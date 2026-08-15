@@ -1,0 +1,612 @@
+from uuid import UUID
+import json
+from urllib.parse import quote
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    Request
+)
+
+from fastapi.responses import RedirectResponse
+
+from sqlalchemy.orm import Session
+
+import jwt
+
+from authlib.integrations.starlette_client import (
+    OAuth
+)
+
+from app.core.config import settings
+
+from app.db.database import get_db
+
+from app.db.models import (
+    User,
+    OAuthAccount,
+    AuthProvider
+)
+
+from app.schema.auth import (
+    RegisterRequest,
+    LoginRequest,
+    RefreshTokenRequest,
+    TokenResponse,
+    UserResponse,
+    UpdateProfileRequest,
+    ChangePasswordRequest,
+)
+
+from app.services.auth_service import (
+    create_local_user,
+    authenticate_user,
+    create_token_pair,
+    rotate_refresh_token,
+    revoke_refresh_token,
+    get_user_by_id,
+    get_current_user,
+    update_user_profile,
+    change_local_user_password,
+)
+
+
+router = APIRouter(
+    prefix="/auth",
+    tags=["Authentication"]
+)
+
+
+# ============================================================
+# GOOGLE OAUTH
+# ============================================================
+
+oauth = OAuth()
+
+oauth.register(
+
+    name="google",
+
+    client_id=settings.GOOGLE_CLIENT_ID,
+
+    client_secret=settings.GOOGLE_CLIENT_SECRET,
+
+    server_metadata_url=(
+        "https://accounts.google.com/.well-known/openid-configuration"
+    ),
+
+    client_kwargs={
+
+        "scope":
+            "openid email profile"
+    }
+)
+
+
+# ============================================================
+# REGISTER
+# ============================================================
+
+@router.post(
+    "/register",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED
+)
+def register(
+
+    data: RegisterRequest,
+
+    db: Session = Depends(get_db)
+):
+
+    try:
+
+        user = create_local_user(
+
+            db=db,
+
+            email=data.email,
+
+            password=data.password,
+
+            username=data.username,
+
+            full_name=data.full_name
+        )
+
+    except ValueError as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    access_token, refresh_token = (
+        create_token_pair(
+            db,
+            user
+        )
+    )
+
+    return TokenResponse(
+
+        access_token=access_token,
+
+        refresh_token=refresh_token,
+
+        user=user
+    )
+
+
+# ============================================================
+# LOGIN
+# ============================================================
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
+from app.services.auth_service import (
+    authenticate_user,
+    create_token_pair,
+)
+from app.schema.auth import TokenResponse
+
+
+@router.post(
+    "/login",
+    response_model=TokenResponse
+)
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+
+    user = authenticate_user(
+        db=db,
+        email=form_data.username,
+        password=form_data.password
+    )
+
+    if not user:
+
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password."
+        )
+
+    access_token, refresh_token = create_token_pair(
+        db,
+        user
+    )
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=user
+    )
+
+
+# ============================================================
+# REFRESH
+# ============================================================
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse
+)
+def refresh(
+
+    data: RefreshTokenRequest,
+
+    db: Session = Depends(get_db)
+):
+
+    try:
+
+        access_token, refresh_token = (
+            rotate_refresh_token(
+                db,
+                data.refresh_token
+            )
+        )
+
+    except ValueError as e:
+
+        raise HTTPException(
+            status_code=401,
+            detail=str(e)
+        )
+
+    # Get user from new refresh token
+
+    from app.services.auth_service import (
+        get_refresh_session
+    )
+
+    session = get_refresh_session(
+        db,
+        refresh_token
+    )
+
+    user = get_user_by_id(
+        db,
+        session.user_id
+    )
+
+    return TokenResponse(
+
+        access_token=access_token,
+
+        refresh_token=refresh_token,
+
+        user=user
+    )
+
+
+# ============================================================
+# LOGOUT
+# ============================================================
+
+@router.post(
+    "/logout"
+)
+def logout(
+
+    data: RefreshTokenRequest,
+
+    db: Session = Depends(get_db)
+):
+
+    revoke_refresh_token(
+
+        db,
+
+        data.refresh_token
+    )
+
+    return {
+
+        "message":
+            "Successfully logged out."
+    }
+
+
+# ============================================================
+# GOOGLE LOGIN
+# ============================================================
+
+@router.get(
+    "/google"
+)
+async def google_login(
+    request: Request
+):
+
+    redirect_uri = (
+        request.url_for(
+            "google_callback"
+        )
+    )
+
+    return await oauth.google.authorize_redirect(
+
+        request,
+
+        redirect_uri
+    )
+
+
+# ============================================================
+# GOOGLE CALLBACK
+# ============================================================
+
+@router.get(
+    "/google/callback",
+    name="google_callback"
+)
+async def google_callback(
+
+    request: Request,
+
+    db: Session = Depends(get_db)
+):
+
+    try:
+
+        token = await oauth.google.authorize_access_token(
+            request
+        )
+
+    except Exception:
+
+        raise HTTPException(
+
+            status_code=401,
+
+            detail="Google authentication failed."
+        )
+
+    user_info = token.get(
+        "userinfo"
+    )
+
+    if not user_info:
+
+        raise HTTPException(
+
+            status_code=401,
+
+            detail="Could not retrieve Google user information."
+        )
+
+    google_id = user_info.get(
+        "sub"
+    )
+
+    email = user_info.get(
+        "email"
+    )
+
+    name = user_info.get(
+        "name"
+    )
+
+    picture = user_info.get(
+        "picture"
+    )
+
+    email_verified = user_info.get(
+        "email_verified",
+        False
+    )
+
+    if not google_id or not email:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail="Google account did not provide required information."
+        )
+
+    # --------------------------------------------------------
+    # Find existing Google account
+    # --------------------------------------------------------
+
+    from sqlalchemy import select
+
+    oauth_account = db.scalar(
+
+        select(OAuthAccount).where(
+
+            OAuthAccount.provider
+            == AuthProvider.GOOGLE,
+
+            OAuthAccount.provider_user_id
+            == google_id
+        )
+    )
+
+    # --------------------------------------------------------
+    # Existing Google account
+    # --------------------------------------------------------
+
+    if oauth_account:
+
+        user = db.scalar(
+
+            select(User).where(
+
+                User.id
+                == oauth_account.user_id
+            )
+        )
+
+    # --------------------------------------------------------
+    # New Google account
+    # --------------------------------------------------------
+
+    else:
+
+        user = db.scalar(
+
+            select(User).where(
+
+                User.email
+                == email.lower()
+            )
+        )
+
+        # ----------------------------------------------------
+        # Existing local user with same email
+        # ----------------------------------------------------
+
+        if not user:
+
+            user = User(
+
+                email=email.lower(),
+
+                full_name=name,
+
+                profile_picture_url=picture,
+
+                is_active=True,
+
+                is_verified=email_verified
+            )
+
+            db.add(user)
+
+            db.flush()
+
+        else:
+
+            # Optionally update profile information
+
+            if not user.profile_picture_url:
+
+                user.profile_picture_url = picture
+
+            if not user.full_name:
+
+                user.full_name = name
+
+            if email_verified:
+
+                user.is_verified = True
+
+        # ----------------------------------------------------
+        # Create OAuth account
+        # ----------------------------------------------------
+
+        oauth_account = OAuthAccount(
+
+            user_id=user.id,
+
+            provider=AuthProvider.GOOGLE,
+
+            provider_user_id=google_id,
+
+            provider_email=email,
+
+            access_token=token.get(
+                "access_token"
+            ),
+
+            refresh_token=token.get(
+                "refresh_token"
+            )
+        )
+
+        db.add(oauth_account)
+
+        db.commit()
+
+        db.refresh(user)
+
+    # --------------------------------------------------------
+    # JWT
+    # --------------------------------------------------------
+
+    access_token, refresh_token = (
+        create_token_pair(
+            db,
+            user
+        )
+    )
+
+    user_payload = UserResponse.model_validate(
+        user
+    )
+
+    user_json = json.dumps(
+        user_payload.model_dump(mode="json")
+    )
+
+    frontend_callback = (
+        f"{settings.FRONTEND_URL.rstrip('/')}"
+        "/auth/callback"
+    )
+
+    fragment = (
+        f"access_token={quote(access_token)}"
+        f"&refresh_token={quote(refresh_token)}"
+        "&token_type=bearer"
+        f"&user={quote(user_json)}"
+    )
+
+    return RedirectResponse(
+        url=f"{frontend_callback}#{fragment}",
+        status_code=302
+    )
+
+
+# ============================================================
+# PROFILE
+# ============================================================
+
+@router.get(
+    "/me",
+    response_model=UserResponse
+)
+def get_profile(
+    current_user: User = Depends(get_current_user)
+):
+
+    return UserResponse.model_validate(
+        current_user
+    )
+
+
+@router.patch(
+    "/me",
+    response_model=UserResponse
+)
+def update_profile(
+    data: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+
+    try:
+
+        updated_user = update_user_profile(
+            db=db,
+            user=current_user,
+            full_name=data.full_name,
+            username=data.username,
+        )
+
+    except ValueError as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    return UserResponse.model_validate(
+        updated_user
+    )
+
+
+@router.post(
+    "/change-password"
+)
+def change_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+
+    if data.current_password == data.new_password:
+
+        raise HTTPException(
+            status_code=400,
+            detail="New password must be different from the current password."
+        )
+
+    try:
+
+        change_local_user_password(
+            db=db,
+            user=current_user,
+            current_password=data.current_password,
+            new_password=data.new_password,
+        )
+
+    except ValueError as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    return {
+        "message":
+            "Password updated successfully."
+    }

@@ -1,0 +1,76 @@
+services:
+
+  # ==========================================================
+  # FASTAPI
+  # ==========================================================
+
+  api:
+
+    build: .
+
+    container_name: youtube_research_api
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./app:/app/app
+
+    environment:
+
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/youtube_research
+
+    depends_on:
+
+      postgres:
+        condition: service_healthy
+
+
+  # ==========================================================
+  # POSTGRES + PGVECTOR
+  # ==========================================================
+
+  postgres:
+
+    image: pgvector/pgvector:pg16
+
+    container_name: youtube_research_postgres
+
+    environment:
+
+      POSTGRES_USER: postgres
+
+      POSTGRES_PASSWORD: postgres
+
+      POSTGRES_DB: youtube_research
+
+    ports:
+
+      - "5432:5432"
+
+    volumes:
+
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U postgres -d youtube_research"
+        ]
+
+      interval: 5s
+
+      timeout: 5s
+
+      retries: 5
+
+
+# ============================================================
+# PERSISTENT VOLUMES
+# ============================================================
+
+volumes:
+
+  postgres_data:
