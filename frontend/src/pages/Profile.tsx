@@ -16,6 +16,7 @@ function Profile() {
   const [profileError, setProfileError] = useState('')
   const [profileMessage, setProfileMessage] = useState('')
 
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
@@ -103,6 +104,7 @@ function Profile() {
       setNewPassword('')
       setConfirmNewPassword('')
       setPasswordMessage('Password updated successfully.')
+      setPasswordModalOpen(false)
     } catch (error) {
       if (typeof error === 'object' && error !== null && 'response' in error) {
         const apiError = error as {
@@ -186,56 +188,98 @@ function Profile() {
             placeholder="Set a unique username"
           />
 
-          <Button type="submit" loading={profileLoading}>
+          <Button type="submit" loading={profileLoading} className="cursor-pointer">
             {profileLoading ? 'Saving profile...' : 'Save profile'}
           </Button>
         </form>
 
-        <form className="space-y-4 border border-[#222222] bg-[#111111] p-6" onSubmit={handlePasswordChange}>
-          <h2 className="text-xl">Change Password</h2>
-          <p className="text-sm text-[#999999]">Secure your account with a new password.</p>
-
-          {passwordError ? (
-            <p className="border border-[#222222] bg-black px-3 py-2 text-xs text-[#cfcfcf]">
-              {passwordError}
-            </p>
-          ) : null}
+        <div className="border border-[#222222] bg-[#111111] p-6">
+          <h2 className="text-xl">Security</h2>
+          <p className="mt-2 text-sm text-[#999999]">Keep your account protected.</p>
 
           {passwordMessage ? (
-            <p className="border border-[#222222] bg-black px-3 py-2 text-xs text-[#cfcfcf]">
+            <p className="mt-4 border border-[#222222] bg-black px-3 py-2 text-xs text-[#cfcfcf]">
               {passwordMessage}
             </p>
           ) : null}
 
-          <Input
-            label="Current password"
-            type="password"
-            value={currentPassword}
-            onChange={(event) => setCurrentPassword(event.target.value)}
-            placeholder="Enter current password"
-          />
-
-          <Input
-            label="New password"
-            type="password"
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            placeholder="Enter new password"
-          />
-
-          <Input
-            label="Confirm new password"
-            type="password"
-            value={confirmNewPassword}
-            onChange={(event) => setConfirmNewPassword(event.target.value)}
-            placeholder="Confirm new password"
-          />
-
-          <Button type="submit" variant="secondary" loading={passwordLoading}>
-            {passwordLoading ? 'Updating password...' : 'Update password'}
-          </Button>
-        </form>
+          <div className="mt-6">
+            <Button
+              type="button"
+              variant="secondary"
+              className="cursor-pointer"
+              onClick={() => setPasswordModalOpen(true)}
+            >
+              Change password
+            </Button>
+          </div>
+        </div>
       </div>
+
+      {passwordModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-lg rounded-md border border-[#222222] bg-[#111111] p-6">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-semibold">Change password</h3>
+                <p className="mt-1 text-sm text-[#999999]">Update your account security.</p>
+              </div>
+              <button
+                type="button"
+                className="cursor-pointer rounded-md border border-[#222222] px-2 py-1 text-sm text-[#999999] hover:text-white"
+                onClick={() => setPasswordModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <form className="space-y-4" onSubmit={handlePasswordChange}>
+              {passwordError ? (
+                <p className="border border-[#222222] bg-black px-3 py-2 text-xs text-[#cfcfcf]">
+                  {passwordError}
+                </p>
+              ) : null}
+
+              <Input
+                label="Current password"
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                placeholder="Enter current password"
+              />
+
+              <Input
+                label="New password"
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="Enter new password"
+              />
+
+              <Input
+                label="Confirm new password"
+                type="password"
+                value={confirmNewPassword}
+                onChange={(event) => setConfirmNewPassword(event.target.value)}
+                placeholder="Confirm new password"
+              />
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  className="cursor-pointer rounded-md border border-[#222222] px-4 py-2.5 text-sm text-[#999999] hover:text-white"
+                  onClick={() => setPasswordModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <Button type="submit" variant="primary" loading={passwordLoading} className="cursor-pointer">
+                  {passwordLoading ? 'Updating password...' : 'Update password'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

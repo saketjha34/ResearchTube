@@ -29,7 +29,7 @@ function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center px-5 py-2.5 text-sm tracking-wide rounded-md ${variantClasses[variant]} ${fullWidth ? 'w-full' : ''} ${className}`}
+      className={`inline-flex cursor-pointer items-center justify-center px-5 py-2.5 text-sm tracking-wide rounded-md ${variantClasses[variant]} ${fullWidth ? 'w-full' : ''} ${className}`}
       disabled={loading || disabled}
       {...props}
     >

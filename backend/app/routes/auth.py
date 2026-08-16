@@ -283,7 +283,8 @@ def logout(
     "/google"
 )
 async def google_login(
-    request: Request
+    request: Request,
+    prompt: str | None = None,
 ):
 
     redirect_uri = (
@@ -292,11 +293,14 @@ async def google_login(
         )
     )
 
+    selected_prompt = prompt or "select_account"
+
     return await oauth.google.authorize_redirect(
-
         request,
-
-        redirect_uri
+        redirect_uri,
+        prompt=selected_prompt,
+        access_type="offline",
+        include_granted_scopes="true",
     )
 
 

@@ -118,5 +118,9 @@ export const logoutRequest = async (refreshToken: string): Promise<void> => {
 }
 
 export const startGoogleLogin = (): void => {
-  window.location.href = 'http://localhost:8000/auth/google'
+  const googleAuthUrl = new URL('http://localhost:8000/auth/google')
+  googleAuthUrl.searchParams.set('prompt', 'select_account')
+  googleAuthUrl.searchParams.set('ts', String(Date.now()))
+
+  window.location.href = googleAuthUrl.toString()
 }

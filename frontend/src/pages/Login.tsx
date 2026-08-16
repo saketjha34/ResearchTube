@@ -48,10 +48,19 @@ function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-      <div className="w-full max-w-md rounded-md border border-[#222222] bg-[#111111] p-8 animate-fade-in">
-        <h1 className="text-3xl font-semibold">Welcome back</h1>
-        <p className="mt-2 text-sm text-[#999999]">Continue your research.</p>
+    <div className="flex min-h-screen items-center justify-center bg-black px-4 py-10 text-white">
+      <div className="w-full max-w-[500px] rounded-2xl border border-[#222222] bg-[#111111] p-7 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:p-8">
+        <div className="mb-8 flex items-center justify-between gap-3">
+          <Link to="/" className="text-left text-xs tracking-[0.35em] text-white transition-colors hover:text-[#d9d9d9]">
+            RESEARCHTUBE
+          </Link>
+          <span className="rounded-full border border-[#2b2b2b] bg-[#161616] px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-[#999999]">
+            Secure access
+          </span>
+        </div>
+
+        <h1 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Welcome back</h1>
+        <p className="mt-2 text-sm text-[#999999]">Continue building your research workspace.</p>
 
         {params.get('expired') === '1' ? (
           <p className="mt-4 border border-[#222222] bg-black px-3 py-2 text-xs text-[#cfcfcf]">
@@ -70,6 +79,7 @@ function Login() {
             label="Email"
             type="email"
             placeholder="you@example.com"
+            helperText="Use the email linked to your ResearchTube account."
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
@@ -77,28 +87,31 @@ function Login() {
             label="Password"
             type="password"
             placeholder="••••••••"
+            helperText="Use your secure password for this workspace."
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
 
-          <Button type="submit" fullWidth loading={loading}>
-            {loading ? 'Signing in...' : 'Sign in'}
-          </Button>
+          <div className="pt-1">
+            <Button type="submit" fullWidth loading={loading}>
+              {loading ? 'Signing in...' : 'Sign in'}
+            </Button>
+          </div>
         </form>
 
-        <div className="my-6 flex items-center gap-3 text-xs text-[#666666]">
+        <div className="my-6 flex items-center gap-3 text-[11px] uppercase tracking-[0.22em] text-[#666666]">
           <div className="h-px flex-1 bg-[#222222]" />
-          OR
+          Or
           <div className="h-px flex-1 bg-[#222222]" />
         </div>
 
-        <Button variant="secondary" fullWidth onClick={startGoogleLogin}>
+        <Button variant="secondary" fullWidth onClick={startGoogleLogin} className="cursor-pointer">
           Continue with Google
         </Button>
 
         <p className="mt-6 text-sm text-[#999999]">
           Don't have an account?{' '}
-          <Link className="text-white hover:text-[#cfcfcf]" to="/register">
+          <Link className="font-medium text-white transition-colors hover:text-[#cfcfcf]" to="/register">
             Create one
           </Link>
         </p>
