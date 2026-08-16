@@ -10,7 +10,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from pwdlib import PasswordHash
 
@@ -97,8 +98,8 @@ def hash_refresh_token(
 
 
 # CREATE LOCAL USER
-def create_local_user(
-    db: Session,
+async def create_local_user(
+    db: AsyncSession,
     email: str,
     password: str,
     username: str | None = None,
@@ -107,7 +108,7 @@ def create_local_user(
 
     email = email.lower().strip()
 
-    existing_user = db.scalar(
+    existing_user = await db.scalar(
         select(User).where(
             User.email == email
         )
@@ -129,7 +130,7 @@ def create_local_user(
 
     db.add(user)
 
-    db.flush()
+    await db.flush()
 
     auth = UserAuth(
         user_id=user.id,
@@ -139,26 +140,26 @@ def create_local_user(
 
     db.add(auth)
 
-    db.commit()
+    await db.commit()
 
-    db.refresh(user)
+    await db.refresh(user)
 
     return user
 
 
 # AUTHENTICATE LOCAL USER
-def authenticate_user(
-    db: Session,
+async def authenticate_user(
+    db: AsyncSession,
     email: str,
     password: str
 ) -> User | None:
 
     email = email.lower().strip()
 
-    user = db.scalar(
-        select(User).where(
-            User.email == email
-        )
+    user = await db.scalar(
+        select(User)
+        .options(selectinload(User.auth))
+        .where(User.email == email)
     )
 
     if not user:
@@ -185,8 +186,8 @@ def authenticate_user(
 
 # ============================================================
 # CREATE REFRESH SESSION
-def create_refresh_session(
-    db: Session,
+async def create_refresh_session(
+    db: AsyncSession,
     user: User
 ) -> str:
 
@@ -213,7 +214,7 @@ def create_refresh_session(
 
     db.add(refresh_token)
 
-    db.commit()
+    await db.commit()
 
     return raw_token
 
@@ -222,8 +223,8 @@ def create_refresh_session(
 # CREATE TOKEN PAIR
 # ============================================================
 
-def create_token_pair(
-    db: Session,
+async def create_token_pair(
+    db: AsyncSession,
     user: User
 ):
 
@@ -231,7 +232,7 @@ def create_token_pair(
         user.id
     )
 
-    refresh_token = create_refresh_session(
+    refresh_token = await create_refresh_session(
         db,
         user
     )
@@ -246,8 +247,8 @@ def create_token_pair(
 # GET REFRESH SESSION
 # ============================================================
 
-def get_refresh_session(
-    db: Session,
+async def get_refresh_session(
+    db: AsyncSession,
     raw_token: str
 ) -> RefreshToken | None:
 
@@ -255,7 +256,7 @@ def get_refresh_session(
         raw_token
     )
 
-    refresh_token = db.scalar(
+    refresh_token = await db.scalar(
         select(RefreshToken).where(
             RefreshToken.token_hash == token_hash
         )
@@ -282,12 +283,12 @@ def get_refresh_session(
 # ROTATE REFRESH TOKEN
 # ============================================================
 
-def rotate_refresh_token(
-    db: Session,
+async def rotate_refresh_token(
+    db: AsyncSession,
     raw_token: str
 ):
 
-    session = get_refresh_session(
+    session = await get_refresh_session(
         db,
         raw_token
     )
@@ -298,7 +299,7 @@ def rotate_refresh_token(
             "Invalid or expired refresh token."
         )
 
-    user = db.scalar(
+    user = await db.scalar(
         select(User).where(
             User.id == session.user_id
         )
@@ -312,9 +313,9 @@ def rotate_refresh_token(
 
     session.revoked = True
 
-    db.commit()
+    await db.commit()
 
-    return create_token_pair(
+    return await create_token_pair(
         db,
         user
     )
@@ -324,12 +325,12 @@ def rotate_refresh_token(
 # REVOKE REFRESH TOKEN
 # ============================================================
 
-def revoke_refresh_token(
-    db: Session,
+async def revoke_refresh_token(
+    db: AsyncSession,
     raw_token: str
 ):
 
-    session = get_refresh_session(
+    session = await get_refresh_session(
         db,
         raw_token
     )
@@ -338,27 +339,27 @@ def revoke_refresh_token(
 
         session.revoked = True
 
-        db.commit()
+        await db.commit()
 
 
 # ============================================================
 # GET USER BY ID
 # ============================================================
 
-def get_user_by_id(
-    db: Session,
+async def get_user_by_id(
+    db: AsyncSession,
     user_id: UUID
 ) -> User | None:
 
-    return db.scalar(
+    return await db.scalar(
         select(User).where(
             User.id == user_id
         )
     )
 
 
-def update_user_profile(
-    db: Session,
+async def update_user_profile(
+    db: AsyncSession,
     user: User,
     full_name: str | None,
     username: str | None,
@@ -370,7 +371,7 @@ def update_user_profile(
 
         if normalized_username:
 
-            existing_username_user = db.scalar(
+            existing_username_user = await db.scalar(
                 select(User).where(
                     User.username == normalized_username,
                     User.id != user.id,
@@ -389,20 +390,20 @@ def update_user_profile(
 
         user.full_name = full_name.strip() or None
 
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
 
     return user
 
 
-def change_local_user_password(
-    db: Session,
+async def change_local_user_password(
+    db: AsyncSession,
     user: User,
     current_password: str,
     new_password: str,
 ):
 
-    auth = db.scalar(
+    auth = await db.scalar(
         select(UserAuth).where(
             UserAuth.user_id == user.id
         )
@@ -431,16 +432,16 @@ def change_local_user_password(
         timezone.utc
     )
 
-    db.commit()
+    await db.commit()
 
 
 # ============================================================
 # GET CURRENT USER FROM JWT
 # ============================================================
 
-def get_current_user(
+async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ) -> User:
 
     # --------------------------------------------------------
@@ -529,7 +530,7 @@ def get_current_user(
     # Get user
     # --------------------------------------------------------
 
-    user = get_user_by_id(
+    user = await get_user_by_id(
         db,
         user_uuid
     )

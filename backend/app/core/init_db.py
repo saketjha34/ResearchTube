@@ -1,9 +1,9 @@
-from app.db.database import engine
-from app.db.models import Base
 from sqlalchemy import text
 
+from app.db.database import Base, engine
 
-def init_db():
+
+async def init_db():
 
     print("Initializing database...")
 
@@ -11,11 +11,11 @@ def init_db():
     # ENABLE PGVECTOR
     # ========================================================
 
-    with engine.begin() as connection:
+    async with engine.begin() as connection:
 
         print("Enabling pgvector extension...")
 
-        connection.execute(
+        await connection.execute(
             text(
                 "CREATE EXTENSION IF NOT EXISTS vector"
             )
@@ -27,8 +27,10 @@ def init_db():
 
     print("Creating database tables...")
 
-    Base.metadata.create_all(
-        bind=engine
-    )
+    async with engine.begin() as connection:
+
+        await connection.run_sync(
+            Base.metadata.create_all
+        )
 
     print("Database initialization complete.")

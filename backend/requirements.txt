@@ -5,12 +5,12 @@ langchain
 langgraph
 langchain-google-genai
 langchain-community
-
+youtube-transcript-api
 google-api-python-client
-
+pytest
 pydantic
 pydantic-settings
-
+asyncpg
 sqlalchemy
 asyncpg
 psycopg2-binary

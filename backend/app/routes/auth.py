@@ -1,4 +1,3 @@
-from uuid import UUID
 import json
 from urllib.parse import quote
 
@@ -11,10 +10,10 @@ from fastapi import (
 )
 
 from fastapi.responses import RedirectResponse
+from fastapi.security import OAuth2PasswordRequestForm
 
-from sqlalchemy.orm import Session
-
-import jwt
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from authlib.integrations.starlette_client import (
     OAuth
@@ -32,7 +31,6 @@ from app.db.models import (
 
 from app.schema.auth import (
     RegisterRequest,
-    LoginRequest,
     RefreshTokenRequest,
     TokenResponse,
     UserResponse,
@@ -94,16 +92,16 @@ oauth.register(
     response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED
 )
-def register(
+async def register(
 
     data: RegisterRequest,
 
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
 
     try:
 
-        user = create_local_user(
+        user = await create_local_user(
 
             db=db,
 
@@ -124,7 +122,7 @@ def register(
         )
 
     access_token, refresh_token = (
-        create_token_pair(
+        await create_token_pair(
             db,
             user
         )
@@ -140,32 +138,16 @@ def register(
     )
 
 
-# ============================================================
-# LOGIN
-# ============================================================
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-
-from app.db.database import get_db
-from app.services.auth_service import (
-    authenticate_user,
-    create_token_pair,
-)
-from app.schema.auth import TokenResponse
-
-
 @router.post(
     "/login",
     response_model=TokenResponse
 )
-def login(
+async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
 
-    user = authenticate_user(
+    user = await authenticate_user(
         db=db,
         email=form_data.username,
         password=form_data.password
@@ -178,7 +160,7 @@ def login(
             detail="Invalid email or password."
         )
 
-    access_token, refresh_token = create_token_pair(
+    access_token, refresh_token = await create_token_pair(
         db,
         user
     )
@@ -198,17 +180,17 @@ def login(
     "/refresh",
     response_model=TokenResponse
 )
-def refresh(
+async def refresh(
 
     data: RefreshTokenRequest,
 
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
 
     try:
 
         access_token, refresh_token = (
-            rotate_refresh_token(
+            await rotate_refresh_token(
                 db,
                 data.refresh_token
             )
@@ -227,15 +209,29 @@ def refresh(
         get_refresh_session
     )
 
-    session = get_refresh_session(
+    session = await get_refresh_session(
         db,
         refresh_token
     )
 
-    user = get_user_by_id(
+    if not session:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired refresh token."
+        )
+
+    user = await get_user_by_id(
         db,
         session.user_id
     )
+
+    if not user:
+
+        raise HTTPException(
+            status_code=401,
+            detail="User not found."
+        )
 
     return TokenResponse(
 
@@ -254,14 +250,14 @@ def refresh(
 @router.post(
     "/logout"
 )
-def logout(
+async def logout(
 
     data: RefreshTokenRequest,
 
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
 
-    revoke_refresh_token(
+    await revoke_refresh_token(
 
         db,
 
@@ -316,7 +312,7 @@ async def google_callback(
 
     request: Request,
 
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
 
     try:
@@ -381,9 +377,7 @@ async def google_callback(
     # Find existing Google account
     # --------------------------------------------------------
 
-    from sqlalchemy import select
-
-    oauth_account = db.scalar(
+    oauth_account = await db.scalar(
 
         select(OAuthAccount).where(
 
@@ -401,7 +395,7 @@ async def google_callback(
 
     if oauth_account:
 
-        user = db.scalar(
+        user = await db.scalar(
 
             select(User).where(
 
@@ -416,7 +410,7 @@ async def google_callback(
 
     else:
 
-        user = db.scalar(
+        user = await db.scalar(
 
             select(User).where(
 
@@ -446,7 +440,7 @@ async def google_callback(
 
             db.add(user)
 
-            db.flush()
+            await db.flush()
 
         else:
 
@@ -489,16 +483,16 @@ async def google_callback(
 
         db.add(oauth_account)
 
-        db.commit()
+        await db.commit()
 
-        db.refresh(user)
+        await db.refresh(user)
 
     # --------------------------------------------------------
     # JWT
     # --------------------------------------------------------
 
     access_token, refresh_token = (
-        create_token_pair(
+        await create_token_pair(
             db,
             user
         )
@@ -538,7 +532,7 @@ async def google_callback(
     "/me",
     response_model=UserResponse
 )
-def get_profile(
+async def get_profile(
     current_user: User = Depends(get_current_user)
 ):
 
@@ -551,15 +545,15 @@ def get_profile(
     "/me",
     response_model=UserResponse
 )
-def update_profile(
+async def update_profile(
     data: UpdateProfileRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
 
     try:
 
-        updated_user = update_user_profile(
+        updated_user = await update_user_profile(
             db=db,
             user=current_user,
             full_name=data.full_name,
@@ -581,10 +575,10 @@ def update_profile(
 @router.post(
     "/change-password"
 )
-def change_password(
+async def change_password(
     data: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
 
     if data.current_password == data.new_password:
@@ -596,7 +590,7 @@ def change_password(
 
     try:
 
-        change_local_user_password(
+        await change_local_user_password(
             db=db,
             user=current_user,
             current_password=data.current_password,

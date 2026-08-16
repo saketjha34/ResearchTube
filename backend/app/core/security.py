@@ -13,7 +13,7 @@ from fastapi.security import (
     HTTPAuthorizationCredentials
 )
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 
@@ -31,12 +31,12 @@ security = HTTPBearer()
 # GET CURRENT USER
 # ============================================================
 
-def get_current_user(
+async def get_current_user(
 
     credentials: HTTPAuthorizationCredentials =
         Depends(security),
 
-    db: Session =
+    db: AsyncSession =
         Depends(get_db)
 ):
 
@@ -110,7 +110,7 @@ def get_current_user(
             detail="Invalid user ID."
         )
 
-    user = get_user_by_id(
+    user = await get_user_by_id(
 
         db,
 
