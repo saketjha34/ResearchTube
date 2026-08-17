@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+﻿import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Input from '../components/Input'
 import Button from '../components/Button'
@@ -34,7 +34,7 @@ function Register() {
 
     try {
       await register(fullName, username, email, password)
-      navigate('/dashboard', { replace: true })
+      navigate('/research', { replace: true })
     } catch (submitError) {
       setError(
         submitError instanceof Error

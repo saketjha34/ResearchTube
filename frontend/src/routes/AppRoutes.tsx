@@ -1,11 +1,10 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+﻿import { Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from '../layouts/AppLayout'
 import ProtectedRoute from '../components/ProtectedRoute'
 import Landing from '../pages/Landing'
 import Login from '../pages/Login'
 import Register from '../pages/Register'
 import AuthCallback from '../pages/AuthCallback'
-import Dashboard from '../pages/Dashboard'
 import Research from '../pages/Research'
 import AuthTest from '../pages/AuthTest'
 import Profile from '../pages/Profile'
@@ -18,14 +17,9 @@ function AppRoutes() {
       <Route path="/register" element={<Register />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
 
-      <Route
-        element={
-          <ProtectedRoute>
-            <AppLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/dashboard" element={<Dashboard />} />
+      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+        {/* /dashboard redirects directly to /research */}
+        <Route path="/dashboard" element={<Navigate to="/research" replace />} />
         <Route path="/research" element={<Research />} />
         <Route path="/auth-test" element={<AuthTest />} />
         <Route path="/profile" element={<Profile />} />

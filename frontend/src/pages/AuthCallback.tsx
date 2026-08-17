@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { persistAuthSession, type User } from '../api/auth'
 
@@ -53,7 +53,7 @@ function AuthCallback() {
         user: payload.user,
       })
 
-      navigate('/dashboard', { replace: true })
+      navigate('/research', { replace: true })
     } catch (callbackError) {
       setError(
         callbackError instanceof Error

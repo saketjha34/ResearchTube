@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+﻿import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Input from '../components/Input'
 import Button from '../components/Button'
@@ -11,7 +11,7 @@ function Login() {
   const { login, isAuthenticated } = useAuth()
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search])
-  const redirectTo = params.get('redirect') || '/dashboard'
+  const redirectTo = params.get('redirect') || '/research'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -20,7 +20,7 @@ function Login() {
 
   useEffect(() => {
     if (isAuthenticated()) {
-      navigate('/dashboard', { replace: true })
+      navigate('/research', { replace: true })
     }
   }, [isAuthenticated, navigate])
 
@@ -86,7 +86,7 @@ function Login() {
           <Input
             label="Password"
             type="password"
-            placeholder="••••••••"
+            placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
             helperText="Use your secure password for this workspace."
             value={password}
             onChange={(event) => setPassword(event.target.value)}
