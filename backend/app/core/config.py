@@ -1,6 +1,4 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import socket
-from urllib.parse import urlsplit, urlunsplit
 
 
 class Settings(BaseSettings):
@@ -11,12 +9,15 @@ class Settings(BaseSettings):
 
     GEMINI_API_KEY: str
     YOUTUBE_API_KEY: str
+    OPENAI_API_KEY: str | None = None
 
     # ========================================================
     # DATABASE
     # ========================================================
 
+    ENVIRONMENT: str = "dev"
     DATABASE_URL: str
+    PROD_DATABASE_URL: str | None = None
 
     # ========================================================
     # RAG
@@ -55,48 +56,22 @@ class Settings(BaseSettings):
 
     @property
     def runtime_database_url(self) -> str:
-        """Return a DB URL that works in both Docker and local runs.
+        """Return the correct DB URL based on ENVIRONMENT.
 
-        If DATABASE_URL uses the Docker service hostname "postgres"
-        but DNS resolution fails (typical on host machine), fallback
-        to localhost while preserving credentials, driver, DB name,
-        query params, and port.
+        - "dev"  → DATABASE_URL      (local Docker postgres)
+        - "prod" → PROD_DATABASE_URL (Supabase / hosted postgres)
         """
+        if self.ENVIRONMENT == "prod":
+            if not self.PROD_DATABASE_URL:
+                raise ValueError("PROD_DATABASE_URL must be set when ENVIRONMENT=prod")
+            url = self.PROD_DATABASE_URL
+            # Ensure the asyncpg driver prefix is present
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return url
 
-        parsed = urlsplit(self.DATABASE_URL)
-
-        if parsed.hostname != "postgres":
-            return self.DATABASE_URL
-
-        port = parsed.port or 5432
-
-        try:
-            socket.getaddrinfo("postgres", port)
-            return self.DATABASE_URL
-        except socket.gaierror:
-            pass
-
-        username = parsed.username or ""
-        password = parsed.password or ""
-
-        auth = ""
-        if username:
-            auth = username
-            if password:
-                auth += f":{password}"
-            auth += "@"
-
-        netloc = f"{auth}localhost:{port}"
-
-        return urlunsplit(
-            (
-                parsed.scheme,
-                netloc,
-                parsed.path,
-                parsed.query,
-                parsed.fragment,
-            )
-        )
+        # dev (default)
+        return self.DATABASE_URL
 
 
 settings = Settings()

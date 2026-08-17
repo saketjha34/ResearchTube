@@ -24,15 +24,15 @@ from app.agents.youtube_research_agent import (
     youtube_research_agent,
 )
 
-from app.agents.context_analysis_agent import (
+from app.agents.youtube_context_analysis_agent import (
     context_analysis_agent,
 )
 
-from app.agents.final_report_agent import (
+from app.agents.youtube_final_report_agent import (
     final_report_agent,
 )
 
-from app.graph.state import ResearchState
+from app.graph.youtube_state import ResearchState
 
 from app.graph.persistence import (
     update_research_run_status,

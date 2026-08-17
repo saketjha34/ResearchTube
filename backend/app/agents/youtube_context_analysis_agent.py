@@ -39,6 +39,8 @@ from app.schema.youtube import (
     ResourceAnalysis,
 )
 
+from app.prompts.youtube_prompts import get_context_analysis_prompt
+
 
 # ============================================================
 # GEMINI
@@ -304,142 +306,10 @@ async def context_analysis_agent(
     # 4. PROMPT
     # ========================================================
 
-    prompt = f"""
-You are Agent 2 of a YouTube research system.
-
-You are responsible for:
-
-1. RAG-based content analysis.
-2. Educational evaluation.
-3. Resource ranking.
-
-USER RESEARCH QUESTION:
-
-{user_query}
-
-
-YouTube resources were collected by Agent 1.
-
-The transcript chunks below were retrieved
-from PostgreSQL using pgvector semantic search.
-
-Use the retrieved transcript chunks as the
-PRIMARY evidence for understanding the actual
-content of each video.
-
-
-============================================================
-EVALUATION CRITERIA
-============================================================
-
-For EVERY video evaluate:
-
-1. Relevance
-2. Educational quality
-3. Content coverage
-4. Beginner friendliness
-5. Technical depth
-6. Practical usefulness
-
-
-Give:
-
-- relevance_score: 0-10
-- educational_quality_score: 0-10
-- coverage_score: 0-10
-- overall_score: 0-10 (weighted average of the above)
-- beginner_friendly
-- concepts_covered
-- strengths
-- weaknesses
-- recommendation_reason
-
-
-============================================================
-RANKING
-============================================================
-
-Rank the resources from BEST to WORST.
-
-rank 1 = best resource.
-
-Content quality is more important than popularity.
-
-DO NOT rank a video purely based on:
-
-- views
-- likes
-- comments
-
-Popularity is only supporting metadata.
-
-Prioritize:
-
-1. Relevance
-2. Educational quality
-3. Coverage
-4. Beginner friendliness
-5. Technical depth
-6. Practical usefulness
-
-
-============================================================
-RAG RULES
-============================================================
-
-The transcript chunks are the primary evidence.
-
-Do NOT invent:
-
-- concepts
-- explanations
-- topics
-- technical details
-- transcript content
-
-If a video has no transcript chunks:
-
-- acknowledge that transcript evidence is unavailable
-- rely only on available metadata
-- reduce educational-confidence appropriately
-- mention the limitation in weaknesses
-
-
-============================================================
-IMPORTANT
-============================================================
-
-Analyze EVERY video.
-
-Do not omit a video simply because
-its transcript is unavailable.
-
-Use the video metadata only for facts
-such as:
-
-- title
-- channel
-- URL
-- date
-- views
-- likes
-- comments
-
-Use transcript RAG context for:
-
-- concepts
-- educational quality
-- coverage
-- technical depth
-- practical usefulness
-
-
-============================================================
-RETRIEVED YOUTUBE + RAG CONTEXT
-============================================================
-
-{context_text}
-"""
+    prompt = get_context_analysis_prompt(
+        user_query=user_query,
+        context_text=context_text,
+    )
 
     # ========================================================
     # 5. GEMINI (async)

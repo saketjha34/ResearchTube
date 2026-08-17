@@ -12,6 +12,7 @@ Agents will call these tools when they need YouTube information.
 
 from googleapiclient.discovery import build
 from langchain_core.tools import tool
+# pyrefly: ignore [missing-import]
 from youtube_transcript_api import YouTubeTranscriptApi
 
 from app.core.config import settings

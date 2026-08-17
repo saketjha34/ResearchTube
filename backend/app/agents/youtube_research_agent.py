@@ -36,6 +36,8 @@ from app.tools.youtube_tools import (
     get_video_transcript,
 )
 
+from app.prompts.youtube_prompts import get_plan_youtube_research_prompt
+
 
 # ============================================================
 # GEMINI
@@ -62,73 +64,10 @@ async def plan_youtube_research(
     num_videos: int,
 ) -> YouTubeResearchRequest:
 
-    prompt = f"""
-You are the YouTube Research Planning component.
-
-Convert the user's research request into a
-YouTubeResearchRequest.
-
-USER QUERY:
-{user_query}
-
-NUMBER OF VIDEOS:
-{num_videos}
-
-IMPORTANT:
-
-video_count MUST be exactly {num_videos}.
-
-Determine:
-
-1. The best YouTube search topic.
-2. Whether YouTube search is required.
-3. Whether video details are required.
-4. Whether transcripts are required.
-5. Which metadata fields should be collected.
-
-AVAILABLE FIELDS:
-
-- title
-- description
-- url
-- channel
-- published_at
-- views
-- likes
-- comments
-- transcript
-
-RESEARCH RULES:
-
-For research, educational resources,
-tutorials, courses, comparisons,
-recommendations, rankings, or learning resources:
-
-- search_videos = true
-- get_details = true
-- get_transcript = true
-- fields.transcript = true
-
-At minimum collect:
-
-- title
-- url
-- channel
-- transcript
-
-If useful for evaluating resources, also collect:
-
-- description
-- published_at
-- views
-- likes
-- comments
-
-Do not invent any information.
-
-Return only the structured
-YouTubeResearchRequest.
-"""
+    prompt = get_plan_youtube_research_prompt(
+        user_query=user_query,
+        num_videos=num_videos,
+    )
 
     # Wrap the synchronous LLM call in a thread
     raw_request = await asyncio.to_thread(

@@ -1,3 +1,3 @@
-from app.graph.research_graph import (
+from app.graph.youtube_graph import (
     create_research_graph,
 )

@@ -9,7 +9,7 @@ from app.core.init_db import init_db
 
 from app.routes.auth import router as auth_router
 from app.routes.test import router as test_router
-from app.routes.research import router as research_router
+from app.routes.youtube_research import router as research_router
 
 
 # ============================================================

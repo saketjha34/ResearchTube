@@ -44,7 +44,7 @@ from app.schema.history import (
     HistoryEntry,
 )
 
-from app.graph.research_graph import create_research_graph
+from app.graph.youtube_graph import create_research_graph
 
 from app.graph.persistence import (
     create_research_run,

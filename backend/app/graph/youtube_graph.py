@@ -9,8 +9,8 @@ from langgraph.graph import (
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.graph.state import ResearchState
-from app.graph.nodes import make_nodes
+from app.graph.youtube_state import ResearchState
+from app.graph.youtube_nodes import make_nodes
 
 
 def create_research_graph(

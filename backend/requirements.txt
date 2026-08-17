@@ -4,6 +4,7 @@ uvicorn[standard]
 langchain
 langgraph
 langchain-google-genai
+langchain-openai
 langchain-community
 youtube-transcript-api
 google-api-python-client
