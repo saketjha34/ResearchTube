@@ -1,8 +1,8 @@
-﻿import { UserRound, Menu, X, FlaskConical, ChevronLeft, ChevronRight, PenSquare, Clock, Loader2 } from 'lucide-react'
+import { UserRound, Menu, X, FlaskConical, PenSquare, Clock, Loader2, Trash2, MoreVertical, Share2, Pin, Pencil, Search, ArrowUpRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import UserMenu from './UserMenu'
-import { getHistory, type HistoryItem } from '../api/research'
+import { getHistory, deleteHistoryEntry, renameHistoryEntry, type HistoryItem } from '../api/research'
 
 const navItems = [
   { label: 'Research', icon: FlaskConical, to: '/research' },
@@ -18,13 +18,23 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [open, setOpen] = useState(false)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [activeMenuRunId, setActiveMenuRunId] = useState<string | null>(null)
+  const [deleteTargetRunId, setDeleteTargetRunId] = useState<string | null>(null)
+  const [renameTargetRunId, setRenameTargetRunId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+
+  // Search palette state
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
   const location = useLocation()
   const navigate = useNavigate()
 
   const loadHistory = async () => {
     setLoading(true)
     try {
-      const data = await getHistory(1, 60) // Increase pageSize to fetch more runs since we filter completed ones
+      const data = await getHistory(1, 60)
       setHistory(data.items)
     } catch {
       setHistory([])
@@ -33,19 +43,45 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     }
   }
 
-  // Load history on mount
+  useEffect(() => { void loadHistory() }, [])
+
+  // Close menus on outside click
   useEffect(() => {
-    void loadHistory()
+    const handleClose = () => setActiveMenuRunId(null)
+    window.addEventListener('click', handleClose)
+    return () => window.removeEventListener('click', handleClose)
   }, [])
 
-  // Listen to custom 'research:created' event to refresh history list
+  // Listen for history refresh events
   useEffect(() => {
-    const handleRefresh = () => {
-      void loadHistory()
-    }
+    const handleRefresh = () => { void loadHistory() }
     window.addEventListener('research:created', handleRefresh)
     return () => window.removeEventListener('research:created', handleRefresh)
   }, [])
+
+  // Keyboard shortcut: Ctrl+K / Cmd+K to open search
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+        setSearchQuery('')
+      }
+      if (e.key === 'Escape') {
+        setSearchOpen(false)
+        setSearchQuery('')
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [])
+
+  // Focus input when search opens
+  useEffect(() => {
+    if (searchOpen) {
+      setTimeout(() => searchInputRef.current?.focus(), 50)
+    }
+  }, [searchOpen])
 
   const handleNewResearch = () => {
     navigate('/research')
@@ -55,12 +91,57 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   const activeRunId = new URLSearchParams(location.search).get('run')
 
-  // Filter only successful (completed) research runs
+  const confirmDelete = async () => {
+    if (!deleteTargetRunId) return
+    const runId = deleteTargetRunId
+    setDeleteTargetRunId(null)
+    try {
+      await deleteHistoryEntry(runId)
+      if (activeRunId === runId) {
+        navigate('/research')
+        window.history.pushState({}, '', '/research')
+        window.dispatchEvent(new Event('research:clear'))
+      }
+      void loadHistory()
+    } catch {
+      alert('Failed to delete research run.')
+    }
+  }
+
+  const confirmRename = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!renameTargetRunId || !renameValue.trim()) return
+    const runId = renameTargetRunId
+    const newName = renameValue.trim()
+    setRenameTargetRunId(null)
+    try {
+      await renameHistoryEntry(runId, newName)
+      window.dispatchEvent(new Event('research:created'))
+      void loadHistory()
+    } catch {
+      alert('Failed to rename research run.')
+    }
+  }
+
+  // Filter only completed runs
   const completedHistory = history.filter((item) => item.status === 'completed')
+
+  // Filtered search results
+  const searchResults = searchQuery.trim()
+    ? completedHistory.filter((item) =>
+        item.query.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : completedHistory.slice(0, 8)
+
+  const handleSearchNavigate = (runId: string) => {
+    setSearchOpen(false)
+    setSearchQuery('')
+    navigate(`/research?run=${runId}`)
+  }
 
   return (
     <>
-      {/* Mobile Toggle Menu */}
+      {/* Mobile Toggle */}
       <button
         className="fixed left-4 top-4 z-40 inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#222222] bg-black text-white md:hidden"
         onClick={() => setOpen((v) => !v)}
@@ -85,16 +166,29 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
               RESEARCHTUBE
             </Link>
           )}
-          <button
-            onClick={onToggle}
-            className="hidden md:flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-[#666666] hover:bg-[#111111] hover:text-white transition-all"
-            aria-label="Toggle sidebar"
-          >
-            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
+          <div className="flex items-center gap-1">
+            {/* Search icon */}
+            <button
+              onClick={() => { setSearchOpen(true); setSearchQuery('') }}
+              className="hidden md:flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-[#666666] hover:bg-[#111111] hover:text-white transition-all"
+              aria-label="Search history"
+              title="Search (Ctrl+K)"
+            >
+              <Search size={15} />
+            </button>
+            {/* Sidebar collapse/expand toggle */}
+            <button
+              onClick={onToggle}
+              className="hidden md:flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-[#666666] hover:bg-[#111111] hover:text-white transition-all"
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            </button>
+          </div>
         </div>
 
-        {/* Navigation Items */}
+        {/* Navigation */}
         <nav className="px-3 py-2">
           <ul className="space-y-1">
             {navItems.map(({ label, icon: Icon, to }) => (
@@ -120,7 +214,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </ul>
         </nav>
 
-        {/* New Research Button (Always shown) */}
+        {/* New Research Button */}
         <div className="px-3 py-2">
           <button
             onClick={handleNewResearch}
@@ -133,13 +227,12 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </button>
         </div>
 
-        {/* Recents list (Only successful history) */}
+        {/* Recents */}
         {!collapsed && (
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
             <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-widest text-[#555555]">
               Recents
             </p>
-
             {loading ? (
               <div className="flex items-center gap-2 px-2 py-2 text-[#555555]">
                 <Loader2 size={12} className="animate-spin" />
@@ -150,10 +243,10 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
             ) : (
               <ul className="space-y-0.5">
                 {completedHistory.map((item) => (
-                  <li key={item.run_id}>
+                  <li key={item.run_id} className="relative group">
                     <button
                       onClick={() => navigate(`/research?run=${item.run_id}`)}
-                      className={`flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-xs transition-all hover:bg-[#111111] ${
+                      className={`flex w-full items-start gap-2 rounded-md pl-2 pr-8 py-2 text-left text-xs transition-all hover:bg-[#111111] ${
                         activeRunId === item.run_id
                           ? 'bg-[#111111] text-white font-bold'
                           : 'text-[#888888] hover:text-white'
@@ -162,6 +255,49 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       <Clock size={11} className="mt-0.5 flex-shrink-0 opacity-50" />
                       <span className="line-clamp-2 leading-relaxed">{item.query}</span>
                     </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setActiveMenuRunId(activeMenuRunId === item.run_id ? null : item.run_id)
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
+                      title="Menu"
+                    >
+                      <MoreVertical size={13} />
+                    </button>
+
+                    {activeMenuRunId === item.run_id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-2 top-8 z-50 w-44 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
+                      >
+                        <button
+                          onClick={() => { alert('Share feature is coming soon!'); setActiveMenuRunId(null) }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+                        >
+                          <Share2 size={12} className="opacity-70" /><span>Share conversation</span>
+                        </button>
+                        <button
+                          onClick={() => { alert('Pin feature is coming soon!'); setActiveMenuRunId(null) }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+                        >
+                          <Pin size={12} className="opacity-70" /><span>Pin</span>
+                        </button>
+                        <button
+                          onClick={() => { setRenameTargetRunId(item.run_id); setRenameValue(item.query); setActiveMenuRunId(null) }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+                        >
+                          <Pencil size={12} className="opacity-70" /><span>Rename</span>
+                        </button>
+                        <hr className="border-[#222222] my-1" />
+                        <button
+                          onClick={() => { setDeleteTargetRunId(item.run_id); setActiveMenuRunId(null) }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#ef4444] hover:bg-[#181818]"
+                        >
+                          <Trash2 size={12} className="opacity-70" /><span>Delete</span>
+                        </button>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -170,11 +306,145 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
 
         {collapsed && <div className="flex-1" />}
-
         <UserMenu collapsed={collapsed} />
       </aside>
 
-      {/* Mobile Bottom Navigation (Only on mobile) */}
+      {/* ── Search Command Palette ─────────────────────────────── */}
+      {searchOpen && (
+        <div
+          className="fixed inset-0 z-[200] flex items-start justify-center pt-24 px-4 bg-black/70 backdrop-blur-sm"
+          onClick={() => { setSearchOpen(false); setSearchQuery('') }}
+        >
+          <div
+            className="w-full max-w-lg bg-[#111111] border border-[#2a2a2a] rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Search Input */}
+            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-[#1e1e1e]">
+              <Search size={15} className="flex-shrink-0 text-[#555555]" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search your research history..."
+                className="flex-1 bg-transparent text-sm text-white placeholder:text-[#444444] outline-none font-medium"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="text-[#555555] hover:text-white transition-colors">
+                  <X size={13} />
+                </button>
+              )}
+              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold text-[#555555] border border-[#2a2a2a] rounded bg-[#0a0a0a]">ESC</kbd>
+            </div>
+
+            {/* Quick Commands */}
+            {!searchQuery && (
+              <div className="px-3 pt-3 pb-1">
+                <p className="px-2 mb-1.5 text-[10px] font-bold tracking-[0.2em] text-[#444444] uppercase">Commands</p>
+                <button
+                  onClick={() => { setSearchOpen(false); handleNewResearch() }}
+                  className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#888888] hover:bg-[#1a1a1a] hover:text-white transition-all group"
+                >
+                  <PenSquare size={14} className="text-[#555555] group-hover:text-white transition-colors" />
+                  <span>Start a new research</span>
+                </button>
+              </div>
+            )}
+
+            {/* Results */}
+            <div className="px-3 pb-3 pt-1">
+              {searchResults.length > 0 ? (
+                <>
+                  <p className="px-2 mb-1.5 text-[10px] font-bold tracking-[0.2em] text-[#444444] uppercase mt-2">
+                    {searchQuery ? 'Results' : 'Recent'}
+                  </p>
+                  <ul className="space-y-0.5 max-h-64 overflow-y-auto">
+                    {searchResults.map((item) => (
+                      <li key={item.run_id}>
+                        <button
+                          onClick={() => handleSearchNavigate(item.run_id)}
+                          className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#888888] hover:bg-[#1a1a1a] hover:text-white transition-all group text-left"
+                        >
+                          <Clock size={13} className="flex-shrink-0 text-[#444444] group-hover:text-[#888888] transition-colors" />
+                          <span className="flex-1 truncate">{item.query}</span>
+                          <ArrowUpRight size={12} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-[#555555]" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : searchQuery ? (
+                <div className="px-3 py-6 text-center text-sm text-[#444444]">
+                  No research runs found for "<span className="text-[#888888]">{searchQuery}</span>"
+                </div>
+              ) : null}
+            </div>
+
+            {/* Footer hint */}
+            <div className="px-5 py-2.5 border-t border-[#1a1a1a] flex items-center gap-4 text-[10px] text-[#444444] font-medium">
+              <span><kbd className="font-bold text-[#555555]">↑↓</kbd> navigate</span>
+              <span><kbd className="font-bold text-[#555555]">↵</kbd> open</span>
+              <span><kbd className="font-bold text-[#555555]">ESC</kbd> close</span>
+              <span className="ml-auto">Ctrl+K to open</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Modal */}
+      {renameTargetRunId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fade-in">
+          <form onSubmit={confirmRename} className="bg-[#1e1e1e] border border-[#2c2c2c] max-w-sm w-full p-6 rounded-2xl shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>Rename chat</h3>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">New Name</label>
+              <input
+                type="text"
+                required
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                className="w-full bg-black border border-[#2c2c2c] text-white px-4 py-2.5 rounded-lg outline-none focus:border-[#444444] text-sm font-medium"
+                placeholder="Enter new name..."
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={() => setRenameTargetRunId(null)}
+                className="px-5 py-2 text-xs font-bold tracking-wider uppercase rounded-full bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] transition-all">
+                Cancel
+              </button>
+              <button type="submit"
+                className="px-5 py-2 text-xs font-bold tracking-wider uppercase rounded-full bg-white text-black hover:bg-[#dddddd] transition-all">
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Delete Modal */}
+      {deleteTargetRunId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-[#1e1e1e] border border-[#2c2c2c] max-w-sm w-full p-6 rounded-2xl shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>Delete chat?</h3>
+            <p className="text-sm text-[#888888] leading-relaxed">
+              This will delete prompts, reports, and videos from your ResearchTube Activity, plus any content you created.
+            </p>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setDeleteTargetRunId(null)}
+                className="px-5 py-2 text-xs font-bold tracking-wider uppercase rounded-full bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] transition-all">
+                Cancel
+              </button>
+              <button onClick={() => void confirmDelete()}
+                className="px-5 py-2 text-xs font-bold tracking-wider uppercase rounded-full bg-[#ef4444] text-white hover:bg-[#dc2626] transition-all">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-[#181818] bg-black px-4 py-2 md:hidden">
         <ul className="grid grid-cols-2 gap-1">
           {navItems.map(({ label, icon: Icon, to }) => (

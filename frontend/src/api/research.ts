@@ -44,3 +44,11 @@ export async function getHistoryEntry(runId: string): Promise<HistoryItem> {
   const res = await client.get<HistoryItem>(`/youtube/history/${runId}`)
   return res.data
 }
+export async function deleteHistoryEntry(runId: string): Promise<{ success: boolean; message: string }> {
+  const res = await client.delete<{ success: boolean; message: string }>(`/youtube/history/${runId}`)
+  return res.data
+}
+export async function renameHistoryEntry(runId: string, newName: string): Promise<{ success: boolean; message: string }> {
+  const res = await client.patch<{ success: boolean; message: string }>(`/youtube/history/${runId}/rename`, { query: newName })
+  return res.data
+}

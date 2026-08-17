@@ -49,14 +49,48 @@ function useTypingEffect(items: string[], speed = 55, pause = 2200) {
   return text
 }
 
-function ScoreBar({ label, value }: { label: string; value: number }) {
-  const pct = Math.round((value / 10) * 100)
+const LOADING_STATUSES = [
+  "Firing up the pipeline agents...",
+  "Searching YouTube for the best video matches...",
+  "Filtering videos by relevance and quality metrics...",
+  "Extracting audio transcripts from matches...",
+  "Chunking transcripts and parsing timestamp metadata...",
+  "Generating dense embeddings using AI models...",
+  "Structuring vector databases for deep context retrieval...",
+  "Running multi-agent RAG queries on video content...",
+  "Evaluating educational quality and coverage scores...",
+  "Structuring beginner-friendly recommendations...",
+  "Synthesizing the executive summary and key takeaways...",
+  "Mapping out step-by-step learning paths...",
+  "Compiling strengths, weaknesses, and key concepts...",
+  "Finalizing formatting and rendering report..."
+]
+
+function useLoadingStatus(statuses: string[], interval = 3500) {
+  const [index, setIndex] = useState(0)
+  const [fade, setFade] = useState(true)
+  useEffect(() => {
+    const t = setInterval(() => {
+      setFade(false)
+      setTimeout(() => {
+        setIndex((prev) => (prev + 1) % statuses.length)
+        setFade(true)
+      }, 300)
+    }, interval)
+    return () => clearInterval(t)
+  }, [statuses, interval])
+  return { status: statuses[index], fade }
+}
+
+function ScoreBar({ label, value }: { label: string; value: number | null | undefined }) {
+  const v = value ?? 0
+  const pct = Math.round((v / 10) * 100)
   const color = pct >= 80 ? '#22c55e' : pct >= 60 ? '#eab308' : '#ef4444'
   return (
     <div>
       <div className="mb-1 flex items-center justify-between">
         <span className="text-[10px] tracking-[0.2em] font-bold text-[#555555]">{label.toUpperCase()}</span>
-        <span className="text-xs font-bold text-white">{value.toFixed(1)}</span>
+        <span className="text-xs font-bold text-white">{v.toFixed(1)}</span>
       </div>
       <div className="h-1 rounded-full bg-[#222222] overflow-hidden">
         <div className="h-full rounded-full" style={{ width: pct + '%', backgroundColor: color, transition: 'width 0.7s ease' }} />
@@ -83,7 +117,7 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
             {res.description && <p className="mt-3 text-sm text-[#888888] line-clamp-2 leading-relaxed">{res.description}</p>}
           </div>
           <div className="flex-shrink-0 text-right pl-4">
-            <p className="text-3xl font-bold text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>{res.overall_score.toFixed(1)}</p>
+            <p className="text-3xl font-bold text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>{(res.overall_score ?? 0).toFixed(1)}</p>
             <p className="text-[10px] font-bold tracking-[0.2em] text-[#555555]">/ 10</p>
           </div>
         </div>
@@ -115,29 +149,29 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
 
       {open && (
         <div className="border-t border-[#1a1a1a] p-6 space-y-6 animate-fade-in">
-          {res.concepts_covered.length > 0 && (
+          {(res.concepts_covered ?? []).length > 0 && (
             <div>
               <p className="mb-3 text-xs font-bold tracking-[0.25em] text-[#555555]">CONCEPTS COVERED</p>
               <div className="flex flex-wrap gap-2">
-                {res.concepts_covered.map((c) => (
+                {(res.concepts_covered ?? []).map((c) => (
                   <span key={c} className="border border-[#222222] bg-black px-3.5 py-1 text-xs tracking-[0.1em] text-[#888888] font-medium">{c}</span>
                 ))}
               </div>
             </div>
           )}
-          {res.strengths.length > 0 && (
+          {(res.strengths ?? []).length > 0 && (
             <div>
               <p className="mb-3 text-xs font-bold tracking-[0.25em] text-green-700">STRENGTHS</p>
               <ul className="space-y-2">
-                {res.strengths.map((s) => <li key={s} className="flex items-start gap-2.5 text-sm text-[#888888]"><span className="mt-0.5 text-green-500 font-extrabold">+</span>{s}</li>)}
+                {(res.strengths ?? []).map((s) => <li key={s} className="flex items-start gap-2.5 text-sm text-[#888888]"><span className="mt-0.5 text-green-500 font-extrabold">+</span>{s}</li>)}
               </ul>
             </div>
           )}
-          {res.weaknesses.length > 0 && (
+          {(res.weaknesses ?? []).length > 0 && (
             <div>
               <p className="mb-3 text-xs font-bold tracking-[0.25em] text-red-700">WEAKNESSES</p>
               <ul className="space-y-2">
-                {res.weaknesses.map((w) => <li key={w} className="flex items-start gap-2.5 text-sm text-[#888888]"><span className="mt-0.5 text-red-500 font-extrabold">−</span>{w}</li>)}
+                {(res.weaknesses ?? []).map((w) => <li key={w} className="flex items-start gap-2.5 text-sm text-[#888888]"><span className="mt-0.5 text-red-500 font-extrabold">−</span>{w}</li>)}
               </ul>
             </div>
           )}
@@ -165,22 +199,22 @@ interface RecommendedResource {
   rank: number; video_id: string; title: string; url: string
   channel: string | null; published_at: string | null; description: string | null
   views: number | null; likes: number | null; comments: number | null
-  transcript_available: boolean; transcript_language: string | null
-  relevance_score: number; educational_quality_score: number
-  coverage_score: number; overall_score: number; beginner_friendly: boolean
-  concepts_covered: string[]; strengths: string[]; weaknesses: string[]
-  recommendation_reason: string; thumbnail_url?: string | null
+  transcript_available: boolean | null; transcript_language: string | null
+  relevance_score: number | null; educational_quality_score: number | null
+  coverage_score: number | null; overall_score: number | null; beginner_friendly: boolean | null
+  concepts_covered: string[] | null; strengths: string[] | null; weaknesses: string[] | null
+  recommendation_reason: string | null; thumbnail_url?: string | null
 }
 
 function ReportView({ report, query }: { report: ResearchResponse['report'] | HistoryItem; query: string }) {
   const r = 'executive_summary' in report ? report : (report as HistoryItem)
   const exec = 'executive_summary' in r ? (r as ResearchResponse['report']).executive_summary : (r as HistoryItem).executive_summary ?? ''
-  const resources = 'recommended_resources' in r ? r.recommended_resources : []
-  const topics = 'key_topics' in r ? r.key_topics : []
-  const path = 'learning_path' in r ? r.learning_path : []
+  const resources: RecommendedResource[] = ('recommended_resources' in r ? ((r as any).recommended_resources ?? []) : [])
+  const topics: string[] = ('key_topics' in r ? ((r as any).key_topics ?? []) : [])
+  const path: string[] = ('learning_path' in r ? ((r as any).learning_path ?? []) : [])
   const conc = 'conclusion' in r ? (r as ResearchResponse['report']).conclusion : (r as HistoryItem).conclusion ?? ''
   const method = 'methodology' in r ? (r as ResearchResponse['report']).methodology : (r as HistoryItem).methodology ?? ''
-  const limits = 'limitations' in r ? r.limitations : []
+  const limits: string[] = ('limitations' in r ? ((r as any).limitations ?? []) : [])
 
   return (
     <div className="space-y-10 animate-slide-up">
@@ -294,6 +328,7 @@ function Research() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingPlaceholder = useTypingEffect(PLACEHOLDER_TOPICS)
   const greeting = GREETINGS[new Date().getHours() % GREETINGS.length]
+  const { status: loadingStatus, fade: loadingFade } = useLoadingStatus(LOADING_STATUSES)
   const activeRunId = searchParams.get('run')
 
   useEffect(() => {
@@ -306,6 +341,20 @@ function Research() {
       } catch { setError('Could not load this research run.') }
     }
     void load()
+  }, [activeRunId])
+
+  useEffect(() => {
+    const handleRefresh = async () => {
+      if (activeRunId) {
+        try {
+          const data = await getHistoryEntry(activeRunId)
+          setHistoryResult(data)
+          setHistoryQuery(data.query)
+        } catch {}
+      }
+    }
+    window.addEventListener('research:created', handleRefresh)
+    return () => window.removeEventListener('research:created', handleRefresh)
   }, [activeRunId])
 
   useEffect(() => {
@@ -364,26 +413,31 @@ function Research() {
 
       {/* Empty State Centered Search Dialog */}
       {showHome ? (
-        <div className="flex flex-col items-center justify-center flex-1 max-w-2xl mx-auto w-full space-y-5 animate-fade-in py-12">
-          <h2 className="text-base md:text-lg font-bold tracking-tight text-center text-[#cccccc]" style={{fontFamily:"'Space Grotesk',sans-serif"}}>{greeting}</h2>
-          <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} />
+        <div className="flex flex-col justify-center flex-1 max-w-2xl mx-auto w-full animate-fade-in py-12">
+          <div className="w-full flex flex-col items-start">
+            <h2 className="text-base md:text-lg font-bold tracking-tight text-left text-[#cccccc] mb-6" style={{fontFamily:"'Space Grotesk',sans-serif"}}>{greeting}</h2>
+            <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} />
+          </div>
         </div>
       ) : (
         <div className="space-y-10 flex-1">
           {/* Loading */}
           {loading && (
-            <div className="flex flex-col items-center justify-center gap-6 py-20 animate-fade-in">
-              <Loader2 size={36} className="animate-spin text-white" />
-              <div className="text-center">
-                <p className="text-lg font-bold tracking-[0.1em] text-white">RESEARCHING...</p>
-                <p className="mt-2 text-xs font-semibold text-[#666666] tracking-wide">Running 3-agent pipeline · This takes ~2 minutes</p>
+            <div className="flex flex-col items-center justify-center gap-8 py-24 animate-fade-in flex-1">
+              <div className="relative flex items-center justify-center h-24 w-24">
+                <div className="absolute inset-0 rounded-full border border-white/10 animate-ping" />
+                <div className="absolute inset-2 rounded-full border-t-2 border-r-2 border-white/80 animate-spin [animation-duration:1.2s]" />
+                <div className="h-10 w-10 rounded-full bg-white/5 backdrop-blur-md border border-white/20 animate-pulse flex items-center justify-center">
+                  <Play size={10} className="text-white fill-white ml-0.5" />
+                </div>
               </div>
-              <div className="flex items-center gap-4 text-[10px] font-bold tracking-[0.2em] text-[#555555]">
-                <span>AGENT 1: SEARCH</span>
-                <span>→</span>
-                <span>AGENT 2: RAG</span>
-                <span>→</span>
-                <span>AGENT 3: REPORT</span>
+              <div className="text-center space-y-3 min-h-[5rem] flex flex-col justify-center max-w-lg">
+                <p className={"text-base font-semibold tracking-wide text-white transition-opacity duration-300 " + (loadingFade ? "opacity-100" : "opacity-0")}>
+                  {loadingStatus.toUpperCase()}
+                </p>
+                <p className="text-[10px] font-bold text-[#555555] tracking-[0.2em] uppercase">
+                  Synthesizing video knowledge graph · Please wait ~2 minutes
+                </p>
               </div>
             </div>
           )}
@@ -404,10 +458,12 @@ function Research() {
             <div className="space-y-10">
               <ReportView report={activeReport} query={activeQuery} />
               <div ref={bottomRef} />
-              <div className="border-t border-[#181818] pt-8">
-                <p className="mb-4 text-xs font-bold tracking-[0.3em] text-[#555555]">NEW RESEARCH</p>
-                <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} />
-              </div>
+              {!activeRunId && (
+                <div className="border-t border-[#181818] pt-8 max-w-2xl mx-auto w-full">
+                  <p className="mb-4 text-xs font-bold tracking-[0.3em] text-[#555555] text-left">NEW RESEARCH</p>
+                  <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} />
+                </div>
+              )}
             </div>
           )}
         </div>

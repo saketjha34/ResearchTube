@@ -19,6 +19,7 @@ Endpoints:
 from __future__ import annotations
 
 from uuid import UUID
+from pydantic import BaseModel
 
 from fastapi import (
     APIRouter,
@@ -56,6 +57,10 @@ from app.services.history_service import (
     get_user_history,
     _build_entry,
 )
+
+
+class RenameHistoryRequest(BaseModel):
+    query: str
 
 
 router = APIRouter(
@@ -236,3 +241,105 @@ async def get_history_entry(
         session=session,
         run=run,
     )
+
+
+# ============================================================
+# DELETE /youtube/history/{run_id}  — PROTECTED
+# ============================================================
+
+@router.delete(
+    "/history/{run_id}",
+)
+async def delete_history_entry(
+    run_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Delete a single research run history entry.
+
+    Returns 404 if the run does not exist or does not
+    belong to the authenticated user.
+    """
+
+    result = await session.execute(
+        select(ResearchRun).where(
+            ResearchRun.id == run_id,
+            ResearchRun.user_id == current_user.id,
+        )
+    )
+    run = result.scalar_one_or_none()
+
+    if run is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Research run not found.",
+        )
+
+    try:
+        await session.delete(run)
+        await session.commit()
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete research run: {exc}",
+        )
+
+    return {
+        "success": True,
+        "message": "Research run deleted successfully.",
+    }
+
+
+# ============================================================
+# PATCH /youtube/history/{run_id}/rename  — PROTECTED
+# ============================================================
+
+@router.patch(
+    "/history/{run_id}/rename",
+)
+async def rename_history_entry(
+    run_id: UUID,
+    request: RenameHistoryRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Rename a single research run history entry.
+
+    Returns 404 if the run does not exist or does not
+    belong to the authenticated user.
+    """
+
+    result = await session.execute(
+        select(ResearchRun).where(
+            ResearchRun.id == run_id,
+            ResearchRun.user_id == current_user.id,
+        )
+    )
+    run = result.scalar_one_or_none()
+
+    if run is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Research run not found.",
+        )
+
+    try:
+        run.user_query = request.query
+        await session.commit()
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to rename research run: {exc}",
+        )
+
+    return {
+        "success": True,
+        "message": "Research run renamed successfully.",
+    }
+
+
+
