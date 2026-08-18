@@ -148,6 +148,8 @@ class HistoryEntry(BaseModel):
 
     status: str
 
+    is_public: bool = False
+
     video_count: int
 
     created_at: datetime

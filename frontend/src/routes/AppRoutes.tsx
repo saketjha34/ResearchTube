@@ -8,6 +8,7 @@ import AuthCallback from '../pages/AuthCallback'
 import Research from '../pages/Research'
 import AuthTest from '../pages/AuthTest'
 import Profile from '../pages/Profile'
+import { SharedReport } from '../pages/SharedReport'
 
 function AppRoutes() {
   return (
@@ -16,6 +17,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/share/:runId" element={<SharedReport />} />
 
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         {/* /dashboard redirects directly to /research */}

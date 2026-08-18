@@ -291,6 +291,7 @@ async def _build_entry(
         run_id=str(run.id),
         query=run.user_query,
         status=run.status,
+        is_public=run.is_public,
         video_count=run.video_count,
         created_at=run.created_at,
         completed_at=run.completed_at,

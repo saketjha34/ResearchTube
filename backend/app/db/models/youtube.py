@@ -84,6 +84,13 @@ class ResearchRun(Base):
         index=True,
     )
 
+    is_public: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+    )
+
     error_message: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,

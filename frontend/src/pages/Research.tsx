@@ -246,7 +246,7 @@ interface RecommendedResource {
   recommendation_reason: string | null; thumbnail_url?: string | null
 }
 
-function ReportView({ report, query, searchQuery = '' }: { report: ResearchResponse['report'] | HistoryItem; query: string; searchQuery?: string }) {
+export function ReportView({ report, query, searchQuery = '' }: { report: ResearchResponse['report'] | HistoryItem; query: string; searchQuery?: string }) {
   const r = 'executive_summary' in report ? report : (report as HistoryItem)
   const exec = 'executive_summary' in r ? (r as ResearchResponse['report']).executive_summary : (r as HistoryItem).executive_summary ?? ''
   const resources: RecommendedResource[] = ('recommended_resources' in r ? ((r as any).recommended_resources ?? []) : [])
@@ -368,6 +368,7 @@ function Research() {
   const [query, setQuery] = useState('')
   const [videoCount, setVideoCount] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [result, setResult] = useState<ResearchResponse | null>(null)
   const [historyResult, setHistoryResult] = useState<HistoryItem | null>(null)
   const [historyQuery, setHistoryQuery] = useState('')
@@ -388,11 +389,13 @@ function Research() {
     if (!activeRunId) { setHistoryResult(null); setHistoryQuery(''); return }
     setResult(null); setError(null)
     const load = async () => {
-      try {
-        const data = await getHistoryEntry(activeRunId)
-        setHistoryResult(data); setHistoryQuery(data.query)
-      } catch { setError('Could not load this research run.') }
-    }
+        try {
+          setHistoryLoading(true)
+          const data = await getHistoryEntry(activeRunId)
+          setHistoryResult(data); setHistoryQuery(data.query)
+        } catch { setError('Could not load this research run.') }
+        finally { setHistoryLoading(false) }
+      }
     void load()
   }, [activeRunId])
 
@@ -551,7 +554,7 @@ function Research() {
           )}
 
           {/* Report */}
-          {activeReport && !loading && (
+          {activeReport && !loading && !historyLoading && (
             <div className="space-y-10">
               <ReportView report={activeReport} query={activeQuery} searchQuery={reportSearch} />
               <div ref={bottomRef} />

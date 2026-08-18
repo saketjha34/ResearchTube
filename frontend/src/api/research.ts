@@ -52,3 +52,12 @@ export async function renameHistoryEntry(runId: string, newName: string): Promis
   const res = await client.patch<{ success: boolean; message: string }>(`/youtube/history/${runId}/rename`, { query: newName })
   return res.data
 }
+export async function shareHistoryEntry(runId: string): Promise<{ success: boolean; message: string; is_public: boolean }> {
+  const res = await client.patch<{ success: boolean; message: string; is_public: boolean }>(`/youtube/history/${runId}/share`)
+  return res.data
+}
+
+export async function getSharedEntry(runId: string): Promise<HistoryItem> {
+  const res = await client.get<HistoryItem>(`/youtube/shared/${runId}`)
+  return res.data
+}

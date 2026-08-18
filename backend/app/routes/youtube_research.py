@@ -343,3 +343,83 @@ async def rename_history_entry(
 
 
 
+
+# ============================================================
+# PATCH /youtube/history/{run_id}/share  — PROTECTED
+# ============================================================
+
+@router.patch(
+    "/history/{run_id}/share",
+    response_model=dict,
+)
+async def share_history_entry(
+    run_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Toggle the is_public status of a research run.
+    """
+
+    result = await session.execute(
+        select(ResearchRun).where(
+            ResearchRun.id == run_id,
+            ResearchRun.user_id == current_user.id,
+        )
+    )
+    run = result.scalar_one_or_none()
+
+    if run is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Research run not found.",
+        )
+
+    try:
+        run.is_public = True
+        await session.commit()
+    except Exception as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to share research run: {exc}",
+        )
+
+    return {
+        "success": True,
+        "message": "Research run is now public.",
+        "is_public": True,
+    }
+
+
+# ============================================================
+# GET /youtube/shared/{run_id}  — PUBLIC
+# ============================================================
+
+@router.get(
+    "/shared/{run_id}",
+    response_model=HistoryEntry,
+)
+async def get_shared_history_entry(
+    run_id: UUID,
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Return the full details of a public research run.
+    """
+
+    result = await session.execute(
+        select(ResearchRun).where(
+            ResearchRun.id == run_id,
+            ResearchRun.is_public == True,
+        )
+    )
+    run = result.scalar_one_or_none()
+
+    if run is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Research run not found or not public.",
+        )
+
+    return await _build_entry(session=session, run=run)

@@ -2,7 +2,7 @@ import { UserRound, Menu, X, FlaskConical, PenSquare, Clock, Loader2, Trash2, Mo
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import UserMenu from './UserMenu'
-import { getHistory, deleteHistoryEntry, renameHistoryEntry, type HistoryItem } from '../api/research'
+import { getHistory, deleteHistoryEntry, renameHistoryEntry, shareHistoryEntry, type HistoryItem } from '../api/research'
 
 const navItems = [
   { label: 'Research', icon: FlaskConical, to: '/research' },
@@ -22,6 +22,10 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [deleteTargetRunId, setDeleteTargetRunId] = useState<string | null>(null)
   const [renameTargetRunId, setRenameTargetRunId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [shareTargetRunId, setShareTargetRunId] = useState<string | null>(null)
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
+  const [shareGeneratedUrl, setShareGeneratedUrl] = useState<string | null>(null)
 
   // Pinned runs — persisted in localStorage
   const [pinnedRunIds, setPinnedRunIds] = useState<string[]>(() => {
@@ -102,6 +106,27 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     } catch { alert('Failed to delete research run.') }
   }
 
+  const generateShareLink = async () => {
+    if (!shareTargetRunId) return
+    setShareLoading(true)
+    try {
+      await shareHistoryEntry(shareTargetRunId)
+      const url = window.location.origin + '/share/' + shareTargetRunId
+      setShareGeneratedUrl(url)
+    } catch {
+      alert('Failed to generate share link.')
+    } finally {
+      setShareLoading(false)
+    }
+  }
+
+  const copyShareLink = async () => {
+    if (!shareGeneratedUrl) return
+    await navigator.clipboard.writeText(shareGeneratedUrl)
+    setShareCopied(true)
+    setTimeout(() => setShareCopied(false), 2000)
+  }
+
   const confirmRename = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!renameTargetRunId || !renameValue.trim()) return
@@ -153,12 +178,17 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           onClick={(e) => e.stopPropagation()}
           className="absolute right-2 top-8 z-50 w-44 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
         >
-          <button
-            onClick={() => { alert('Share feature is coming soon!'); setActiveMenuRunId(null) }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
-          >
-            <Share2 size={12} className="opacity-70" /><span>Share conversation</span>
-          </button>
+                      <button
+              onClick={() => {
+                setShareTargetRunId(item.run_id)
+                setShareGeneratedUrl(null)
+                setShareCopied(false)
+                setActiveMenuRunId(null)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            >
+              <Share2 size={12} className="opacity-70" /><span>Share conversation</span>
+            </button>
           <button
             onClick={() => { togglePin(item.run_id); setActiveMenuRunId(null) }}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
@@ -265,7 +295,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
         {/* History List */}
         {!collapsed && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 py-4">
             {loading ? (
               <div className="flex items-center gap-2 px-2 py-2 text-[#555555]">
                 <Loader2 size={12} className="animate-spin" />
@@ -406,6 +436,64 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 className="px-5 py-2 text-xs font-bold tracking-wider uppercase rounded-full bg-white text-black hover:bg-[#dddddd] transition-all">Save</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {shareTargetRunId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-[#1e1e1e] border border-[#2c2c2c] max-w-sm w-full p-6 rounded-2xl shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{fontFamily:"'Space Grotesk',sans-serif"}}>
+                <Share2 size={18} className="text-[#888888]" /> Share Report
+              </h3>
+              <button onClick={() => setShareTargetRunId(null)} className="text-[#666666] hover:text-white transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            
+            <p className="text-sm text-[#888888] leading-relaxed">
+              Anyone with this link will be able to view a read-only version of this research report.
+            </p>
+
+            {!shareGeneratedUrl ? (
+              <div className="pt-2">
+                <button 
+                  onClick={generateShareLink} 
+                  disabled={shareLoading}
+                  className="w-full flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-lg bg-white text-black hover:bg-[#dddddd] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {shareLoading ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
+                  {shareLoading ? 'Generating...' : 'Create Public Link'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center gap-2 bg-black border border-[#2c2c2c] rounded-lg p-1">
+                  <input 
+                    type="text" 
+                    readOnly 
+                    value={shareGeneratedUrl} 
+                    className="flex-1 bg-transparent text-white px-3 py-1.5 text-xs outline-none w-full"
+                  />
+                  <button 
+                    onClick={copyShareLink}
+                    className="flex items-center justify-center h-8 w-8 flex-shrink-0 bg-[#222222] hover:bg-[#333333] rounded-md transition-colors text-white"
+                    title="Copy link"
+                  >
+                    {shareCopied ? <Pin size={12} className="text-green-400" /> : <MoreVertical size={12} className="opacity-0 hidden" />}
+                    {shareCopied ? '✓' : 'Copy'}
+                  </button>
+                </div>
+                <button 
+                  onClick={() => setShareTargetRunId(null)}
+                  className="w-full px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-lg bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] transition-all"
+                >
+                  Done
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
