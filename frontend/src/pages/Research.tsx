@@ -2,6 +2,7 @@
 import { useSearchParams } from 'react-router-dom'
 import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { runResearch, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
+import { useToast, ToastContainer } from '../components/Toast'
 // useAuth removed
 
 const GREETINGS = [
@@ -324,6 +325,7 @@ function Research() {
   const [historyQuery, setHistoryQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [showOptions, setShowOptions] = useState(false)
+  const { toasts, toast, dismiss } = useToast()
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingPlaceholder = useTypingEffect(PLACEHOLDER_TOPICS)
@@ -377,16 +379,20 @@ function Research() {
   const submit = useCallback(async () => {
     if (!query.trim() || loading) return
     setLoading(true); setError(null); setResult(null); setHistoryResult(null); setSearchParams({})
+    toast('Research pipeline started — this takes ~2 minutes', 'info', 6000)
     try {
       const data = await runResearch(query.trim(), videoCount)
       setResult(data)
       window.dispatchEvent(new Event('research:created'))
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200)
+      toast('Research completed! Your report is ready.', 'success', 5000)
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg ?? 'Research failed. Please try again.')
+      const errMsg = msg ?? 'Research failed. Please try again.'
+      setError(errMsg)
+      toast(errMsg, 'error', 6000)
     } finally { setLoading(false) }
-  }, [query, videoCount, loading, setSearchParams])
+  }, [query, videoCount, loading, setSearchParams, toast])
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit() }
@@ -397,6 +403,7 @@ function Research() {
   const activeReport = result?.report ?? historyResult ?? null
 
   return (
+    <>
     <div className="flex flex-col min-h-[calc(100vh-140px)] space-y-10">
       {/* Header - Always left-aligned at top-left */}
       <header className="flex items-start justify-between flex-shrink-0">
@@ -469,6 +476,8 @@ function Research() {
         </div>
       )}
     </div>
+    <ToastContainer toasts={toasts} dismiss={dismiss} />
+    </>
   )
 }
 
