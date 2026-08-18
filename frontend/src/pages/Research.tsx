@@ -1,8 +1,9 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
+import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Copy, Check, Search, X as XIcon } from 'lucide-react'
 import { runResearch, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
 import { useToast, ToastContainer } from '../components/Toast'
+import { Onboarding } from '../components/Onboarding'
 // useAuth removed
 
 const GREETINGS = [
@@ -81,6 +82,44 @@ function useLoadingStatus(statuses: string[], interval = 3500) {
     return () => clearInterval(t)
   }, [statuses, interval])
   return { status: statuses[index], fade }
+}
+
+// ── Copy Button ────────────────────────────────────────────────────────────────
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        })
+      }}
+      title="Copy to clipboard"
+      className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold tracking-[0.15em] border border-[#222222] text-[#555555] hover:border-[#444444] hover:text-white transition-all rounded-md flex-shrink-0"
+    >
+      {copied ? <Check size={10} /> : <Copy size={10} />}
+      {copied ? 'COPIED' : 'COPY'}
+    </button>
+  )
+}
+
+// ── Text Highlighter ────────────────────────────────────────────────────────────
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query.trim() || !text) return <>{text}</>
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase() ? (
+          <mark key={i} style={{ background: 'rgba(250,204,21,0.25)', color: '#fde68a', borderRadius: '2px', padding: '0 2px' }}>{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  )
 }
 
 function ScoreBar({ label, value }: { label: string; value: number | null | undefined }) {
@@ -207,7 +246,7 @@ interface RecommendedResource {
   recommendation_reason: string | null; thumbnail_url?: string | null
 }
 
-function ReportView({ report, query }: { report: ResearchResponse['report'] | HistoryItem; query: string }) {
+function ReportView({ report, query, searchQuery = '' }: { report: ResearchResponse['report'] | HistoryItem; query: string; searchQuery?: string }) {
   const r = 'executive_summary' in report ? report : (report as HistoryItem)
   const exec = 'executive_summary' in r ? (r as ResearchResponse['report']).executive_summary : (r as HistoryItem).executive_summary ?? ''
   const resources: RecommendedResource[] = ('recommended_resources' in r ? ((r as any).recommended_resources ?? []) : [])
@@ -229,11 +268,14 @@ function ReportView({ report, query }: { report: ResearchResponse['report'] | Hi
       {/* Executive Summary */}
       {exec && (
         <div className="border border-[#222222] bg-[#111111] p-8">
-          <div className="mb-5 flex items-center gap-3">
-            <BookOpen size={18} className="text-[#555555]" />
-            <h2 className="text-xs font-bold tracking-[0.3em] text-[#999999]" style={{fontFamily:"'Space Grotesk',sans-serif"}}>EXECUTIVE SUMMARY</h2>
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <BookOpen size={18} className="text-[#555555]" />
+              <h2 className="text-xs font-bold tracking-[0.3em] text-[#999999]" style={{fontFamily:"'Space Grotesk',sans-serif"}}>EXECUTIVE SUMMARY</h2>
+            </div>
+            <CopyButton text={exec} />
           </div>
-          <p className="text-lg leading-8 text-[#cccccc] font-medium">{exec}</p>
+          <p className="text-lg leading-8 text-[#cccccc] font-medium"><Highlight text={exec} query={searchQuery} /></p>
         </div>
       )}
 
@@ -269,15 +311,18 @@ function ReportView({ report, query }: { report: ResearchResponse['report'] | Hi
       {/* Learning Path */}
       {path.length > 0 && (
         <div className="border border-[#222222] bg-[#111111] p-8">
-          <div className="mb-5 flex items-center gap-3">
-            <TrendingUp size={18} className="text-[#555555]" />
-            <h2 className="text-xs font-bold tracking-[0.3em] text-[#999999]" style={{fontFamily:"'Space Grotesk',sans-serif"}}>LEARNING PATH</h2>
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <TrendingUp size={18} className="text-[#555555]" />
+              <h2 className="text-xs font-bold tracking-[0.3em] text-[#999999]" style={{fontFamily:"'Space Grotesk',sans-serif"}}>LEARNING PATH</h2>
+            </div>
+            <CopyButton text={path.map((s, i) => `${i + 1}. ${s}`).join('\n')} />
           </div>
           <ol className="space-y-4">
             {path.map((step, i) => (
               <li key={i} className="flex items-start gap-4 text-base text-[#cccccc] font-medium">
                 <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center border border-[#333333] bg-black text-xs font-bold text-[#666666]">{i + 1}</span>
-                <span className="leading-relaxed mt-0.5">{step}</span>
+                <span className="leading-relaxed mt-0.5"><Highlight text={step} query={searchQuery} /></span>
               </li>
             ))}
           </ol>
@@ -307,8 +352,11 @@ function ReportView({ report, query }: { report: ResearchResponse['report'] | Hi
       {/* Conclusion */}
       {conc && (
         <div className="border border-white bg-black p-8">
-          <p className="mb-4 text-xs font-bold tracking-[0.3em] text-[#555555]">CONCLUSION</p>
-          <p className="text-lg leading-8 text-white font-bold">{conc}</p>
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-xs font-bold tracking-[0.3em] text-[#555555]">CONCLUSION</p>
+            <CopyButton text={conc} />
+          </div>
+          <p className="text-lg leading-8 text-white font-bold"><Highlight text={conc} query={searchQuery} /></p>
         </div>
       )}
     </div>
@@ -326,6 +374,9 @@ function Research() {
   const [error, setError] = useState<string | null>(null)
   const [showOptions, setShowOptions] = useState(false)
   const { toasts, toast, dismiss } = useToast()
+  const [reportSearch, setReportSearch] = useState('')
+  const [reportSearchOpen, setReportSearchOpen] = useState(false)
+  const reportSearchRef = useRef<HTMLInputElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const typingPlaceholder = useTypingEffect(PLACEHOLDER_TOPICS)
@@ -371,6 +422,25 @@ function Research() {
     return () => window.removeEventListener('research:clear', handleClear)
   }, [])
 
+  // Ctrl+F to search within active report
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        if (result || historyResult) {
+          e.preventDefault()
+          setReportSearchOpen(true)
+          setTimeout(() => reportSearchRef.current?.focus(), 50)
+        }
+      }
+      if (e.key === 'Escape' && reportSearchOpen) {
+        setReportSearchOpen(false)
+        setReportSearch('')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [result, historyResult, reportSearchOpen])
+
   const handleNew = () => {
     setSearchParams({}); setResult(null); setHistoryResult(null); setError(null); setQuery('')
     setTimeout(() => inputRef.current?.focus(), 100)
@@ -401,6 +471,26 @@ function Research() {
   const showHome = !loading && !result && !historyResult && !error
   const activeQuery = result ? query : historyQuery
   const activeReport = result?.report ?? historyResult ?? null
+
+  // Count report search matches for display
+  const reportMatchCount = useMemo(() => {
+    if (!reportSearch.trim() || !activeReport) return 0
+    const q = reportSearch.toLowerCase()
+    const r = activeReport as any
+    const allText = [
+      r.executive_summary ?? '',
+      r.conclusion ?? '',
+      r.methodology ?? '',
+      ...(r.learning_path ?? []),
+      ...(r.key_topics ?? []),
+      ...(r.limitations ?? []),
+      ...(r.recommended_resources ?? []).map((x: any) => `${x.title ?? ''} ${x.description ?? ''}`),
+    ].join(' ').toLowerCase()
+    let count = 0
+    let idx = allText.indexOf(q)
+    while (idx !== -1) { count++; idx = allText.indexOf(q, idx + 1) }
+    return count
+  }, [reportSearch, activeReport])
 
   return (
     <>
@@ -463,7 +553,7 @@ function Research() {
           {/* Report */}
           {activeReport && !loading && (
             <div className="space-y-10">
-              <ReportView report={activeReport} query={activeQuery} />
+              <ReportView report={activeReport} query={activeQuery} searchQuery={reportSearch} />
               <div ref={bottomRef} />
               {!activeRunId && (
                 <div className="border-t border-[#181818] pt-8 max-w-2xl mx-auto w-full">
@@ -476,6 +566,32 @@ function Research() {
         </div>
       )}
     </div>
+    {/* Report Search Bar */}
+    {reportSearchOpen && (
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[150] bg-[#111111] border border-[#2a2a2a] rounded-2xl shadow-2xl flex items-center gap-3 px-4 py-3 w-80">
+        <Search size={14} className="flex-shrink-0 text-[#555555]" />
+        <input
+          ref={reportSearchRef}
+          type="text"
+          value={reportSearch}
+          onChange={(e) => setReportSearch(e.target.value)}
+          placeholder="Search in report..."
+          className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#444444] font-medium"
+        />
+        {reportSearch && (
+          <span className="text-[10px] font-bold text-[#555555] flex-shrink-0">
+            {reportMatchCount} match{reportMatchCount !== 1 ? 'es' : ''}
+          </span>
+        )}
+        <button
+          onClick={() => { setReportSearchOpen(false); setReportSearch('') }}
+          className="flex-shrink-0 text-[#444444] hover:text-white transition-colors"
+        >
+          <XIcon size={13} />
+        </button>
+      </div>
+    )}
+    <Onboarding />
     <ToastContainer toasts={toasts} dismiss={dismiss} />
     </>
   )
