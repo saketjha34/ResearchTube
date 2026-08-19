@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Copy, Check, Search, X as XIcon } from 'lucide-react'
 import { runResearch, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
 import { useToast, ToastContainer } from '../components/Toast'
+import KnowledgeGraph from '../components/KnowledgeGraph'
 import { Onboarding } from '../components/Onboarding'
 // useAuth removed
 
@@ -277,6 +278,11 @@ export function ReportView({ report, query, searchQuery = '' }: { report: Resear
           </div>
           <p className="text-lg leading-8 text-[#cccccc] font-medium"><Highlight text={exec} query={searchQuery} /></p>
         </div>
+      )}
+
+      {/* Interactive Knowledge Graph */}
+      {resources.length > 0 && (
+        <KnowledgeGraph query={query} resources={resources} topics={topics} />
       )}
 
       {/* Recommended Resources */}
