@@ -1,8 +1,12 @@
 import axios from 'axios'
 import { clearAuthSession, getAccessToken } from './auth'
 
+const apiBaseUrl = import.meta.env.MODE === 'production'
+  ? (import.meta.env.VITE_API_URL_PROD || 'https://researchtubebackend-197336418001.asia-south1.run.app')
+  : (import.meta.env.VITE_API_URL_DEV || 'http://localhost:8000');
+
 const client = axios.create({
-  baseURL: import.meta.env.MODE === 'production' ? import.meta.env.VITE_API_URL_PROD : import.meta.env.VITE_API_URL_DEV,
+  baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
   },

@@ -35,8 +35,12 @@ export type AuthSession = {
   user: User
 }
 
+const apiBaseUrl = import.meta.env.MODE === 'production'
+  ? (import.meta.env.VITE_API_URL_PROD || 'https://researchtubebackend-197336418001.asia-south1.run.app')
+  : (import.meta.env.VITE_API_URL_DEV || 'http://localhost:8000');
+
 const authClient = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -118,7 +122,7 @@ export const logoutRequest = async (refreshToken: string): Promise<void> => {
 }
 
 export const startGoogleLogin = (): void => {
-  const googleAuthUrl = new URL('http://localhost:8000/auth/google')
+  const googleAuthUrl = new URL(`${apiBaseUrl.replace(/\/$/, '')}/auth/google`)
   googleAuthUrl.searchParams.set('prompt', 'select_account')
   googleAuthUrl.searchParams.set('ts', String(Date.now()))
 
