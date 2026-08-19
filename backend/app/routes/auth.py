@@ -507,7 +507,7 @@ async def google_callback(
     )
 
     frontend_callback = (
-        f"{settings.FRONTEND_URL.rstrip('/')}"
+        f"{settings.runtime_frontend_url.rstrip('/')}"
         "/auth/callback"
     )
 

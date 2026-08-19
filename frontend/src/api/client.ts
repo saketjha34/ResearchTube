@@ -2,7 +2,7 @@ import axios from 'axios'
 import { clearAuthSession, getAccessToken } from './auth'
 
 const client = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: import.meta.env.MODE === 'production' ? import.meta.env.VITE_API_URL_PROD : import.meta.env.VITE_API_URL_DEV,
   headers: {
     'Content-Type': 'application/json',
   },

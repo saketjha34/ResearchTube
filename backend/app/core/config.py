@@ -42,8 +42,9 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
 
-    # Frontend URL used for OAuth callback redirects
-    FRONTEND_URL: str = "http://localhost:5173"
+    # Frontend URLs
+    FRONTEND_URL_DEV: str = "http://localhost:5173"
+    FRONTEND_URL_PROD: str | None = None
 
     # ========================================================
     # CONFIG
@@ -73,5 +74,13 @@ class Settings(BaseSettings):
         # dev (default)
         return self.DATABASE_URL
 
+    @property
+    def runtime_frontend_url(self) -> str:
+        """Return the correct frontend URL based on ENVIRONMENT."""
+        if self.ENVIRONMENT == "prod":
+            if not self.FRONTEND_URL_PROD:
+                raise ValueError("FRONTEND_URL_PROD must be set when ENVIRONMENT=prod")
+            return self.FRONTEND_URL_PROD
+        return self.FRONTEND_URL_DEV
 
 settings = Settings()

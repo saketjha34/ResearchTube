@@ -1,32 +1,27 @@
-# React + TypeScript + Vite
+# Frontend Setup
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This is the React + Vite frontend for ResearchTube.
 
-Currently, two official plugins are available:
+## Running with Docker (Recommended)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. Ensure Docker Desktop is running.
+2. Build and start the container:
+   ``bash
+   docker compose up --build
+   ``
+3. The frontend will be available at [http://localhost:5173](http://localhost:5173).
 
-## React Compiler
+*(Note: Any changes you make to the code will automatically hot-reload in the browser thanks to the Docker volume mapping!)*
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Running locally without Docker (NPM)
 
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+1. Make sure Node.js (v18+) is installed.
+2. Install dependencies:
+   ``bash
+   npm install
+   ``
+3. Start the development server:
+   ``bash
+   npm run dev
+   ``
+4. The frontend will be available at [http://localhost:5173](http://localhost:5173).
