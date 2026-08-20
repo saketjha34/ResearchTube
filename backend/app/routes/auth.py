@@ -283,11 +283,9 @@ async def google_login(
     prompt: str | None = None,
 ):
 
-    redirect_uri = (
-        request.url_for(
-            "google_callback"
-        )
-    )
+    redirect_uri = str(request.url_for("google_callback"))
+    if settings.ENVIRONMENT == "prod" or request.headers.get("x-forwarded-proto") == "https":
+        redirect_uri = redirect_uri.replace("http://", "https://", 1)
 
     selected_prompt = prompt or "select_account"
 
@@ -315,10 +313,15 @@ async def google_callback(
     db: AsyncSession = Depends(get_db)
 ):
 
+    redirect_uri = str(request.url_for("google_callback"))
+    if settings.ENVIRONMENT == "prod" or request.headers.get("x-forwarded-proto") == "https":
+        redirect_uri = redirect_uri.replace("http://", "https://", 1)
+
     try:
 
         token = await oauth.google.authorize_access_token(
-            request
+            request,
+            redirect_uri=redirect_uri
         )
 
     except Exception:
