@@ -324,13 +324,15 @@ async def google_callback(
             redirect_uri=redirect_uri
         )
 
-    except Exception:
-
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print("Google Auth Callback Exception:", str(e))
         raise HTTPException(
 
             status_code=401,
 
-            detail="Google authentication failed."
+            detail=f"Google authentication failed: {str(e)}"
         )
 
     user_info = token.get(

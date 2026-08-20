@@ -56,6 +56,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
 
         "http://research-tube-ai.vercel.app",
+        "https://research-tube-ai.vercel.app",
     ],
 
     allow_credentials=True,
@@ -121,5 +122,5 @@ def root():
 def health():
 
     return {
-        "status": "healthy"
+        "status": "healthy edited"
     }
