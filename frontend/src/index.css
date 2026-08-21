@@ -123,3 +123,10 @@ a {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #555555;
 }
+
+/* Show element if device does not support hover (like touch screens/tablets) */
+@media (hover: none) {
+  .show-on-touch {
+    display: flex !important;
+  }
+}

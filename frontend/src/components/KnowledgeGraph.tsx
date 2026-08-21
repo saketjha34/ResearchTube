@@ -313,27 +313,39 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
     setIsPanning(false)
   }
 
-  // Zooming
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault()
-    const zoomFactor = 1.08
-    const nextK = e.deltaY < 0 ? transform.k * zoomFactor : transform.k / zoomFactor
-    const boundedK = Math.max(0.15, Math.min(3, nextK))
+  // Zooming via Native Non-Passive Event Listener (prevents page scroll and allows zooming over nodes)
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
 
-    if (!svgRef.current) return
-    const rect = svgRef.current.getBoundingClientRect()
-    const mouseX = e.clientX - rect.left
-    const mouseY = e.clientY - rect.top
+    const handleNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = 1.08;
+      
+      setTransform(prev => {
+        const nextK = e.deltaY < 0 ? prev.k * zoomFactor : prev.k / zoomFactor;
+        const boundedK = Math.max(0.15, Math.min(3, nextK));
+        
+        const rect = svg.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        const dx = mouseX - prev.x;
+        const dy = mouseY - prev.y;
+        
+        return {
+          x: mouseX - dx * (boundedK / prev.k),
+          y: mouseY - dy * (boundedK / prev.k),
+          k: boundedK
+        };
+      });
+    };
 
-    const dx = mouseX - transform.x
-    const dy = mouseY - transform.y
-
-    setTransform({
-      x: mouseX - dx * (boundedK / transform.k),
-      y: mouseY - dy * (boundedK / transform.k),
-      k: boundedK
-    })
-  }
+    svg.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => {
+      svg.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, []);
 
   // Highlight connection state helper
   const getHighlightState = (nodeId: string) => {
@@ -443,7 +455,6 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
             onMouseMove={handleSVGMouseMove}
             onMouseUp={handleSVGMouseUp}
             onMouseLeave={handleSVGMouseUp}
-            onWheel={handleWheel}
           >
             <defs>
               <filter id="glow-video" x="-50%" y="-50%" width="200%" height="200%">

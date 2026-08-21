@@ -27,6 +27,39 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [shareCopied, setShareCopied] = useState(false)
   const [shareGeneratedUrl, setShareGeneratedUrl] = useState<string | null>(null)
 
+  // Mobile long press menu triggers
+  const touchTimeoutRef = useRef<any>(null)
+  const isLongPressRef = useRef(false)
+
+  const handleTouchStart = (_e: React.TouchEvent, runId: string) => {
+    isLongPressRef.current = false
+    touchTimeoutRef.current = setTimeout(() => {
+      isLongPressRef.current = true
+      if (navigator.vibrate) {
+        try {
+          navigator.vibrate(50)
+        } catch (err) {}
+      }
+      setActiveMenuRunId(runId)
+    }, 600) // 600ms long press
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchTimeoutRef.current) {
+      clearTimeout(touchTimeoutRef.current)
+    }
+    if (isLongPressRef.current) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+  }
+
+  const handleTouchMove = () => {
+    if (touchTimeoutRef.current) {
+      clearTimeout(touchTimeoutRef.current)
+    }
+  }
+
   // Pinned runs — persisted in localStorage
   const [pinnedRunIds, setPinnedRunIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('rt_pinned_runs') ?? '[]') } catch { return [] }
@@ -156,7 +189,13 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const renderHistoryItem = (item: HistoryItem) => (
     <li key={item.run_id} className="relative group">
       <button
-        onClick={() => navigate(`/research?run=${item.run_id}`)}
+        onClick={() => {
+          if (isLongPressRef.current) return
+          navigate(`/research?run=${item.run_id}`)
+        }}
+        onTouchStart={(e) => handleTouchStart(e, item.run_id)}
+        onTouchEnd={handleTouchEnd}
+        onTouchMove={handleTouchMove}
         className={`flex w-full items-start gap-2 rounded-md pl-2 pr-8 py-2 text-left text-xs transition-all hover:bg-[#111111] ${
           activeRunId === item.run_id ? 'bg-[#111111] text-white font-bold' : 'text-[#888888] hover:text-white'
         }`}
@@ -169,7 +208,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </button>
       <button
         onClick={(e) => { e.stopPropagation(); setActiveMenuRunId(activeMenuRunId === item.run_id ? null : item.run_id) }}
-        className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
+        className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex show-on-touch items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
       >
         <MoreVertical size={13} />
       </button>
@@ -228,13 +267,13 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </button>
 
       <aside
-        className={`fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-[#181818] bg-black transition-all duration-300 md:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-[#181818] bg-black transition-all duration-300 md:translate-x-0 pb-16 md:pb-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
         style={{ width: collapsed ? '64px' : '288px' }}
       >
         {/* Header */}
         <div className="flex flex-shrink-0 items-center px-4 py-4" style={{ minHeight: '64px', justifyContent: collapsed ? 'center' : 'space-between' }}>
           {!collapsed && (
-            <Link to="/research" className="truncate text-xs font-bold tracking-[0.35em] text-white">
+            <Link to="/research" className="truncate text-xs font-bold tracking-[0.35em] text-white pl-12 md:pl-0">
               RESEARCHTUBE
             </Link>
           )}
