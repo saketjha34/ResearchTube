@@ -313,6 +313,62 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
     setIsPanning(false)
   }
 
+  // --- Mobile Touch Screen Interaction Handlers ---
+  const getSVGTouchCoords = (clientX: number, clientY: number) => {
+    if (!svgRef.current) return { x: 0, y: 0 }
+    const rect = svgRef.current.getBoundingClientRect()
+    const x = clientX - rect.left
+    const y = clientY - rect.top
+    return {
+      x: (x - transform.x) / transform.k,
+      y: (y - transform.y) / transform.k
+    }
+  }
+
+  const handleNodeTouchStart = (e: React.TouchEvent, node: Node) => {
+    e.stopPropagation() // Prevent background panning
+    setDraggedNodeId(node.id)
+    node.vx = 0
+    node.vy = 0
+  }
+
+  const handleSVGTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return // Only handle single-finger pans
+    const touch = e.touches[0]
+    setIsPanning(true)
+    setPanStart({ x: touch.clientX - transform.x, y: touch.clientY - transform.y })
+  }
+
+  const handleSVGTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return
+    const touch = e.touches[0]
+    const coords = getSVGTouchCoords(touch.clientX, touch.clientY)
+
+    if (draggedNodeId) {
+      if (e.cancelable) e.preventDefault() // Block browser scroll during drag
+      const node = nodesRef.current.find(n => n.id === draggedNodeId)
+      if (node) {
+        node.x = coords.x
+        node.y = coords.y
+        node.vx = 0
+        node.vy = 0
+        setTick(t => t + 1)
+      }
+    } else if (isPanning) {
+      if (e.cancelable) e.preventDefault() // Block browser scroll during pan
+      setTransform(t => ({
+        ...t,
+        x: touch.clientX - panStart.x,
+        y: touch.clientY - panStart.y
+      }))
+    }
+  }
+
+  const handleSVGTouchEnd = () => {
+    setDraggedNodeId(null)
+    setIsPanning(false)
+  }
+
   // Zooming via Native Non-Passive Event Listener (prevents page scroll and allows zooming over nodes)
   useEffect(() => {
     const svg = svgRef.current;
@@ -455,6 +511,9 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
             onMouseMove={handleSVGMouseMove}
             onMouseUp={handleSVGMouseUp}
             onMouseLeave={handleSVGMouseUp}
+            onTouchStart={handleSVGTouchStart}
+            onTouchMove={handleSVGTouchMove}
+            onTouchEnd={handleSVGTouchEnd}
           >
             <defs>
               <filter id="glow-video" x="-50%" y="-50%" width="200%" height="200%">
@@ -535,6 +594,7 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
                     transform={`translate(${node.x}, ${node.y})`}
                     className="transition-all duration-200 cursor-pointer"
                     onMouseDown={(e) => handleNodeMouseDown(e, node)}
+                    onTouchStart={(e) => handleNodeTouchStart(e, node)}
                     onMouseEnter={() => {
                       setHoveredNodeId(node.id)
                       setHoveredNode(node)
