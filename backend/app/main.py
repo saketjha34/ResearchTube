@@ -122,5 +122,5 @@ def root():
 def health():
 
     return {
-        "status": "healthy edited"
+        "status": "healthy"
     }
