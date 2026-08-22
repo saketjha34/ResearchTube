@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 
 function Profile() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const provider = useMemo(() => detectAuthProvider(user), [user])
 
   // --- Research Analytics State ---
@@ -192,6 +192,25 @@ function Profile() {
     }
   }
 
+  // --- Delete Account ---
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false)
+  const [deleteAccountError, setDeleteAccountError] = useState('')
+
+  const handleDeleteAccount = async () => {
+    setDeleteAccountError('')
+    setDeleteAccountLoading(true)
+    try {
+      await client.delete('/user/account')
+      setDeleteModalOpen(false)
+      await logout()
+    } catch (error) {
+      setDeleteAccountError('Failed to delete account. Please try again later.')
+    } finally {
+      setDeleteAccountLoading(false)
+    }
+  }
+
   return (
     <section className="space-y-8">
       <header>
@@ -281,6 +300,23 @@ function Profile() {
               Change password
             </Button>
           </div>
+        </div>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="border border-red-950/30 bg-[#111111] p-6 rounded-xl hover:border-red-900/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl text-red-500 font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Danger Zone</h2>
+          <p className="text-sm text-[#999999] mt-1">Permanently delete your ResearchTube account and all research history. This is irreversible.</p>
+        </div>
+        <div>
+          <button
+            type="button"
+            className="bg-red-600 hover:bg-red-700 text-white cursor-pointer px-6 py-2.5 font-semibold text-sm transition-all rounded-lg whitespace-nowrap"
+            onClick={() => setDeleteModalOpen(true)}
+          >
+            Delete Account
+          </button>
         </div>
       </div>
 
@@ -576,6 +612,44 @@ function Profile() {
           </div>
         ) : null}
       </section>
+
+      {/* Delete Account Modal */}
+      {deleteModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="w-full max-w-md rounded-xl border border-red-900 bg-[#111111] p-6 space-y-4">
+            <h3 className="text-xl font-bold text-red-500" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Delete Account?</h3>
+            <p className="text-sm text-[#888888] leading-relaxed">
+              Are you absolutely sure you want to delete your account? This will permanently wipe out all your saved research runs, recommended summaries, and custom settings. This action cannot be undone.
+            </p>
+            {deleteAccountError ? (
+              <p className="border border-red-950 bg-red-950/20 px-3 py-2 text-xs text-red-400 rounded-md">
+                {deleteAccountError}
+              </p>
+            ) : null}
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                className="cursor-pointer rounded-full bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] px-5 py-2 text-xs font-bold tracking-wider uppercase transition-all"
+                onClick={() => {
+                  setDeleteModalOpen(false)
+                  setDeleteAccountError('')
+                }}
+                disabled={deleteAccountLoading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cursor-pointer rounded-full bg-red-600 text-white hover:bg-red-700 px-5 py-2 text-xs font-bold tracking-wider uppercase transition-all disabled:opacity-50"
+                onClick={handleDeleteAccount}
+                disabled={deleteAccountLoading}
+              >
+                {deleteAccountLoading ? 'Deleting...' : 'Delete permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

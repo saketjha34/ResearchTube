@@ -24,3 +24,20 @@ async def get_stats(
     Aggregate and return 15 detailed research statistics for the authenticated user.
     """
     return await get_user_stats(db, current_user.id)
+
+
+@router.delete(
+    "/account",
+    status_code=204,
+    summary="Permanently delete user account"
+)
+async def delete_account(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permanently delete the current authenticated user's account and all associated data.
+    """
+    await db.delete(current_user)
+    await db.commit()
+    return None
