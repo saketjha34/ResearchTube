@@ -4,10 +4,78 @@ import Button from '../components/Button'
 import Input from '../components/Input'
 import { detectAuthProvider, getAuthSession, persistAuthSession } from '../api/auth'
 import { useAuth } from '../context/AuthContext'
+import { 
+  BarChart2, 
+  Play, 
+  Cpu, 
+  BookOpen, 
+  Hourglass, 
+  Video, 
+  Layers, 
+  Award, 
+  CheckCircle2, 
+  XCircle, 
+  Loader2,
+  Sparkles,
+  Compass
+} from 'lucide-react'
 
 function Profile() {
   const { user } = useAuth()
   const provider = useMemo(() => detectAuthProvider(user), [user])
+
+  // --- Research Analytics State ---
+  interface ChannelStat {
+    channel: string
+    count: number
+  }
+
+  interface ConceptStat {
+    concept: string
+    count: number
+  }
+
+  interface UserStats {
+    total_research_runs: number
+    completed_research_runs: number
+    failed_research_runs: number
+    total_videos_analyzed: number
+    total_views_analyzed: number
+    average_videos_per_run: number
+    total_channels_discovered: number
+    average_run_duration_seconds: number
+    average_relevance_score: number
+    average_educational_score: number
+    average_coverage_score: number
+    total_beginner_friendly_videos: number
+    total_transcript_chunks: number
+    top_channels: ChannelStat[]
+    top_concepts: ConceptStat[]
+  }
+
+  const [stats, setStats] = useState<UserStats | null>(null)
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState('')
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await client.get('/user/stats')
+        setStats(response.data)
+      } catch (err) {
+        setStatsError('Unable to load research activity stats.')
+      } finally {
+        setStatsLoading(false)
+      }
+    }
+    void fetchStats()
+  }, [])
+
+  const formatNumber = (num: number): string => {
+    if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+    if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K'
+    return num.toString()
+  }
 
   const [fullName, setFullName] = useState('')
   const [username, setUsername] = useState('')
@@ -280,6 +348,234 @@ function Profile() {
           </div>
         </div>
       ) : null}
+
+      {/* --- Research Analytics Section --- */}
+      <section className="space-y-6 pt-6 border-t border-[#222222]">
+        <header>
+          <h2 className="text-2xl font-semibold flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <BarChart2 className="text-purple-400" size={24} /> Research Analytics
+          </h2>
+          <p className="text-sm text-[#999999]">Aggregated insights compiled from your YouTube research runs.</p>
+        </header>
+
+        {statsLoading ? (
+          <div className="border border-[#222222] bg-[#111111] p-12 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="animate-spin text-purple-400" size={32} />
+            <p className="text-xs text-[#999999]">Calculating your research statistics...</p>
+          </div>
+        ) : statsError ? (
+          <div className="border border-red-950 bg-red-950/10 p-6 flex items-center gap-3">
+            <XCircle className="text-red-500" size={20} />
+            <p className="text-sm text-red-200">{statsError}</p>
+          </div>
+        ) : stats ? (
+          <div className="space-y-6">
+            {/* Overview Stats Cards */}
+            <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+              <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-purple-900/50 transition-all group">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Total Queries</span>
+                  <Sparkles size={16} className="text-[#666666] group-hover:text-purple-400 transition-colors" />
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-semibold text-white">{stats.total_research_runs}</span>
+                  <span className="text-xs text-[#555555]">runs</span>
+                </div>
+              </div>
+
+              <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-green-950/50 transition-all group">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Completed</span>
+                  <CheckCircle2 size={16} className="text-[#666666] group-hover:text-green-400 transition-colors" />
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-semibold text-white">{stats.completed_research_runs}</span>
+                  <span className="text-xs text-[#555555]">success</span>
+                </div>
+              </div>
+
+              <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-[#333333] transition-all group">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Videos Analyzed</span>
+                  <Video size={16} className="text-[#666666] group-hover:text-cyan-400 transition-colors" />
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-semibold text-white">{stats.total_videos_analyzed}</span>
+                  <span className="text-xs text-[#555555]">videos</span>
+                </div>
+              </div>
+
+              <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-[#333333] transition-all group">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Audience Reach</span>
+                  <Layers size={16} className="text-[#666666] group-hover:text-yellow-500 transition-colors" />
+                </div>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-semibold text-white">{formatNumber(stats.total_views_analyzed)}</span>
+                  <span className="text-xs text-[#555555]">views</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Performance Detail Grid */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="space-y-6">
+                {/* Secondary Stats */}
+                <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#666666]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Scope & Speed</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="border border-[#1a1a1a] bg-black/40 p-4 rounded-lg">
+                      <div className="flex items-center gap-2 text-[#999999] text-xs">
+                        <Compass size={14} className="text-purple-400" />
+                        <span>Query Scope</span>
+                      </div>
+                      <p className="mt-1 text-lg font-semibold text-white">{stats.average_videos_per_run} <span className="text-xs text-[#555555]">videos/run</span></p>
+                    </div>
+
+                    <div className="border border-[#1a1a1a] bg-black/40 p-4 rounded-lg">
+                      <div className="flex items-center gap-2 text-[#999999] text-xs">
+                        <Hourglass size={14} className="text-cyan-400" />
+                        <span>Avg Run Duration</span>
+                      </div>
+                      <p className="mt-1 text-lg font-semibold text-white">{stats.average_run_duration_seconds}s</p>
+                    </div>
+
+                    <div className="border border-[#1a1a1a] bg-black/40 p-4 rounded-lg">
+                      <div className="flex items-center gap-2 text-[#999999] text-xs">
+                        <Play size={14} className="text-red-400" />
+                        <span>Channels Discovered</span>
+                      </div>
+                      <p className="mt-1 text-lg font-semibold text-white">{stats.total_channels_discovered}</p>
+                    </div>
+
+                    <div className="border border-[#1a1a1a] bg-black/40 p-4 rounded-lg">
+                      <div className="flex items-center gap-2 text-[#999999] text-xs">
+                        <Cpu size={14} className="text-green-400" />
+                        <span>RAG Database Size</span>
+                      </div>
+                      <p className="mt-1 text-lg font-semibold text-white">{formatNumber(stats.total_transcript_chunks)} <span className="text-xs text-[#555555]">embeddings</span></p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Score Averages */}
+                <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-[#666666]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Avg Quality Metrics</h3>
+                    <div className="text-[10px] bg-green-950/20 text-green-400 border border-green-900/50 px-2 py-0.5 rounded-full font-bold">
+                      {stats.total_beginner_friendly_videos} Beginner-Friendly Videos
+                    </div>
+                  </div>
+
+                  <div className="space-y-3.5">
+                    {/* Relevance */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span className="text-[#999999]">Relevance Score</span>
+                        <span className="text-white">{stats.average_relevance_score} / 10</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-1000" 
+                          style={{ width: `${stats.average_relevance_score * 10}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Educational Quality */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span className="text-[#999999]">Educational Quality</span>
+                        <span className="text-white">{stats.average_educational_score} / 10</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-1000" 
+                          style={{ width: `${stats.average_educational_score * 10}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Coverage */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span className="text-[#999999]">Topic Coverage</span>
+                        <span className="text-white">{stats.average_coverage_score} / 10</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-1000" 
+                          style={{ width: `${stats.average_coverage_score * 10}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Insights Columns */}
+              <div className="space-y-6">
+                {/* Top Recommended Channels */}
+                <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4 flex-1">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#666666] flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    <Award size={14} className="text-yellow-500" /> Top Recommended Channels
+                  </h3>
+                  {stats.top_channels.length === 0 ? (
+                    <p className="text-xs text-[#555555] py-4 text-center">No video recommendations generated yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {(() => {
+                        const maxCount = stats.top_channels.reduce((max, c) => Math.max(max, c.count), 1)
+                        return stats.top_channels.map((ch, idx) => (
+                          <div key={ch.channel} className="space-y-1">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-[#cccccc] font-medium truncate flex items-center gap-1.5">
+                                <span className="text-[#555555] font-bold">#{idx + 1}</span> {ch.channel}
+                              </span>
+                              <span className="text-[#888888] font-bold">{ch.count} {ch.count === 1 ? 'time' : 'times'}</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-yellow-500/80 rounded-full" 
+                                style={{ width: `${(ch.count / maxCount) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  )}
+                </div>
+
+                {/* Top Key Concepts Map */}
+                <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4 flex-1">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#666666] flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                    <BookOpen size={14} className="text-purple-400" /> Top Research Concepts
+                  </h3>
+                  {stats.top_concepts.length === 0 ? (
+                    <p className="text-xs text-[#555555] py-4 text-center">No research reports analyzed yet.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {stats.top_concepts.map((concept) => (
+                        <div 
+                          key={concept.concept} 
+                          className="flex items-center gap-2 bg-[#171717] border border-[#222222] hover:border-purple-900/50 hover:bg-purple-950/10 px-3 py-1.5 rounded-lg text-xs transition-colors"
+                        >
+                          <span className="text-[#cccccc] font-medium">{concept.concept}</span>
+                          <span className="bg-[#222222] text-[10px] text-purple-400 font-bold px-1.5 py-0.5 rounded-md">
+                            {concept.count}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </section>
     </section>
   )
 }

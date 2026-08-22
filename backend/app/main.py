@@ -10,6 +10,7 @@ from app.core.init_db import init_db
 from app.routes.auth import router as auth_router
 from app.routes.test import router as test_router
 from app.routes.youtube_research import router as research_router
+from app.routes.user import router as user_router
 
 
 # ============================================================
@@ -99,6 +100,10 @@ app.include_router(
 
 app.include_router(
     research_router
+)
+
+app.include_router(
+    user_router
 )
 
 
