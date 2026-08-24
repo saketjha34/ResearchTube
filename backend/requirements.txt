@@ -6,7 +6,7 @@ langgraph
 langchain-google-genai
 langchain-openai
 langchain-community
-youtube-transcript-api
+youtube-transcript-api>=1.0.0
 google-api-python-client
 pytest
 pydantic

@@ -52,24 +52,10 @@ def search_youtube(
         List of YouTube video metadata.
     """
 
-    # --------------------------------------------------------
-    # Validate input
-    # --------------------------------------------------------
-
     if not query or not query.strip():
-        raise ValueError(
-            "YouTube search query cannot be empty."
-        )
+        raise ValueError("YouTube search query cannot be empty.")
 
-    # Keep API request within YouTube's allowed range.
-    max_results = max(
-        1,
-        min(max_results, 50)
-    )
-
-    # --------------------------------------------------------
-    # Call YouTube Search API
-    # --------------------------------------------------------
+    max_results = max(1, min(max_results, 50))
 
     response = youtube.search().list(
         q=query.strip(),
@@ -77,10 +63,6 @@ def search_youtube(
         type="video",
         maxResults=max_results,
     ).execute()
-
-    # --------------------------------------------------------
-    # Parse results
-    # --------------------------------------------------------
 
     results = []
 
@@ -92,38 +74,18 @@ def search_youtube(
             .get("videoId")
         )
 
-        snippet = item.get(
-            "snippet",
-            {}
-        )
+        snippet = item.get("snippet", {})
 
-        # Skip malformed results.
         if not video_id:
             continue
 
         results.append({
-
             "video_id": video_id,
-
-            "title": snippet.get(
-                "title"
-            ),
-
-            "description": snippet.get(
-                "description"
-            ),
-
-            "channel": snippet.get(
-                "channelTitle"
-            ),
-
-            "published_at": snippet.get(
-                "publishedAt"
-            ),
-
-            "url": (
-                f"https://www.youtube.com/watch?v={video_id}"
-            ),
+            "title": snippet.get("title"),
+            "description": snippet.get("description"),
+            "channel": snippet.get("channelTitle"),
+            "published_at": snippet.get("publishedAt"),
+            "url": f"https://www.youtube.com/watch?v={video_id}",
         })
 
     return results
@@ -138,8 +100,7 @@ def get_video_details(
     video_id: str,
 ) -> dict:
     """
-    Get detailed metadata and statistics
-    for a YouTube video.
+    Get detailed metadata and statistics for a YouTube video.
 
     Args:
         video_id:
@@ -149,97 +110,103 @@ def get_video_details(
         Video metadata and statistics.
     """
 
-    # --------------------------------------------------------
-    # Validate input
-    # --------------------------------------------------------
-
     if not video_id or not video_id.strip():
-        raise ValueError(
-            "video_id cannot be empty."
-        )
+        raise ValueError("video_id cannot be empty.")
 
     video_id = video_id.strip()
-
-    # --------------------------------------------------------
-    # Call YouTube Videos API
-    # --------------------------------------------------------
 
     response = youtube.videos().list(
         part="snippet,statistics",
         id=video_id,
     ).execute()
 
-    items = response.get(
-        "items",
-        []
-    )
-
-    # --------------------------------------------------------
-    # Video does not exist
-    # --------------------------------------------------------
+    items = response.get("items", [])
 
     if not items:
-
         return {
             "success": False,
             "error": "Video not found",
             "video_id": video_id,
         }
 
-    # --------------------------------------------------------
-    # Extract video information
-    # --------------------------------------------------------
-
     video = items[0]
-
-    snippet = video.get(
-        "snippet",
-        {}
-    )
-
-    statistics = video.get(
-        "statistics",
-        {}
-    )
+    snippet = video.get("snippet", {})
+    statistics = video.get("statistics", {})
 
     return {
-
         "success": True,
-
         "video_id": video_id,
-
-        "title": snippet.get(
-            "title"
-        ),
-
-        "description": snippet.get(
-            "description"
-        ),
-
-        "channel": snippet.get(
-            "channelTitle"
-        ),
-
-        "published_at": snippet.get(
-            "publishedAt"
-        ),
-
-        "views": statistics.get(
-            "viewCount"
-        ),
-
-        "likes": statistics.get(
-            "likeCount"
-        ),
-
-        "comments": statistics.get(
-            "commentCount"
-        ),
-
-        "url": (
-            f"https://www.youtube.com/watch?v={video_id}"
-        ),
+        "title": snippet.get("title"),
+        "description": snippet.get("description"),
+        "channel": snippet.get("channelTitle"),
+        "published_at": snippet.get("publishedAt"),
+        "views": statistics.get("viewCount"),
+        "likes": statistics.get("likeCount"),
+        "comments": statistics.get("commentCount"),
+        "url": f"https://www.youtube.com/watch?v={video_id}",
     }
+
+
+# ============================================================
+# INTERNAL: FETCH TRANSCRIPT WITH 3-LAYER FALLBACK
+# ============================================================
+
+def _fetch_transcript_with_fallback(
+    video_id: str,
+) -> tuple[str | None, str | None]:
+    """
+    Attempt to fetch a transcript with 3 progressive fallbacks
+    using only api.fetch() (compatible with youtube-transcript-api v1.x):
+
+        Layer 1 — English (manual or auto-generated)
+        Layer 2 — Common language variants (en-US, en-GB, en-IN, hi, es, etc.)
+        Layer 3 — No language filter: accepts whatever YouTube has available
+
+    Returns:
+        (transcript_text, language_label) or (None, None) on failure.
+    """
+
+    api = YouTubeTranscriptApi()
+
+    # --------------------------------------------------------
+    # Layer 1: English (covers both manual and auto-generated)
+    # --------------------------------------------------------
+    try:
+        fetched = api.fetch(video_id, languages=["en"])
+        text = "\n".join(s.text for s in fetched)
+        if text.strip():
+            print(f"[Transcript] {video_id}: Layer 1 (EN) succeeded.")
+            return text, "en"
+    except Exception as e:
+        print(f"[Transcript] {video_id}: Layer 1 failed — {e}")
+
+    # --------------------------------------------------------
+    # Layer 2: Common language variants (broad net)
+    # --------------------------------------------------------
+    other_languages = ["en-US", "en-GB", "en-IN", "en-AU", "hi", "es", "fr", "de", "pt"]
+    try:
+        fetched = api.fetch(video_id, languages=other_languages)
+        text = "\n".join(s.text for s in fetched)
+        if text.strip():
+            print(f"[Transcript] {video_id}: Layer 2 (language variants) succeeded.")
+            return text, "variant"
+    except Exception as e:
+        print(f"[Transcript] {video_id}: Layer 2 failed — {e}")
+
+    # --------------------------------------------------------
+    # Layer 3: No language filter — take whatever is available
+    # --------------------------------------------------------
+    try:
+        fetched = api.fetch(video_id)
+        text = "\n".join(s.text for s in fetched)
+        if text.strip():
+            print(f"[Transcript] {video_id}: Layer 3 (any language) succeeded.")
+            return text, "any"
+    except Exception as e:
+        print(f"[Transcript] {video_id}: Layer 3 failed — {e}")
+
+    print(f"[Transcript] {video_id}: All 3 layers exhausted — no transcript available.")
+    return None, None
 
 
 # ============================================================
@@ -249,14 +216,13 @@ def get_video_details(
 @tool
 def get_video_transcript(
     video_id: str,
-    max_chars: int = 10000,
+    max_chars: int = 15000,
 ) -> str:
     """
-    Fetch a YouTube transcript.
-
-    The tool tries:
-        1. English
-        2. Hindi
+    Fetch a YouTube transcript using a 3-layer fallback strategy:
+        1. Manual English transcript
+        2. Auto-generated English captions
+        3. Any available language, translated to English
 
     The transcript is truncated to max_chars to prevent
     sending extremely large context to an LLM.
@@ -269,119 +235,25 @@ def get_video_transcript(
             Maximum number of characters returned.
 
     Returns:
-        Transcript text.
+        Transcript text, or an unavailability message.
     """
 
-    # --------------------------------------------------------
-    # Validate input
-    # --------------------------------------------------------
-
     if not video_id or not video_id.strip():
-
-        return (
-            "Transcript unavailable: "
-            "video_id cannot be empty."
-        )
+        return "Transcript unavailable: video_id cannot be empty."
 
     video_id = video_id.strip()
+    max_chars = max(100, max_chars)
 
-    max_chars = max(
-        100,
-        max_chars
-    )
+    text, language_used = _fetch_transcript_with_fallback(video_id)
 
-    # --------------------------------------------------------
-    # Initialize transcript API
-    # --------------------------------------------------------
-
-    api = YouTubeTranscriptApi()
-
-    # --------------------------------------------------------
-    # Try English transcript
-    # --------------------------------------------------------
-
-    transcript = None
-    language_used = None
-
-    try:
-
-        transcript = api.fetch(
-            video_id,
-            languages=["en"],
-        )
-
-        language_used = "en"
-
-    except Exception:
-        pass
-
-    # --------------------------------------------------------
-    # Try Hindi transcript
-    # --------------------------------------------------------
-
-    if transcript is None:
-
-        try:
-
-            transcript = api.fetch(
-                video_id,
-                languages=["hi"],
-            )
-
-            language_used = "hi"
-
-        except Exception as e:
-
-            return (
-                "Transcript unavailable: "
-                f"{str(e)}"
-            )
-
-    # --------------------------------------------------------
-    # Convert transcript to text
-    # --------------------------------------------------------
-
-    try:
-
-        text = "\n".join(
-            snippet.text
-            for snippet in transcript
-        )
-
-    except Exception as e:
-
-        return (
-            "Transcript parsing failed: "
-            f"{str(e)}"
-        )
-
-    # --------------------------------------------------------
-    # Handle empty transcript
-    # --------------------------------------------------------
-
-    if not text.strip():
-
+    if not text or not text.strip():
         return (
             "Transcript unavailable: "
-            "transcript is empty."
+            "no transcript found for this video "
+            "(manual, auto-generated, or translated)."
         )
-
-    # --------------------------------------------------------
-    # Limit transcript size
-    # --------------------------------------------------------
 
     if len(text) > max_chars:
+        text = text[:max_chars] + "\n\n[TRANSCRIPT TRUNCATED]"
 
-        text = (
-            text[:max_chars]
-            + "\n\n[TRANSCRIPT TRUNCATED]"
-        )
-
-    # --------------------------------------------------------
-    # Return transcript
-    # --------------------------------------------------------
-
-    return (
-        f"[Language: {language_used}]\n\n"
-        f"{text}"
-    )
+    return f"[Language: {language_used}]\n\n{text}"

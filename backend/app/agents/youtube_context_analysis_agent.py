@@ -18,6 +18,8 @@ This agent does NOT:
 
 from __future__ import annotations
 
+import asyncio
+
 from typing import Any
 from uuid import UUID
 
@@ -319,9 +321,27 @@ async def context_analysis_agent(
         "[Agent 2] Analyzing resources..."
     )
 
-    raw_analysis = await analysis_llm.ainvoke(
-        prompt
-    )
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            raw_analysis = await analysis_llm.ainvoke(prompt)
+            break
+        except Exception as exc:
+            err_str = str(exc).lower()
+            is_transient = any(kw in err_str for kw in [
+                "transfer", "payload", "clientpayloaderror",
+                "transferencoding", "connection", "timeout",
+                "reset", "eof", "incomplete",
+            ])
+            if is_transient and attempt < max_retries:
+                wait = 2 ** attempt
+                print(
+                    f"[Agent 2] Transient error (attempt {attempt}/{max_retries}), "
+                    f"retrying in {wait}s — {exc}"
+                )
+                await asyncio.sleep(wait)
+            else:
+                raise
 
     # ========================================================
     # 6. VALIDATE OUTPUT

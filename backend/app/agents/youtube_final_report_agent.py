@@ -18,6 +18,8 @@ This agent does NOT:
 
 from __future__ import annotations
 
+import asyncio
+
 from app.llm.gemini import GeminiLLM
 
 from app.schema.youtube import (
@@ -276,9 +278,34 @@ Description:
         "\n[Agent 3] Generating final report..."
     )
 
-    raw_report = await report_llm.ainvoke(
-        prompt
-    )
+    # ========================================================
+    # 6. GEMINI ASYNC INVOCATION (with retry on transient errors)
+    # ========================================================
+
+    max_retries = 3
+    last_exc: Exception | None = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            raw_report = await report_llm.ainvoke(prompt)
+            break
+        except Exception as exc:
+            last_exc = exc
+            err_str = str(exc).lower()
+            is_transient = any(kw in err_str for kw in [
+                "transfer", "payload", "clientpayloaderror",
+                "transferencoding", "connection", "timeout",
+                "reset", "eof", "incomplete",
+            ])
+            if is_transient and attempt < max_retries:
+                wait = 2 ** attempt  # 2s, 4s
+                print(
+                    f"[Agent 3] Transient error (attempt {attempt}/{max_retries}), "
+                    f"retrying in {wait}s — {exc}"
+                )
+                await asyncio.sleep(wait)
+            else:
+                raise
 
     # ========================================================
     # 7. VALIDATE OUTPUT
