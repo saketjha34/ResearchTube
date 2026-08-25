@@ -26,7 +26,10 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Request,
 )
+
+from app.core.limiter import limiter
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,7 +80,9 @@ router = APIRouter(
     "/research",
     response_model=ResearchAPIResponse,
 )
+@limiter.limit("5/minute")          # expensive pipeline — strict cap
 async def research_youtube(
+    http_request: Request,
     request: ResearchAPIRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
@@ -175,7 +180,9 @@ async def research_youtube(
     "/history",
     response_model=HistoryListResponse,
 )
+@limiter.limit("60/minute")          # read-only list
 async def get_history(
+    request: Request,
     page: int = Query(default=1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(
         default=20,
@@ -211,7 +218,9 @@ async def get_history(
     "/history/{run_id}",
     response_model=HistoryEntry,
 )
+@limiter.limit("60/minute")          # read-only single entry
 async def get_history_entry(
+    request: Request,
     run_id: UUID,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
@@ -250,7 +259,9 @@ async def get_history_entry(
 @router.delete(
     "/history/{run_id}",
 )
+@limiter.limit("20/minute")          # delete operations
 async def delete_history_entry(
+    request: Request,
     run_id: UUID,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
@@ -299,9 +310,11 @@ async def delete_history_entry(
 @router.patch(
     "/history/{run_id}/rename",
 )
+@limiter.limit("20/minute")          # rename operations
 async def rename_history_entry(
+    request: Request,
     run_id: UUID,
-    request: RenameHistoryRequest,
+    rename_request: RenameHistoryRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
@@ -327,7 +340,7 @@ async def rename_history_entry(
         )
 
     try:
-        run.user_query = request.query
+        run.user_query = rename_request.query
         await session.commit()
     except Exception as exc:
         await session.rollback()
@@ -343,7 +356,6 @@ async def rename_history_entry(
 
 
 
-
 # ============================================================
 # PATCH /youtube/history/{run_id}/share  — PROTECTED
 # ============================================================
@@ -352,7 +364,9 @@ async def rename_history_entry(
     "/history/{run_id}/share",
     response_model=dict,
 )
+@limiter.limit("10/minute")          # share toggle
 async def share_history_entry(
+    request: Request,
     run_id: UUID,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
@@ -400,7 +414,9 @@ async def share_history_entry(
     "/shared/{run_id}",
     response_model=HistoryEntry,
 )
+@limiter.limit("30/minute")          # public endpoint — IP-based
 async def get_shared_history_entry(
+    request: Request,
     run_id: UUID,
     session: AsyncSession = Depends(get_db),
 ):

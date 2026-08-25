@@ -1,6 +1,8 @@
 import json
 from urllib.parse import quote
 
+from app.core.limiter import limiter
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -92,10 +94,10 @@ oauth.register(
     response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED
 )
+@limiter.limit("5/hour")          # prevent account-creation spam
 async def register(
-
+    request: Request,
     data: RegisterRequest,
-
     db: AsyncSession = Depends(get_db)
 ):
 
@@ -142,7 +144,9 @@ async def register(
     "/login",
     response_model=TokenResponse
 )
+@limiter.limit("10/minute")        # brute-force protection
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db)
 ):
@@ -180,10 +184,10 @@ async def login(
     "/refresh",
     response_model=TokenResponse
 )
+@limiter.limit("30/minute")        # token refresh abuse
 async def refresh(
-
+    request: Request,
     data: RefreshTokenRequest,
-
     db: AsyncSession = Depends(get_db)
 ):
 
@@ -250,10 +254,10 @@ async def refresh(
 @router.post(
     "/logout"
 )
+@limiter.limit("20/minute")        # prevent refresh token flood
 async def logout(
-
+    request: Request,
     data: RefreshTokenRequest,
-
     db: AsyncSession = Depends(get_db)
 ):
 
@@ -278,6 +282,7 @@ async def logout(
 @router.get(
     "/google"
 )
+@limiter.limit("10/minute")        # prevent OAuth initiation spam
 async def google_login(
     request: Request,
     prompt: str | None = None,
@@ -535,7 +540,9 @@ async def google_callback(
     "/me",
     response_model=UserResponse
 )
+@limiter.limit("60/minute")        # read-only, generous
 async def get_profile(
+    request: Request,
     current_user: User = Depends(get_current_user)
 ):
 
@@ -548,7 +555,9 @@ async def get_profile(
     "/me",
     response_model=UserResponse
 )
+@limiter.limit("10/minute")        # profile update
 async def update_profile(
+    request: Request,
     data: UpdateProfileRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -578,7 +587,9 @@ async def update_profile(
 @router.post(
     "/change-password"
 )
+@limiter.limit("5/minute")         # sensitive — very strict
 async def change_password(
+    request: Request,
     data: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)

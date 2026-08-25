@@ -3,9 +3,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+# pyrefly: ignore [missing-import]
+from slowapi import _rate_limit_exceeded_handler
+# pyrefly: ignore [missing-import]
+from slowapi.errors import RateLimitExceeded
+# pyrefly: ignore [missing-import]
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.config import settings
 from app.core.init_db import init_db
+from app.core.limiter import limiter
 
 from app.routes.auth import router as auth_router
 from app.routes.test import router as test_router
@@ -36,6 +43,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Wire slowapi into the app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 
 # ============================================================
