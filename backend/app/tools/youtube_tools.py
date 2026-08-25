@@ -8,7 +8,21 @@ Tools:
 
 These tools are intentionally kept independent from the agents.
 Agents will call these tools when they need YouTube information.
+
+PROXY SUPPORT (for cloud deployments where YouTube blocks GCP IPs):
+    Set YOUTUBE_PROXY_URL in your environment to route transcript
+    requests through a residential proxy.
+
+    Examples:
+        YOUTUBE_PROXY_URL=http://user:pass@proxy.example.com:8080
+        YOUTUBE_PROXY_URL=socks5://user:pass@proxy.example.com:1080
+
+    Webshare (free tier): https://proxy.webshare.io/
+    Set WEBSHARE_PROXY_USERNAME + WEBSHARE_PROXY_PASSWORD instead
+    to use the Webshare-specific config.
 """
+
+import os
 
 from googleapiclient.discovery import build
 from langchain_core.tools import tool
@@ -19,7 +33,7 @@ from app.core.config import settings
 
 
 # ============================================================
-# YOUTUBE CLIENT
+# YOUTUBE CLIENT (YouTube Data API v3)
 # ============================================================
 
 youtube = build(
@@ -27,6 +41,78 @@ youtube = build(
     "v3",
     developerKey=settings.YOUTUBE_API_KEY,
 )
+
+
+# ============================================================
+# PROXY-AWARE TRANSCRIPT API FACTORY
+# ============================================================
+
+def _build_transcript_api() -> YouTubeTranscriptApi:
+    """
+    Build a YouTubeTranscriptApi instance, optionally configured
+    with a proxy to work around GCP/cloud IP blocks.
+
+    Priority:
+        1. Webshare proxy  (WEBSHARE_PROXY_USERNAME + WEBSHARE_PROXY_PASSWORD)
+        2. Generic proxy   (YOUTUBE_PROXY_URL)
+        3. No proxy        (works fine on local / non-cloud IPs)
+    """
+
+    # ----------------------------------------------------------
+    # Option 1: Webshare residential proxy (recommended for prod)
+    # ----------------------------------------------------------
+    webshare_user = os.getenv("WEBSHARE_PROXY_USERNAME", "").strip()
+    webshare_pass = os.getenv("WEBSHARE_PROXY_PASSWORD", "").strip()
+
+    if webshare_user and webshare_pass:
+        try:
+            from youtube_transcript_api.proxies import WebshareProxyConfig
+            print("[Transcript] Using Webshare proxy.")
+            return YouTubeTranscriptApi(
+                proxy_config=WebshareProxyConfig(
+                    proxy_username=webshare_user,
+                    proxy_password=webshare_pass,
+                )
+            )
+        except ImportError:
+            print("[Transcript] WebshareProxyConfig not available — falling back.")
+
+    # ----------------------------------------------------------
+    # Option 2: Generic proxy URL  (any provider)
+    # e.g. YOUTUBE_PROXY_URL=http://user:pass@31.59.20.176:6754
+    # ----------------------------------------------------------
+    proxy_url = os.getenv("YOUTUBE_PROXY_URL", "").strip()
+
+    if proxy_url:
+        safe_url = proxy_url.split("@")[-1]  # hide credentials in logs
+
+        # Try GenericProxyConfig (youtube-transcript-api v1.x)
+        # Correct param names are http_url / https_url
+        try:
+            from youtube_transcript_api.proxies import GenericProxyConfig
+            print(f"[Transcript] Using generic proxy via GenericProxyConfig: {safe_url}")
+            return YouTubeTranscriptApi(
+                proxy_config=GenericProxyConfig(
+                    http_url=proxy_url,
+                    https_url=proxy_url,
+                )
+            )
+        except (ImportError, TypeError):
+            pass
+
+        # Fallback: inject proxy via HTTP_PROXY / HTTPS_PROXY env vars.
+        # The underlying httpx / requests client will pick these up automatically.
+        print(f"[Transcript] Using generic proxy via env vars: {safe_url}")
+        os.environ["HTTP_PROXY"] = proxy_url
+        os.environ["HTTPS_PROXY"] = proxy_url
+        os.environ["http_proxy"] = proxy_url
+        os.environ["https_proxy"] = proxy_url
+        return YouTubeTranscriptApi()
+
+    # ----------------------------------------------------------
+    # Option 3: No proxy (default — works on local/residential IPs)
+    # ----------------------------------------------------------
+    return YouTubeTranscriptApi()
 
 
 # ============================================================
@@ -156,7 +242,10 @@ def _fetch_transcript_with_fallback(
 ) -> tuple[str | None, str | None]:
     """
     Attempt to fetch a transcript with 3 progressive fallbacks
-    using only api.fetch() (compatible with youtube-transcript-api v1.x):
+    using only api.fetch() (compatible with youtube-transcript-api v1.x).
+
+    A proxy-aware API instance is built each call so that env var
+    changes at runtime are picked up (e.g. for testing).
 
         Layer 1 — English (manual or auto-generated)
         Layer 2 — Common language variants (en-US, en-GB, en-IN, hi, es, etc.)
@@ -166,7 +255,7 @@ def _fetch_transcript_with_fallback(
         (transcript_text, language_label) or (None, None) on failure.
     """
 
-    api = YouTubeTranscriptApi()
+    api = _build_transcript_api()
 
     # --------------------------------------------------------
     # Layer 1: English (covers both manual and auto-generated)
@@ -221,8 +310,11 @@ def get_video_transcript(
     """
     Fetch a YouTube transcript using a 3-layer fallback strategy:
         1. Manual English transcript
-        2. Auto-generated English captions
-        3. Any available language, translated to English
+        2. Auto-generated English captions / language variants
+        3. Any available language
+
+    Proxy support: Set WEBSHARE_PROXY_USERNAME + WEBSHARE_PROXY_PASSWORD
+    or YOUTUBE_PROXY_URL in the environment to bypass cloud IP blocks.
 
     The transcript is truncated to max_chars to prevent
     sending extremely large context to an LLM.
