@@ -24,12 +24,18 @@ PROXY SUPPORT (for cloud deployments where YouTube blocks GCP IPs):
 
 import os
 
+# pyrefly: ignore [missing-import]
+import structlog
+
 from googleapiclient.discovery import build
 from langchain_core.tools import tool
 # pyrefly: ignore [missing-import]
 from youtube_transcript_api import YouTubeTranscriptApi
 
 from app.core.config import settings
+
+
+logger = structlog.get_logger("youtube_tools")
 
 
 # ============================================================
@@ -67,7 +73,7 @@ def _build_transcript_api() -> YouTubeTranscriptApi:
     if webshare_user and webshare_pass:
         try:
             from youtube_transcript_api.proxies import WebshareProxyConfig
-            print("[Transcript] Using Webshare proxy.")
+            logger.info("transcript.proxy_mode", mode="webshare")
             return YouTubeTranscriptApi(
                 proxy_config=WebshareProxyConfig(
                     proxy_username=webshare_user,
@@ -75,7 +81,7 @@ def _build_transcript_api() -> YouTubeTranscriptApi:
                 )
             )
         except ImportError:
-            print("[Transcript] WebshareProxyConfig not available — falling back.")
+            logger.warning("transcript.proxy_mode", mode="webshare", status="unavailable_falling_back")
 
     # ----------------------------------------------------------
     # Option 2: Generic proxy URL  (any provider)
@@ -90,7 +96,7 @@ def _build_transcript_api() -> YouTubeTranscriptApi:
         # Correct param names are http_url / https_url
         try:
             from youtube_transcript_api.proxies import GenericProxyConfig
-            print(f"[Transcript] Using generic proxy via GenericProxyConfig: {safe_url}")
+            logger.info("transcript.proxy_mode", mode="generic", host=safe_url)
             return YouTubeTranscriptApi(
                 proxy_config=GenericProxyConfig(
                     http_url=proxy_url,
@@ -102,7 +108,7 @@ def _build_transcript_api() -> YouTubeTranscriptApi:
 
         # Fallback: inject proxy via HTTP_PROXY / HTTPS_PROXY env vars.
         # The underlying httpx / requests client will pick these up automatically.
-        print(f"[Transcript] Using generic proxy via env vars: {safe_url}")
+        logger.info("transcript.proxy_mode", mode="env_vars", host=safe_url)
         os.environ["HTTP_PROXY"] = proxy_url
         os.environ["HTTPS_PROXY"] = proxy_url
         os.environ["http_proxy"] = proxy_url
@@ -112,6 +118,7 @@ def _build_transcript_api() -> YouTubeTranscriptApi:
     # ----------------------------------------------------------
     # Option 3: No proxy (default — works on local/residential IPs)
     # ----------------------------------------------------------
+    logger.info("transcript.proxy_mode", mode="none")
     return YouTubeTranscriptApi()
 
 
@@ -257,6 +264,8 @@ def _fetch_transcript_with_fallback(
 
     api = _build_transcript_api()
 
+    log = logger.bind(video_id=video_id)
+
     # --------------------------------------------------------
     # Layer 1: English (covers both manual and auto-generated)
     # --------------------------------------------------------
@@ -264,10 +273,10 @@ def _fetch_transcript_with_fallback(
         fetched = api.fetch(video_id, languages=["en"])
         text = "\n".join(s.text for s in fetched)
         if text.strip():
-            print(f"[Transcript] {video_id}: Layer 1 (EN) succeeded.")
+            log.info("transcript.layer_ok", layer=1, language="en")
             return text, "en"
     except Exception as e:
-        print(f"[Transcript] {video_id}: Layer 1 failed — {e}")
+        log.warning("transcript.layer_failed", layer=1, exc=str(e))
 
     # --------------------------------------------------------
     # Layer 2: Common language variants (broad net)
@@ -277,10 +286,10 @@ def _fetch_transcript_with_fallback(
         fetched = api.fetch(video_id, languages=other_languages)
         text = "\n".join(s.text for s in fetched)
         if text.strip():
-            print(f"[Transcript] {video_id}: Layer 2 (language variants) succeeded.")
+            log.info("transcript.layer_ok", layer=2, language="variant")
             return text, "variant"
     except Exception as e:
-        print(f"[Transcript] {video_id}: Layer 2 failed — {e}")
+        log.warning("transcript.layer_failed", layer=2, exc=str(e))
 
     # --------------------------------------------------------
     # Layer 3: No language filter — take whatever is available
@@ -289,12 +298,12 @@ def _fetch_transcript_with_fallback(
         fetched = api.fetch(video_id)
         text = "\n".join(s.text for s in fetched)
         if text.strip():
-            print(f"[Transcript] {video_id}: Layer 3 (any language) succeeded.")
+            log.info("transcript.layer_ok", layer=3, language="any")
             return text, "any"
     except Exception as e:
-        print(f"[Transcript] {video_id}: Layer 3 failed — {e}")
+        log.warning("transcript.layer_failed", layer=3, exc=str(e))
 
-    print(f"[Transcript] {video_id}: All 3 layers exhausted — no transcript available.")
+    log.error("transcript.exhausted", layers_tried=3)
     return None, None
 
 

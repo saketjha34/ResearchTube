@@ -18,6 +18,8 @@ asyncpg
 psycopg2-binary
 pgvector
 
+structlog
+
 python-dotenv
 fastapi
 uvicorn

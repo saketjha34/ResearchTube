@@ -29,6 +29,9 @@ from fastapi import (
     Request,
 )
 
+# pyrefly: ignore [missing-import]
+import structlog
+
 from app.core.limiter import limiter
 
 from sqlalchemy import select
@@ -70,6 +73,8 @@ router = APIRouter(
     prefix="/youtube",
     tags=["YouTube Research"],
 )
+
+_logger = structlog.get_logger("youtube_research")
 
 
 # ============================================================
@@ -137,12 +142,13 @@ async def research_youtube(
 
     except Exception as exc:
 
-        print()
-        print("=" * 70)
-        print("RESEARCH PIPELINE FAILED")
-        print("=" * 70)
-        print(type(exc).__name__)
-        print(str(exc))
+        _logger.error(
+            "pipeline.failed",
+            run_id=run_id_str,
+            user_id=str(current_user.id),
+            exc_type=type(exc).__name__,
+            exc_msg=str(exc),
+        )
 
         try:
             await update_research_run_status(

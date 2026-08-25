@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
+import time
+# pyrefly: ignore [missing-import]
+import structlog
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -14,6 +17,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.config import settings
 from app.core.init_db import init_db
 from app.core.limiter import limiter
+from app.core.logging_config import configure_logging
 
 from app.routes.auth import router as auth_router
 from app.routes.test import router as test_router
@@ -28,9 +32,15 @@ from app.routes.user import router as user_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
-    print("Initializing database...")
+    # Configure structured logging before anything else
+    configure_logging(environment=settings.ENVIRONMENT)
+
+    logger = structlog.get_logger()
+    logger.info("db.init", environment=settings.ENVIRONMENT)
 
     await init_db()
+
+    logger.info("db.ready")
 
     yield
 
@@ -122,6 +132,32 @@ app.include_router(
 app.include_router(
     user_router
 )
+
+
+# ============================================================
+# HTTP REQUEST LOGGING MIDDLEWARE
+# Logs every request with method, path, status, duration_ms
+# ============================================================
+
+_req_logger = structlog.get_logger("http")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next) -> Response:
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = round((time.perf_counter() - start) * 1000, 1)
+
+    # Skip noisy health / docs endpoints
+    if request.url.path not in ("/health", "/", "/docs", "/openapi.json"):
+        _req_logger.info(
+            "request.completed",
+            method=request.method,
+            path=request.url.path,
+            status=response.status_code,
+            duration_ms=duration_ms,
+        )
+
+    return response
 
 
 # ============================================================

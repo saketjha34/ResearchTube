@@ -13,6 +13,9 @@ from __future__ import annotations
 import asyncio
 from uuid import UUID
 
+# pyrefly: ignore [missing-import]
+import structlog
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -28,6 +31,8 @@ from app.schema.youtube import YouTubeVideoResult
 
 # Module-level embedding service (shared)
 _embedding_service = GeminiEmbeddingService()
+
+logger = structlog.get_logger("ingestor")
 
 
 async def ingest_transcripts(
@@ -67,6 +72,8 @@ async def ingest_transcripts(
         Overlap between consecutive chunks.
     """
 
+    log = logger.bind(run_id=str(research_run_id))
+
     for video in videos:
 
         # ====================================================
@@ -74,27 +81,30 @@ async def ingest_transcripts(
         # ====================================================
 
         if not video.transcript_available:
-            print(
-                f"[Ingestor] Skipping {video.video_id} "
-                f"(no transcript)."
+            log.info(
+                "rag.skipped",
+                video_id=video.video_id,
+                reason="no_transcript",
             )
             continue
 
         transcript_text = video.transcript
 
         if not transcript_text or not transcript_text.strip():
-            print(
-                f"[Ingestor] Skipping {video.video_id} "
-                f"(empty transcript)."
+            log.info(
+                "rag.skipped",
+                video_id=video.video_id,
+                reason="empty_transcript",
             )
             continue
 
         db_video_uuid = video_id_map.get(video.video_id)
 
         if db_video_uuid is None:
-            print(
-                f"[Ingestor] WARNING: No DB UUID for "
-                f"{video.video_id} — skipping."
+            log.warning(
+                "rag.skipped",
+                video_id=video.video_id,
+                reason="no_db_uuid",
             )
             continue
 
@@ -109,14 +119,13 @@ async def ingest_transcripts(
         )
 
         if not chunks:
-            print(
-                f"[Ingestor] No chunks for {video.video_id}."
-            )
+            log.warning("rag.no_chunks", video_id=video.video_id)
             continue
 
-        print(
-            f"[Ingestor] {video.video_id}: "
-            f"{len(chunks)} chunks — embedding..."
+        log.info(
+            "rag.embedding",
+            video_id=video.video_id,
+            chunk_count=len(chunks),
         )
 
         # ====================================================
@@ -148,7 +157,8 @@ async def ingest_transcripts(
 
         await session.flush()
 
-        print(
-            f"[Ingestor] {video.video_id}: "
-            f"persisted {len(chunks)} chunks."
+        log.info(
+            "rag.ingested",
+            video_id=video.video_id,
+            vectors_stored=len(chunks),
         )

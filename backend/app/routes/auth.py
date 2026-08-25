@@ -1,6 +1,9 @@
 import json
 from urllib.parse import quote
 
+# pyrefly: ignore [missing-import]
+import structlog
+
 from app.core.limiter import limiter
 
 from fastapi import (
@@ -57,6 +60,8 @@ router = APIRouter(
     prefix="/auth",
     tags=["Authentication"]
 )
+
+_logger = structlog.get_logger("auth")
 
 
 # ============================================================
@@ -330,7 +335,7 @@ async def google_callback(
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print("Google Auth Callback Exception:", str(e))
+        _logger.error("auth.google_callback_failed", exc=str(e))
         raise HTTPException(
 
             status_code=401,

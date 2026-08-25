@@ -18,6 +18,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
+# pyrefly: ignore [missing-import]
+import structlog
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.youtube_research_agent import (
@@ -44,6 +47,9 @@ from app.graph.persistence import (
 from app.rag.ingestor import ingest_transcripts
 
 
+logger = structlog.get_logger("nodes")
+
+
 def make_nodes(session: AsyncSession):
     """
     Factory that returns all node functions with the
@@ -63,14 +69,12 @@ def make_nodes(session: AsyncSession):
         state: ResearchState,
     ) -> dict:
 
-        print()
-        print("=" * 70)
-        print("NODE 1 — YOUTUBE RESEARCH (Agent 1)")
-        print("=" * 70)
+        run_id = UUID(state["research_run_id"])
+        log = logger.bind(node=1, run_id=str(run_id))
+        log.info("node.started", name="youtube_research")
 
         user_query = state["user_query"]
         video_count = state.get("video_count", 3)
-        run_id = UUID(state["research_run_id"])
 
         await update_research_run_status(
             session=session,
@@ -87,7 +91,11 @@ def make_nodes(session: AsyncSession):
 
         except Exception as exc:
 
-            print(f"[Node 1] Agent 1 failed: {exc}")
+            log.error(
+                "node.failed",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
 
             await update_research_run_status(
                 session=session,
@@ -99,6 +107,8 @@ def make_nodes(session: AsyncSession):
             await session.commit()
 
             raise
+
+        log.info("node.completed", name="youtube_research")
 
         return {
             "research_result": research_result,
@@ -112,12 +122,10 @@ def make_nodes(session: AsyncSession):
         state: ResearchState,
     ) -> dict:
 
-        print()
-        print("=" * 70)
-        print("NODE 2 — PERSIST RESEARCH RESULTS")
-        print("=" * 70)
-
         run_id = UUID(state["research_run_id"])
+        log = logger.bind(node=2, run_id=str(run_id))
+        log.info("node.started", name="persist_research")
+
         research_result = state["research_result"]
 
         try:
@@ -132,7 +140,11 @@ def make_nodes(session: AsyncSession):
 
         except Exception as exc:
 
-            print(f"[Node 2] Persist failed: {exc}")
+            log.error(
+                "node.failed",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
 
             await update_research_run_status(
                 session=session,
@@ -152,6 +164,8 @@ def make_nodes(session: AsyncSession):
             for yt_id, db_uuid in video_id_map.items()
         }
 
+        log.info("node.completed", name="persist_research", videos=len(video_id_map_str))
+
         return {
             "video_id_map": video_id_map_str,
         }
@@ -164,12 +178,10 @@ def make_nodes(session: AsyncSession):
         state: ResearchState,
     ) -> dict:
 
-        print()
-        print("=" * 70)
-        print("NODE 3 — INGEST TRANSCRIPTS (RAG)")
-        print("=" * 70)
-
         run_id = UUID(state["research_run_id"])
+        log = logger.bind(node=3, run_id=str(run_id))
+        log.info("node.started", name="ingest_transcripts")
+
         research_result = state["research_result"]
         video_id_map_str = state.get("video_id_map", {})
 
@@ -198,7 +210,11 @@ def make_nodes(session: AsyncSession):
 
         except Exception as exc:
 
-            print(f"[Node 3] Ingestion failed: {exc}")
+            log.error(
+                "node.failed",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
 
             await update_research_run_status(
                 session=session,
@@ -211,6 +227,8 @@ def make_nodes(session: AsyncSession):
 
             raise
 
+        log.info("node.completed", name="ingest_transcripts")
+
         return {}
 
     # ========================================================
@@ -221,12 +239,10 @@ def make_nodes(session: AsyncSession):
         state: ResearchState,
     ) -> dict:
 
-        print()
-        print("=" * 70)
-        print("NODE 4 — RAG + ANALYSIS (Agent 2)")
-        print("=" * 70)
-
         run_id = UUID(state["research_run_id"])
+        log = logger.bind(node=4, run_id=str(run_id))
+        log.info("node.started", name="context_analysis")
+
         video_id_map_str = state.get("video_id_map", {})
 
         await update_research_run_status(
@@ -253,7 +269,11 @@ def make_nodes(session: AsyncSession):
 
         except Exception as exc:
 
-            print(f"[Node 4] Agent 2 failed: {exc}")
+            log.error(
+                "node.failed",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
 
             await update_research_run_status(
                 session=session,
@@ -265,6 +285,8 @@ def make_nodes(session: AsyncSession):
             await session.commit()
 
             raise
+
+        log.info("node.completed", name="context_analysis")
 
         return {
             "analysis": analysis,
@@ -278,12 +300,10 @@ def make_nodes(session: AsyncSession):
         state: ResearchState,
     ) -> dict:
 
-        print()
-        print("=" * 70)
-        print("NODE 5 — PERSIST ANALYSIS")
-        print("=" * 70)
-
         run_id = UUID(state["research_run_id"])
+        log = logger.bind(node=5, run_id=str(run_id))
+        log.info("node.started", name="persist_analysis")
+
         video_id_map_str = state.get("video_id_map", {})
         analysis = state["analysis"]
 
@@ -305,7 +325,11 @@ def make_nodes(session: AsyncSession):
 
         except Exception as exc:
 
-            print(f"[Node 5] Persist analysis failed: {exc}")
+            log.error(
+                "node.failed",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
 
             await update_research_run_status(
                 session=session,
@@ -318,6 +342,8 @@ def make_nodes(session: AsyncSession):
 
             raise
 
+        log.info("node.completed", name="persist_analysis")
+
         return {}
 
     # ========================================================
@@ -328,12 +354,9 @@ def make_nodes(session: AsyncSession):
         state: ResearchState,
     ) -> dict:
 
-        print()
-        print("=" * 70)
-        print("NODE 6 — FINAL REPORT (Agent 3)")
-        print("=" * 70)
-
         run_id = UUID(state["research_run_id"])
+        log = logger.bind(node=6, run_id=str(run_id))
+        log.info("node.started", name="final_report")
 
         await update_research_run_status(
             session=session,
@@ -351,7 +374,11 @@ def make_nodes(session: AsyncSession):
 
         except Exception as exc:
 
-            print(f"[Node 6] Agent 3 failed: {exc}")
+            log.error(
+                "node.failed",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
 
             await update_research_run_status(
                 session=session,
@@ -363,6 +390,8 @@ def make_nodes(session: AsyncSession):
             await session.commit()
 
             raise
+
+        log.info("node.completed", name="final_report")
 
         return {
             "final_report": final_report,
@@ -376,12 +405,10 @@ def make_nodes(session: AsyncSession):
         state: ResearchState,
     ) -> dict:
 
-        print()
-        print("=" * 70)
-        print("NODE 7 — PERSIST FINAL REPORT")
-        print("=" * 70)
-
         run_id = UUID(state["research_run_id"])
+        log = logger.bind(node=7, run_id=str(run_id))
+        log.info("node.started", name="persist_final_report")
+
         final_report = state["final_report"]
 
         try:
@@ -402,7 +429,11 @@ def make_nodes(session: AsyncSession):
 
         except Exception as exc:
 
-            print(f"[Node 7] Persist report failed: {exc}")
+            log.error(
+                "node.failed",
+                exc_type=type(exc).__name__,
+                exc_msg=str(exc),
+            )
 
             await update_research_run_status(
                 session=session,
@@ -414,6 +445,8 @@ def make_nodes(session: AsyncSession):
             await session.commit()
 
             raise
+
+        log.info("node.completed", name="persist_final_report")
 
         return {}
 
