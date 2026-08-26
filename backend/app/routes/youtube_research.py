@@ -87,8 +87,8 @@ _logger = structlog.get_logger("youtube_research")
 )
 @limiter.limit("5/minute")          # expensive pipeline — strict cap
 async def research_youtube(
-    http_request: Request,
-    request: ResearchAPIRequest,
+    request: Request,
+    payload: ResearchAPIRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
@@ -108,8 +108,8 @@ async def research_youtube(
 
         run = await create_research_run(
             session=session,
-            user_query=request.query,
-            video_count=request.video_count,
+            user_query=payload.query,
+            video_count=payload.video_count,
             user_id=current_user.id,
         )
 
@@ -134,8 +134,8 @@ async def research_youtube(
 
         result = await graph.ainvoke(
             {
-                "user_query": request.query,
-                "video_count": request.video_count,
+                "user_query": payload.query,
+                "video_count": payload.video_count,
                 "research_run_id": run_id_str,
             }
         )

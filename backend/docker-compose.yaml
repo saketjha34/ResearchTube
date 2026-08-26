@@ -23,6 +23,12 @@ services:
     env_file:
       - .env
 
+    dns:
+      - 10.3.0.101
+      - 10.20.1.21
+      - 10.230.102.86
+      - 8.8.8.8
+
     depends_on:
 
       postgres:
