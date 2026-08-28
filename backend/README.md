@@ -12,11 +12,10 @@ The backend is built as an asynchronous Python application using a modern enterp
 
 *   **API Framework:** `FastAPI` (asynchronous routing, dependency injection, automatic OpenAPI docs).
 *   **Agentic Orchestration:** `LangGraph` (state-machine workflow definition, message handling, execution checkpoints).
-*   **Language Models:** Google `Gemini 1.5 Flash` via the new `google-genai` SDK.
+*   **Language Models:** Google `Gemini 3.5 Flash` via the new `google-genai` SDK.
 *   **Embeddings Generator:** Google `text-embedding-004` (generates 768-dimensional dense vectors).
 *   **Database & Vector Engine:** `PostgreSQL` with the `pgvector` extension for semantic vector similarity searching.
 *   **Object Relational Mapper:** `SQLAlchemy 2.0` (asynchronous engine using modern mapped columns typing).
-*   **Migration Engine:** `Alembic` (relational schema migrations and version tracking).
 *   **Security & Protection:** `slowapi` (FastAPI rate limiter implementing token bucket algorithms) and `pwdlib[argon2]` (secure credential hashing).
 *   **Observability:** `structlog` (structured JSON logging optimized for GCP Cloud Logging).
 *   **Efficiency:** `GZipMiddleware` (response compression cutting payload size by ~70% on large requests).
@@ -314,11 +313,6 @@ cp .env.example .env
     ```bash
     docker compose logs -f api
     ```
-4.  **Database Migration (Inside Container):**
-    Migrations are applied automatically on startup, but you can force-run them if needed:
-    ```bash
-    docker compose exec api alembic upgrade head
-    ```
 
 ---
 
@@ -345,11 +339,7 @@ If you prefer running the FastAPI app directly on your host machine (for instanc
     ```env
     DATABASE_URL=postgresql+asyncpg://<username>:<password>@localhost:5432/youtube_research
     ```
-5.  **Run Database Migrations:**
-    ```bash
-    alembic upgrade head
-    ```
-6.  **Start Dev Server:**
+5.  **Start Dev Server:**
     Launch the FastAPI app with Uvicorn (hot-reload enabled):
     ```bash
     uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload

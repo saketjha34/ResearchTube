@@ -109,7 +109,33 @@ a {
   animation: spin 1s linear infinite;
 }
 
-/* Custom Scrollbar */
+/* Custom Global Window Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #080808;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 9999px;
+  border: 2px solid #080808;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #27272a #080808;
+}
+
+/* Custom Scrollbar for inner elements */
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
