@@ -66,27 +66,27 @@ class Settings(BaseSettings):
             if not self.PROD_DATABASE_URL:
                 raise ValueError("PROD_DATABASE_URL must be set when ENVIRONMENT=prod")
             url = self.PROD_DATABASE_URL
+        else:
+            # dev (default)
+            url = self.DATABASE_URL
 
-            # Auto-rewrite direct Supabase URL to pooler URL if we detect the known project ref.
-            # This serves as a safety fallback in environments like Vercel which lack IPv6.
-            from urllib.parse import urlparse, urlunparse
-            try:
-                parsed = urlparse(url)
-                if parsed.hostname == "db.nkinzcrzcnuvqxtncefs.supabase.co":
-                    password_part = f":{parsed.password}" if parsed.password else ""
-                    new_netloc = f"postgres.nkinzcrzcnuvqxtncefs{password_part}@aws-0-ap-northeast-1.pooler.supabase.com:6543"
-                    parsed = parsed._replace(netloc=new_netloc)
-                    url = urlunparse(parsed)
-            except Exception:
-                pass
+        # Auto-rewrite direct Supabase URL to pooler URL if we detect the known project ref.
+        # This serves as a safety fallback in environments like Vercel which lack IPv6.
+        from urllib.parse import urlparse, urlunparse
+        try:
+            parsed = urlparse(url)
+            if parsed.hostname == "db.nkinzcrzcnuvqxtncefs.supabase.co":
+                password_part = f":{parsed.password}" if parsed.password else ""
+                new_netloc = f"postgres.nkinzcrzcnuvqxtncefs{password_part}@aws-0-ap-northeast-1.pooler.supabase.com:6543"
+                parsed = parsed._replace(netloc=new_netloc)
+                url = urlunparse(parsed)
+        except Exception:
+            pass
 
-            # Ensure the asyncpg driver prefix is present
-            if url.startswith("postgresql://"):
-                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-            return url
-
-        # dev (default)
-        return self.DATABASE_URL
+        # Ensure the asyncpg driver prefix is present
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
 
     @property
     def runtime_frontend_url(self) -> str:
