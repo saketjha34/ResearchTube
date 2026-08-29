@@ -1,11 +1,18 @@
+from urllib.parse import urlparse
 from sqlalchemy import text
 
 from app.db.database import Base, engine
+from app.core.config import settings
 
 
 async def init_db():
 
-    print("Initializing database...")
+    # Parse and log host for easier debugging
+    try:
+        parsed = urlparse(settings.runtime_database_url)
+        print(f"Initializing database at: {parsed.hostname}:{parsed.port} (user: {parsed.username})")
+    except Exception:
+        print("Initializing database...")
 
     # ========================================================
     # ENABLE PGVECTOR
