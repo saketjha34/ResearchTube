@@ -84,36 +84,29 @@ def _build_transcript_api() -> YouTubeTranscriptApi:
             logger.warning("transcript.proxy_mode", mode="webshare", status="unavailable_falling_back")
 
     # ----------------------------------------------------------
-    # Option 2: Generic proxy URL  (any provider)
+    # Option 2: Generic proxy URL  (any provider, e.g. ScraperAPI)
     # e.g. YOUTUBE_PROXY_URL=http://user:pass@31.59.20.176:6754
     # ----------------------------------------------------------
     proxy_url = os.getenv("YOUTUBE_PROXY_URL", "").strip()
 
     if proxy_url:
         safe_url = proxy_url.split("@")[-1]  # hide credentials in logs
-
-        # Try GenericProxyConfig (youtube-transcript-api v1.x)
-        # Correct param names are http_url / https_url
-        try:
-            from youtube_transcript_api.proxies import GenericProxyConfig
-            logger.info("transcript.proxy_mode", mode="generic", host=safe_url)
-            return YouTubeTranscriptApi(
-                proxy_config=GenericProxyConfig(
-                    http_url=proxy_url,
-                    https_url=proxy_url,
-                )
-            )
-        except (ImportError, TypeError):
-            pass
-
-        # Fallback: inject proxy via HTTP_PROXY / HTTPS_PROXY env vars.
-        # The underlying httpx / requests client will pick these up automatically.
-        logger.info("transcript.proxy_mode", mode="env_vars", host=safe_url)
-        os.environ["HTTP_PROXY"] = proxy_url
-        os.environ["HTTPS_PROXY"] = proxy_url
-        os.environ["http_proxy"] = proxy_url
-        os.environ["https_proxy"] = proxy_url
-        return YouTubeTranscriptApi()
+        logger.info("transcript.proxy_mode", mode="custom_session", host=safe_url)
+        
+        import requests
+        import urllib3
+        # Suppress urllib3 InsecureRequestWarning for verify=False
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        # Build requests Session with proxy and verify=False to prevent SSL certificate validation issues
+        session = requests.Session()
+        session.proxies = {
+            "http": proxy_url,
+            "https": proxy_url,
+        }
+        session.verify = False
+        
+        return YouTubeTranscriptApi(http_client=session)
 
     # ----------------------------------------------------------
     # Option 3: No proxy (default — works on local/residential IPs)
