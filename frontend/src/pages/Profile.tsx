@@ -17,8 +17,11 @@ import {
   XCircle, 
   Loader2,
   Sparkles,
-  Compass
+  Compass,
+  RefreshCw
 } from 'lucide-react'
+
+const STATS_CACHE_KEY = 'rt_user_analytics_stats'
 
 function Profile() {
   const { user, logout } = useAuth()
@@ -55,20 +58,57 @@ function Profile() {
 
   const [stats, setStats] = useState<UserStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
+  const [statsRefreshing, setStatsRefreshing] = useState(false)
   const [statsError, setStatsError] = useState('')
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await client.get('/user/stats')
-        setStats(response.data)
-      } catch (err) {
-        setStatsError('Unable to load research activity stats.')
-      } finally {
-        setStatsLoading(false)
+  // Load stats: check browser cache first, fallback to backend API
+  const fetchStats = async (isManualRefresh = false) => {
+    if (!isManualRefresh) {
+      const cached = localStorage.getItem(STATS_CACHE_KEY)
+      if (cached) {
+        try {
+          const parsed: UserStats = JSON.parse(cached)
+          setStats(parsed)
+          setStatsLoading(false)
+          return
+        } catch {
+          // If parse fails, clear invalid cache and proceed to fetch
+          localStorage.removeItem(STATS_CACHE_KEY)
+        }
       }
     }
-    void fetchStats()
+
+    if (isManualRefresh) {
+      setStatsRefreshing(true)
+    } else {
+      setStatsLoading(true)
+    }
+    setStatsError('')
+
+    try {
+      const response = await client.get<UserStats>('/user/stats')
+      setStats(response.data)
+      localStorage.setItem(STATS_CACHE_KEY, JSON.stringify(response.data))
+    } catch (err) {
+      setStatsError('Unable to load research activity stats.')
+    } finally {
+      setStatsLoading(false)
+      setStatsRefreshing(false)
+    }
+  }
+
+  // Initial mount: load cached stats or fetch once
+  useEffect(() => {
+    void fetchStats(false)
+  }, [])
+
+  // Invalidate cache when a new research run completes
+  useEffect(() => {
+    const handleResearchCreated = () => {
+      localStorage.removeItem(STATS_CACHE_KEY)
+    }
+    window.addEventListener('research:created', handleResearchCreated)
+    return () => window.removeEventListener('research:created', handleResearchCreated)
   }, [])
 
   const formatNumber = (num: number): string => {
@@ -202,6 +242,7 @@ function Profile() {
     setDeleteAccountLoading(true)
     try {
       await client.delete('/user/account')
+      localStorage.removeItem(STATS_CACHE_KEY)
       setDeleteModalOpen(false)
       await logout()
     } catch (error) {
@@ -387,11 +428,22 @@ function Profile() {
 
       {/* --- Research Analytics Section --- */}
       <section className="space-y-6 pt-6 border-t border-[#222222]">
-        <header>
-          <h2 className="text-2xl font-semibold flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            <BarChart2 className="text-purple-400" size={24} /> Research Analytics
-          </h2>
-          <p className="text-sm text-[#999999]">Aggregated insights compiled from your YouTube research runs.</p>
+        <header className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h2 className="text-2xl font-semibold flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+              <BarChart2 className="text-purple-400" size={24} /> Research Analytics
+            </h2>
+            <p className="text-sm text-[#999999]">Aggregated insights compiled from your YouTube research runs.</p>
+          </div>
+          <button
+            onClick={() => void fetchStats(true)}
+            disabled={statsLoading || statsRefreshing}
+            className="flex items-center gap-1.5 border border-[#222222] bg-[#111111] hover:border-[#444444] hover:text-white px-3.5 py-1.5 text-xs text-[#888888] font-bold rounded-lg transition-all disabled:opacity-50 cursor-pointer"
+            title="Refresh Analytics Stats"
+          >
+            <RefreshCw size={13} className={statsRefreshing ? "animate-spin text-purple-400" : ""} />
+            <span>{statsRefreshing ? 'REFRESHING...' : 'REFRESH'}</span>
+          </button>
         </header>
 
         {statsLoading ? (
@@ -400,7 +452,7 @@ function Profile() {
             <p className="text-xs text-[#999999]">Calculating your research statistics...</p>
           </div>
         ) : statsError ? (
-          <div className="border border-red-950 bg-red-950/10 p-6 flex items-center gap-3">
+          <div className="border border-red-955 bg-red-950/10 p-6 flex items-center gap-3">
             <XCircle className="text-red-500" size={20} />
             <p className="text-sm text-red-200">{statsError}</p>
           </div>
@@ -453,98 +505,74 @@ function Profile() {
               </div>
             </div>
 
-            {/* Performance Detail Grid */}
+            {/* Performance Metrics & Quality Scores */}
             <div className="grid gap-6 lg:grid-cols-2">
-              <div className="space-y-6">
-                {/* Secondary Stats */}
-                <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-[#666666]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Scope & Speed</h3>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="border border-[#1a1a1a] bg-black/40 p-4 rounded-lg">
-                      <div className="flex items-center gap-2 text-[#999999] text-xs">
-                        <Compass size={14} className="text-purple-400" />
-                        <span>Query Scope</span>
-                      </div>
-                      <p className="mt-1 text-lg font-semibold text-white">{stats.average_videos_per_run} <span className="text-xs text-[#555555]">videos/run</span></p>
-                    </div>
-
-                    <div className="border border-[#1a1a1a] bg-black/40 p-4 rounded-lg">
-                      <div className="flex items-center gap-2 text-[#999999] text-xs">
-                        <Hourglass size={14} className="text-cyan-400" />
-                        <span>Avg Run Duration</span>
-                      </div>
-                      <p className="mt-1 text-lg font-semibold text-white">{stats.average_run_duration_seconds}s</p>
-                    </div>
-
-                    <div className="border border-[#1a1a1a] bg-black/40 p-4 rounded-lg">
-                      <div className="flex items-center gap-2 text-[#999999] text-xs">
-                        <Play size={14} className="text-red-400" />
-                        <span>Channels Discovered</span>
-                      </div>
-                      <p className="mt-1 text-lg font-semibold text-white">{stats.total_channels_discovered}</p>
-                    </div>
-
-                    <div className="border border-[#1a1a1a] bg-black/40 p-4 rounded-lg">
-                      <div className="flex items-center gap-2 text-[#999999] text-xs">
-                        <Cpu size={14} className="text-green-400" />
-                        <span>RAG Database Size</span>
-                      </div>
-                      <p className="mt-1 text-lg font-semibold text-white">{formatNumber(stats.total_transcript_chunks)} <span className="text-xs text-[#555555]">embeddings</span></p>
-                    </div>
+              <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-6">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-[#666666] flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <Compass size={14} className="text-purple-400" /> Pipeline Performance
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-black/60 p-4 rounded-lg border border-[#222222]">
+                    <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Avg Videos / Run</p>
+                    <p className="text-xl font-bold text-white mt-1">{stats.average_videos_per_run}</p>
+                  </div>
+                  <div className="bg-black/60 p-4 rounded-lg border border-[#222222]">
+                    <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Channels Discovered</p>
+                    <p className="text-xl font-bold text-white mt-1">{stats.total_channels_discovered}</p>
+                  </div>
+                  <div className="bg-black/60 p-4 rounded-lg border border-[#222222]">
+                    <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Vector Chunks</p>
+                    <p className="text-xl font-bold text-purple-400 mt-1">{stats.total_transcript_chunks}</p>
+                  </div>
+                  <div className="bg-black/60 p-4 rounded-lg border border-[#222222]">
+                    <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Beginner Friendly</p>
+                    <p className="text-xl font-bold text-green-400 mt-1">{stats.total_beginner_friendly_videos}</p>
                   </div>
                 </div>
 
-                {/* Score Averages */}
-                <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-[#666666]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Avg Quality Metrics</h3>
-                    <div className="text-[10px] bg-green-950/20 text-green-400 border border-green-900/50 px-2 py-0.5 rounded-full font-bold">
-                      {stats.total_beginner_friendly_videos} Beginner-Friendly Videos
+                {/* Score Averages Progress Bars */}
+                <div className="space-y-4 border-t border-[#1a1a1a] pt-4">
+                  <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Average RAG Metrics</p>
+                  
+                  {/* Relevance */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-[#999999]">Relevance Score</span>
+                      <span className="text-white">{stats.average_relevance_score} / 10</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-1000" 
+                        style={{ width: `${stats.average_relevance_score * 10}%` }}
+                      />
                     </div>
                   </div>
 
-                  <div className="space-y-3.5">
-                    {/* Relevance */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-[#999999]">Relevance Score</span>
-                        <span className="text-white">{stats.average_relevance_score} / 10</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full transition-all duration-1000" 
-                          style={{ width: `${stats.average_relevance_score * 10}%` }}
-                        />
-                      </div>
+                  {/* Educational Quality */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-[#999999]">Educational Quality</span>
+                      <span className="text-white">{stats.average_educational_score} / 10</span>
                     </div>
-
-                    {/* Educational Quality */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-[#999999]">Educational Quality</span>
-                        <span className="text-white">{stats.average_educational_score} / 10</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-1000" 
-                          style={{ width: `${stats.average_educational_score * 10}%` }}
-                        />
-                      </div>
+                    <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-1000" 
+                        style={{ width: `${stats.average_educational_score * 10}%` }}
+                      />
                     </div>
+                  </div>
 
-                    {/* Coverage */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-[#999999]">Topic Coverage</span>
-                        <span className="text-white">{stats.average_coverage_score} / 10</span>
-                      </div>
-                      <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-1000" 
-                          style={{ width: `${stats.average_coverage_score * 10}%` }}
-                        />
-                      </div>
+                  {/* Coverage */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-[#999999]">Topic Coverage</span>
+                      <span className="text-white">{stats.average_coverage_score} / 10</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-black rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-1000" 
+                        style={{ width: `${stats.average_coverage_score * 10}%` }}
+                      />
                     </div>
                   </div>
                 </div>
@@ -622,7 +650,7 @@ function Profile() {
               Are you absolutely sure you want to delete your account? This will permanently wipe out all your saved research runs, recommended summaries, and custom settings. This action cannot be undone.
             </p>
             {deleteAccountError ? (
-              <p className="border border-red-950 bg-red-950/20 px-3 py-2 text-xs text-red-400 rounded-md">
+              <p className="border border-red-955 bg-red-955/20 px-3 py-2 text-xs text-red-400 rounded-md">
                 {deleteAccountError}
               </p>
             ) : null}

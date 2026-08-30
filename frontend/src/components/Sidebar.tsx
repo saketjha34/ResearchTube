@@ -196,8 +196,8 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         onTouchStart={(e) => handleTouchStart(e, item.run_id)}
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
-        className={`flex w-full items-start gap-2 rounded-md pl-2 pr-8 py-2 text-left text-xs transition-all hover:bg-[#111111] ${
-          activeRunId === item.run_id ? 'bg-[#111111] text-white font-bold' : 'text-[#888888] hover:text-white'
+        className={`flex w-full items-start gap-2 rounded-md pl-2 pr-8 py-2 text-left text-xs transition-all duration-200 hover:bg-[#111111] ${
+          activeRunId === item.run_id ? 'bg-[#111111] text-white font-bold border-l-2 border-white' : 'text-[#888888] hover:text-white'
         }`}
       >
         {pinnedRunIds.includes(item.run_id)
@@ -305,13 +305,15 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   onClick={() => setOpen(false)}
                   title={collapsed ? label : undefined}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-md border px-3 py-2.5 text-sm transition-all ${
-                      isActive ? 'border-[#666666] bg-[#111111] text-white font-bold' : 'border-transparent text-[#999999] hover:border-[#222222] hover:bg-[#111111] hover:text-white'
+                    `flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-all duration-300 ease-in-out ${
+                      isActive 
+                        ? 'border-[#555555] bg-[#141414] text-white font-bold shadow-[0_0_15px_rgba(255,255,255,0.05)]' 
+                        : 'border-transparent text-[#999999] hover:border-[#222222] hover:bg-[#111111] hover:text-white'
                     }`
                   }
                   style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}
                 >
-                  <Icon size={16} className="flex-shrink-0" />
+                  <Icon size={16} className="flex-shrink-0 transition-transform duration-300 group-hover:scale-110" />
                   {!collapsed && <span className="truncate">{label}</span>}
                 </NavLink>
               </li>
@@ -348,107 +350,53 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 {pinnedHistory.length > 0 && (
                   <>
                     <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555] flex items-center gap-1.5">
-                      <Pin size={9} /> Pinned
+                      <Pin size={10} className="text-yellow-500" /> Pinned
                     </p>
                     <ul className="space-y-0.5 mb-4">
-                      {pinnedHistory.map((item) => renderHistoryItem(item))}
+                      {pinnedHistory.map(renderHistoryItem)}
                     </ul>
                   </>
                 )}
 
                 {/* Recents section */}
-                {regularHistory.length > 0 && (
-                  <>
-                    <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555]">
-                      Recents
-                    </p>
-                    <ul className="space-y-0.5">
-                      {regularHistory.map((item) => renderHistoryItem(item))}
-                    </ul>
-                  </>
-                )}
+                <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555]">
+                  Recents
+                </p>
+                <ul className="space-y-0.5">
+                  {regularHistory.map(renderHistoryItem)}
+                </ul>
               </>
             )}
           </div>
         )}
 
-        {collapsed && <div className="flex-1" />}
-        <UserMenu collapsed={collapsed} />
+        {/* Footer profile menu */}
+        <div className="flex-shrink-0 border-t border-[#181818] p-3">
+          <UserMenu collapsed={collapsed} />
+        </div>
       </aside>
 
-      {/* Search Command Palette */}
-      {searchOpen && (
-        <div
-          className="fixed inset-0 z-[200] flex items-start justify-center pt-24 px-4 bg-black/70 backdrop-blur-sm"
-          onClick={() => { setSearchOpen(false); setSearchQuery('') }}
-        >
-          <div
-            className="w-full max-w-lg bg-[#111111] border border-[#2a2a2a] rounded-2xl shadow-2xl overflow-hidden animate-fade-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 px-4 py-3.5 border-b border-[#1e1e1e]">
-              <Search size={15} className="flex-shrink-0 text-[#555555]" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search your research history..."
-                className="flex-1 bg-transparent text-sm text-white placeholder:text-[#444444] outline-none font-medium"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="text-[#555555] hover:text-white transition-colors">
-                  <X size={13} />
-                </button>
-              )}
-              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-bold text-[#555555] border border-[#2a2a2a] rounded bg-[#0a0a0a]">ESC</kbd>
-            </div>
-
-            {!searchQuery && (
-              <div className="px-3 pt-3 pb-1">
-                <p className="px-2 mb-1.5 text-[10px] font-bold tracking-[0.2em] text-[#444444] uppercase">Commands</p>
-                <button
-                  onClick={() => { setSearchOpen(false); handleNewResearch() }}
-                  className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#888888] hover:bg-[#1a1a1a] hover:text-white transition-all group"
-                >
-                  <PenSquare size={14} className="text-[#555555] group-hover:text-white transition-colors" />
-                  <span>Start a new research</span>
-                </button>
-              </div>
-            )}
-
-            <div className="px-3 pb-3 pt-1">
-              {searchResults.length > 0 ? (
-                <>
-                  <p className="px-2 mb-1.5 text-[10px] font-bold tracking-[0.2em] text-[#444444] uppercase mt-2">
-                    {searchQuery ? 'Results' : 'Recent'}
-                  </p>
-                  <ul className="space-y-0.5 max-h-64 overflow-y-auto">
-                    {searchResults.map((item) => (
-                      <li key={item.run_id}>
-                        <button
-                          onClick={() => handleSearchNavigate(item.run_id)}
-                          className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#888888] hover:bg-[#1a1a1a] hover:text-white transition-all group text-left"
-                        >
-                          <Clock size={13} className="flex-shrink-0 text-[#444444] group-hover:text-[#888888] transition-colors" />
-                          <span className="flex-1 truncate">{item.query}</span>
-                          <ArrowUpRight size={12} className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-[#555555]" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : searchQuery ? (
-                <div className="px-3 py-6 text-center text-sm text-[#444444]">
-                  No results for "<span className="text-[#888888]">{searchQuery}</span>"
-                </div>
-              ) : null}
-            </div>
-
-            <div className="px-5 py-2.5 border-t border-[#1a1a1a] flex items-center gap-4 text-[10px] text-[#444444] font-medium">
-              <span><kbd className="font-bold text-[#555555]">↵</kbd> open</span>
-              <span><kbd className="font-bold text-[#555555]">ESC</kbd> close</span>
-              <span className="ml-auto">Ctrl+K to open</span>
+      {/* Delete Confirmation Modal */}
+      {deleteTargetRunId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
+            <h3 className="text-base font-bold text-white">Delete Research Run</h3>
+            <p className="text-xs text-[#888888] leading-relaxed">
+              Are you sure you want to delete this research run? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setDeleteTargetRunId(null)}
+                className="px-4 py-2 text-xs font-bold text-[#888888] hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void confirmDelete()}
+                className="px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
@@ -456,23 +404,31 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Rename Modal */}
       {renameTargetRunId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fade-in">
-          <form onSubmit={confirmRename} className="bg-[#1e1e1e] border border-[#2c2c2c] max-w-sm w-full p-6 rounded-2xl shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>Rename chat</h3>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">New Name</label>
-              <input
-                type="text" required value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                className="w-full bg-black border border-[#2c2c2c] text-white px-4 py-2.5 rounded-lg outline-none focus:border-[#444444] text-sm font-medium"
-                placeholder="Enter new name..."
-              />
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button type="button" onClick={() => setRenameTargetRunId(null)}
-                className="px-5 py-2 text-xs font-bold tracking-wider uppercase rounded-full bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] transition-all">Cancel</button>
-              <button type="submit"
-                className="px-5 py-2 text-xs font-bold tracking-wider uppercase rounded-full bg-white text-black hover:bg-[#dddddd] transition-all">Save</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+          <form onSubmit={(e) => void confirmRename(e)} className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
+            <h3 className="text-base font-bold text-white">Rename Research Run</h3>
+            <input
+              type="text"
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="Enter new query title..."
+              className="w-full bg-[#181818] border border-[#333333] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white transition-colors"
+              autoFocus
+            />
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRenameTargetRunId(null)}
+                className="px-4 py-2 text-xs font-bold text-[#888888] hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-xs font-bold bg-white text-black hover:bg-[#cccccc] rounded-lg transition-colors"
+              >
+                Save
+              </button>
             </div>
           </form>
         </div>
@@ -480,98 +436,103 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Share Modal */}
       {shareTargetRunId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-[#1e1e1e] border border-[#2c2c2c] max-w-sm w-full p-6 rounded-2xl shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+          <div className="w-full max-w-md border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2" style={{fontFamily:"'Space Grotesk',sans-serif"}}>
-                <Share2 size={18} className="text-[#888888]" /> Share Report
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Share2 size={16} className="text-purple-400" /> Share Research Report
               </h3>
-              <button onClick={() => setShareTargetRunId(null)} className="text-[#666666] hover:text-white transition-colors">
+              <button onClick={() => setShareTargetRunId(null)} className="text-[#555555] hover:text-white">
                 <X size={16} />
               </button>
             </div>
-            
-            <p className="text-sm text-[#888888] leading-relaxed">
-              Anyone with this link will be able to view a read-only version of this research report.
+            <p className="text-xs text-[#888888] leading-relaxed">
+              Anyone with this link will be able to view the compiled research report and interactive video recommendations.
             </p>
 
             {!shareGeneratedUrl ? (
               <div className="pt-2">
-                <button 
-                  onClick={generateShareLink} 
+                <button
+                  onClick={() => void generateShareLink()}
                   disabled={shareLoading}
-                  className="w-full flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-lg bg-white text-black hover:bg-[#dddddd] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex w-full items-center justify-center gap-2 bg-white text-black font-bold py-2.5 rounded-lg text-xs hover:bg-[#cccccc] transition-colors disabled:opacity-50"
                 >
                   {shareLoading ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
-                  {shareLoading ? 'Generating...' : 'Create Public Link'}
+                  {shareLoading ? 'Generating Public Link...' : 'Create Public Share Link'}
                 </button>
               </div>
             ) : (
               <div className="space-y-3 pt-2">
-                <div className="flex items-center gap-2 bg-black border border-[#2c2c2c] rounded-lg p-1">
-                  <input 
-                    type="text" 
-                    readOnly 
-                    value={shareGeneratedUrl} 
-                    className="flex-1 bg-transparent text-white px-3 py-1.5 text-xs outline-none w-full"
+                <div className="flex items-center gap-2 bg-[#181818] border border-[#333333] rounded-lg p-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={shareGeneratedUrl}
+                    className="flex-1 bg-transparent text-xs text-purple-300 outline-none font-mono truncate"
                   />
-                  <button 
-                    onClick={copyShareLink}
-                    className="flex items-center justify-center h-8 w-8 flex-shrink-0 bg-[#222222] hover:bg-[#333333] rounded-md transition-colors text-white"
-                    title="Copy link"
+                  <button
+                    onClick={() => void copyShareLink()}
+                    className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-bold transition-colors flex-shrink-0"
                   >
-                    {shareCopied ? <Pin size={12} className="text-green-400" /> : <MoreVertical size={12} className="opacity-0 hidden" />}
-                    {shareCopied ? '✓' : 'Copy'}
+                    {shareCopied ? 'Copied!' : 'Copy'}
                   </button>
                 </div>
-                <button 
-                  onClick={() => setShareTargetRunId(null)}
-                  className="w-full px-5 py-2.5 text-xs font-bold tracking-wider uppercase rounded-lg bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] transition-all"
-                >
-                  Done
-                </button>
+                <div className="flex justify-end">
+                  <a
+                    href={shareGeneratedUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-bold text-[#888888] hover:text-white flex items-center gap-1"
+                  >
+                    Open link in new tab <ArrowUpRight size={12} />
+                  </a>
+                </div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Delete Modal */}
-      {deleteTargetRunId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-[#1e1e1e] border border-[#2c2c2c] max-w-sm w-full p-6 rounded-2xl shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>Delete chat?</h3>
-            <p className="text-sm text-[#888888] leading-relaxed">
-              This will delete prompts, reports, and videos from your ResearchTube Activity.
-            </p>
-            <div className="flex justify-end gap-3 pt-2">
-              <button onClick={() => setDeleteTargetRunId(null)}
-                className="px-5 py-2 text-xs font-bold tracking-wider uppercase rounded-full bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] transition-all">Cancel</button>
-              <button onClick={() => void confirmDelete()}
-                className="px-5 py-2 text-xs font-bold tracking-wider uppercase rounded-full bg-[#ef4444] text-white hover:bg-[#dc2626] transition-all">Delete</button>
+      {/* Ctrl+K Search Palette Modal */}
+      {searchOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/80 px-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg border border-[#222222] bg-[#111111] shadow-2xl animate-fade-in rounded-2xl overflow-hidden">
+            <div className="flex items-center gap-3 border-b border-[#222222] px-4 py-3">
+              <Search size={16} className="text-[#555555]" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search past research runs..."
+                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-[#555555]"
+              />
+              <span className="border border-[#222222] bg-black px-2 py-0.5 text-[10px] font-bold text-[#555555] rounded">
+                ESC
+              </span>
+            </div>
+            <div className="max-h-72 overflow-y-auto p-2 custom-scrollbar">
+              {searchResults.length === 0 ? (
+                <p className="p-4 text-center text-xs text-[#555555]">No matching research runs found.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {searchResults.map((item) => (
+                    <li key={item.run_id}>
+                      <button
+                        onClick={() => handleSearchNavigate(item.run_id)}
+                        className="flex w-full items-center justify-between rounded-lg p-2.5 text-left text-xs text-[#cccccc] hover:bg-[#181818] hover:text-white transition-colors"
+                      >
+                        <span className="truncate pr-4">{item.query}</span>
+                        <ArrowUpRight size={13} className="text-[#555555] flex-shrink-0" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </div>
       )}
-
-      {/* Mobile Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-[#181818] bg-black px-4 py-2 md:hidden">
-        <ul className="grid grid-cols-2 gap-1">
-          {navItems.map(({ label, icon: Icon, to }) => (
-            <li key={`mobile-${to}`}>
-              <NavLink
-                to={to}
-                onClick={() => setOpen(false)}
-                className={({ isActive }) =>
-                  `flex flex-col items-center justify-center rounded-md py-2 text-[10px] ${isActive ? 'text-white' : 'text-[#666666]'}`
-                }
-              >
-                <Icon size={16} />{label}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
-      </nav>
     </>
   )
 }

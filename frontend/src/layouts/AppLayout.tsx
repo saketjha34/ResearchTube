@@ -1,9 +1,10 @@
-﻿import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { useState } from 'react'
+import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 
 function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
+  const location = useLocation()
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -13,7 +14,7 @@ function AppLayout() {
           collapsed ? 'md:ml-20' : 'md:ml-72'
         }`}
       >
-        <div className="mx-auto w-full max-w-5xl animate-fade-in">
+        <div key={location.pathname} className="mx-auto w-full max-w-5xl animate-page-transition">
           <Outlet context={{ collapsed }} />
         </div>
       </main>

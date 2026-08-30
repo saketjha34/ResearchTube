@@ -1,11 +1,10 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Copy, Check, Search, X as XIcon } from 'lucide-react'
 import { runResearch, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
 import { useToast, ToastContainer } from '../components/Toast'
 import KnowledgeGraph from '../components/KnowledgeGraph'
 import { Onboarding } from '../components/Onboarding'
-// useAuth removed
 
 const GREETINGS = [
   "What rabbit hole are we exploring today?",
@@ -85,7 +84,7 @@ function useLoadingStatus(statuses: string[], interval = 3500) {
   return { status: statuses[index], fade }
 }
 
-// ── Copy Button ────────────────────────────────────────────────────────────────
+// Copy Button
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   return (
@@ -105,7 +104,7 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-// ── Text Highlighter ────────────────────────────────────────────────────────────
+// Text Highlighter
 function Highlight({ text, query }: { text: string; query: string }) {
   if (!query.trim() || !text) return <>{text}</>
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -120,6 +119,72 @@ function Highlight({ text, query }: { text: string; query: string }) {
         )
       )}
     </>
+  )
+}
+
+// Pulsing Gray Skeleton Box Loader for Toggling Past Research Runs
+function ReportSkeletonLoader() {
+  return (
+    <div className="space-y-10 animate-fade-in">
+      {/* Top right user query pill skeleton */}
+      <div className="flex justify-end">
+        <div className="w-72 h-14 border border-[#222222] bg-[#111111] animate-pulse flex items-center px-6">
+          <div className="h-4 w-48 bg-zinc-800/80 rounded" />
+        </div>
+      </div>
+
+      {/* Executive Summary Skeleton */}
+      <div className="border border-[#222222] bg-[#111111] p-8 space-y-4 animate-pulse">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-5 w-5 bg-zinc-800/80 rounded" />
+          <div className="h-3 w-40 bg-zinc-800/80 rounded" />
+        </div>
+        <div className="h-4 w-full bg-zinc-800/60 rounded" />
+        <div className="h-4 w-11/12 bg-zinc-800/60 rounded" />
+        <div className="h-4 w-4/5 bg-zinc-800/60 rounded" />
+        <div className="h-4 w-2/3 bg-zinc-800/60 rounded" />
+      </div>
+
+      {/* Interactive Knowledge Graph Skeleton */}
+      <div className="border border-[#222222] bg-[#111111] p-8 space-y-4 animate-pulse">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="h-5 w-5 bg-zinc-800/80 rounded" />
+          <div className="h-3 w-48 bg-zinc-800/80 rounded" />
+        </div>
+        <div className="h-64 w-full border border-dashed border-zinc-800 bg-zinc-950/50 rounded-xl flex items-center justify-center relative overflow-hidden">
+          <div className="h-16 w-16 rounded-full bg-zinc-800/70 border border-zinc-700 animate-pulse" />
+          <div className="absolute top-1/4 left-1/4 h-12 w-12 rounded-full bg-zinc-800/50 border border-zinc-800 animate-pulse" />
+          <div className="absolute bottom-1/4 right-1/4 h-12 w-12 rounded-full bg-zinc-800/50 border border-zinc-800 animate-pulse" />
+        </div>
+      </div>
+
+      {/* Recommended Resources Skeleton Cards */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="h-5 w-5 bg-zinc-800/80 rounded" />
+          <div className="h-3 w-52 bg-zinc-800/80 rounded" />
+        </div>
+        <div className="space-y-4">
+          {[1, 2].map((i) => (
+            <div key={i} className="border border-[#222222] bg-[#111111] p-6 space-y-4 animate-pulse">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-2 flex-1">
+                  <div className="h-5 w-3/4 bg-zinc-800/80 rounded" />
+                  <div className="h-3 w-1/4 bg-zinc-800/50 rounded" />
+                  <div className="h-4 w-full bg-zinc-800/40 rounded mt-2" />
+                </div>
+                <div className="h-10 w-14 bg-zinc-800/80 rounded" />
+              </div>
+              <div className="grid grid-cols-3 gap-6 pt-4 border-t border-[#1a1a1a]">
+                <div className="h-3 bg-zinc-800/60 rounded" />
+                <div className="h-3 bg-zinc-800/60 rounded" />
+                <div className="h-3 bg-zinc-800/60 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -149,10 +214,9 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
           <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border border-[#333333] bg-black text-sm font-bold text-[#666666]">
             {rank}
           </span>
-          <div className="min-w-0 flex-1">
-            <a href={res.url} target="_blank" rel="noopener noreferrer" className="group flex items-start gap-2">
-              <h3 className="text-lg font-bold text-white leading-snug group-hover:text-[#cccccc] transition-colors" style={{fontFamily:"'Space Grotesk',sans-serif"}}>{res.title}</h3>
-              <ExternalLink size={14} className="mt-0.5 flex-shrink-0 text-[#555555] group-hover:text-white transition-colors" />
+          <div className="flex-1 min-w-0">
+            <a href={res.url} target="_blank" rel="noreferrer" className="text-base font-bold text-white hover:text-[#cccccc] transition-colors line-clamp-2 leading-snug">
+              {res.title}
             </a>
             {res.channel && <p className="mt-1.5 text-xs font-bold tracking-[0.2em] text-[#555555]">{res.channel.toUpperCase()}</p>}
             {res.description && <p className="mt-3 text-sm text-[#888888] line-clamp-2 leading-relaxed">{res.description}</p>}
@@ -212,7 +276,7 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
             <div>
               <p className="mb-3 text-xs font-bold tracking-[0.25em] text-red-700">WEAKNESSES</p>
               <ul className="space-y-2">
-                {(res.weaknesses ?? []).map((w) => <li key={w} className="flex items-start gap-2.5 text-sm text-[#888888]"><span className="mt-0.5 text-red-500 font-extrabold">−</span>{w}</li>)}
+                {(res.weaknesses ?? []).map((w) => <li key={w} className="flex items-start gap-2.5 text-sm text-[#888888]"><span className="mt-0.5 text-red-500 font-extrabold">-</span>{w}</li>)}
               </ul>
             </div>
           )}
@@ -226,7 +290,7 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
             {[['VIEWS', res.views], ['LIKES', res.likes], ['COMMENTS', res.comments]].map(([k, v]) => (
               <div key={k as string}>
                 <p className="text-xs font-bold tracking-[0.2em] text-[#555555]">{k as string}</p>
-                <p className="mt-1 text-lg font-bold text-[#888888]">{v != null ? Number(v).toLocaleString() : '—'}</p>
+                <p className="mt-1 text-lg font-bold text-[#888888]">{v != null ? Number(v).toLocaleString() : '-'}</p>
               </div>
             ))}
           </div>
@@ -391,38 +455,36 @@ function Research() {
   const { status: loadingStatus, fade: loadingFade } = useLoadingStatus(LOADING_STATUSES)
   const activeRunId = searchParams.get('run')
 
+  // Load past history run when URL search param activeRunId changes
   useEffect(() => {
-    if (!activeRunId) { setHistoryResult(null); setHistoryQuery(''); return }
-    setResult(null); setError(null)
+    if (!activeRunId) {
+      setHistoryResult(null)
+      setHistoryQuery('')
+      return
+    }
+    setResult(null)
+    setError(null)
     const load = async () => {
-        try {
-          setHistoryLoading(true)
-          const data = await getHistoryEntry(activeRunId)
-          setHistoryResult(data); setHistoryQuery(data.query)
-        } catch { setError('Could not load this research run.') }
-        finally { setHistoryLoading(false) }
+      try {
+        setHistoryLoading(true)
+        const data = await getHistoryEntry(activeRunId)
+        setHistoryResult(data)
+        setHistoryQuery(data.query)
+      } catch {
+        setError('Could not load this research run.')
+      } finally {
+        setHistoryLoading(false)
       }
+    }
     void load()
   }, [activeRunId])
 
-  useEffect(() => {
-    const handleRefresh = async () => {
-      if (activeRunId) {
-        try {
-          const data = await getHistoryEntry(activeRunId)
-          setHistoryResult(data)
-          setHistoryQuery(data.query)
-        } catch {}
-      }
-    }
-    window.addEventListener('research:created', handleRefresh)
-    return () => window.removeEventListener('research:created', handleRefresh)
-  }, [activeRunId])
-
+  // Clear state on custom research:clear event
   useEffect(() => {
     const handleClear = () => {
       setResult(null)
       setHistoryResult(null)
+      setHistoryQuery('')
       setError(null)
       setQuery('')
       setTimeout(() => inputRef.current?.focus(), 100)
@@ -450,65 +512,71 @@ function Research() {
     return () => window.removeEventListener('keydown', onKey)
   }, [result, historyResult, reportSearchOpen])
 
+  const reportMatchCount = useMemo(() => {
+    if (!reportSearch.trim()) return 0
+    const text = JSON.stringify(result || historyResult || '')
+    const escaped = reportSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const matches = text.match(new RegExp(escaped, 'gi'))
+    return matches ? matches.length : 0
+  }, [reportSearch, result, historyResult])
+
   const handleNew = () => {
-    setSearchParams({}); setResult(null); setHistoryResult(null); setError(null); setQuery('')
-    setTimeout(() => inputRef.current?.focus(), 100)
+    setSearchParams({})
+    setResult(null)
+    setHistoryResult(null)
+    setHistoryQuery('')
+    setError(null)
+    setQuery('')
+    setTimeout(() => inputRef.current?.focus(), 50)
   }
 
-  const submit = useCallback(async () => {
-    if (!query.trim() || loading) return
-    setLoading(true); setError(null); setResult(null); setHistoryResult(null); setSearchParams({})
-    toast('Research pipeline started — this takes ~2 minutes', 'info', 6000)
+  const submit = async () => {
+    const trimmed = query.trim()
+    if (!trimmed || loading) return
+    setError(null)
+    setResult(null)
+    setHistoryResult(null)
+    setHistoryQuery('')
+    setSearchParams({})
+    setLoading(true)
+
     try {
-      const data = await runResearch(query.trim(), videoCount)
+      const data = await runResearch(trimmed, videoCount)
       setResult(data)
-      window.dispatchEvent(new Event('research:created'))
+      setQuery('')
+      toast('Research compiled successfully!', 'success')
+      // Invalidate user analytics stats cache so fresh profile stats fetch next time
+      localStorage.removeItem('rt_user_analytics_stats')
+      window.dispatchEvent(new CustomEvent('research:created'))
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200)
-      toast('Research completed! Your report is ready.', 'success', 5000)
-    } catch (e: unknown) {
-      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      const errMsg = msg ?? 'Research failed. Please try again.'
-      setError(errMsg)
-      toast(errMsg, 'error', 6000)
-    } finally { setLoading(false) }
-  }, [query, videoCount, loading, setSearchParams, toast])
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || (err instanceof Error ? err.message : 'Research pipeline failed. Please try again.')
+      setError(msg)
+      toast(msg, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit() }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      void submit()
+    }
   }
 
-  const showHome = !loading && !result && !historyResult && !error
-  const activeQuery = result ? query : historyQuery
-  const activeReport = result?.report ?? historyResult ?? null
-
-  // Count report search matches for display
-  const reportMatchCount = useMemo(() => {
-    if (!reportSearch.trim() || !activeReport) return 0
-    const q = reportSearch.toLowerCase()
-    const r = activeReport as any
-    const allText = [
-      r.executive_summary ?? '',
-      r.conclusion ?? '',
-      r.methodology ?? '',
-      ...(r.learning_path ?? []),
-      ...(r.key_topics ?? []),
-      ...(r.limitations ?? []),
-      ...(r.recommended_resources ?? []).map((x: any) => `${x.title ?? ''} ${x.description ?? ''}`),
-    ].join(' ').toLowerCase()
-    let count = 0
-    let idx = allText.indexOf(q)
-    while (idx !== -1) { count++; idx = allText.indexOf(q, idx + 1) }
-    return count
-  }, [reportSearch, activeReport])
+  const activeReport = historyResult ?? result?.report ?? null
+  const activeQuery = historyQuery || query
+  const showHome = !loading && !historyLoading && !activeReport && !error
 
   return (
     <>
-    <div className="flex flex-col min-h-[calc(100vh-140px)] space-y-10">
-      {/* Header - Always left-aligned at top-left */}
-      <header className="flex items-start justify-between flex-shrink-0">
+    <div className="mx-auto flex min-h-[calc(100vh-3.5rem)] max-w-4xl flex-col px-6 pb-16 pt-8 text-white selection:bg-white selection:text-black">
+      {/* Header Bar */}
+      <header className="mb-10 flex items-center justify-between border-b border-[#181818] pb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">RESEARCH</h1>
-          <p className="mt-1 text-xs font-semibold tracking-wide text-[#666666]">AI-powered YouTube research pipeline.</p>
+          <h1 className="text-xl font-bold tracking-tight text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>RESEARCHTUBE AI</h1>
+          <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-[#555555]">DEEP TECHNICAL RESEARCH ENGINE</p>
         </div>
         {(result || historyResult) && (
           <button onClick={handleNew} className="border border-white bg-white px-5 py-2 text-xs font-bold tracking-[0.2em] text-black hover:bg-black hover:text-white transition-all">
@@ -527,8 +595,11 @@ function Research() {
         </div>
       ) : (
         <div className="space-y-10 flex-1">
+          {/* History Run Toggle Skeleton Loader */}
+          {historyLoading && <ReportSkeletonLoader />}
+
           {/* Loading */}
-          {loading && (
+          {loading && !historyLoading && (
             <div className="flex flex-col items-center justify-center gap-8 py-24 animate-fade-in flex-1">
               <div className="relative flex items-center justify-center h-24 w-24">
                 <div className="absolute inset-0 rounded-full border border-white/10 animate-ping" />
@@ -542,14 +613,14 @@ function Research() {
                   {loadingStatus.toUpperCase()}
                 </p>
                 <p className="text-[10px] font-bold text-[#555555] tracking-[0.2em] uppercase">
-                  Synthesizing video knowledge graph · Please wait ~2 minutes
+                  Synthesizing video knowledge graph • Please wait ~2 minutes
                 </p>
               </div>
             </div>
           )}
 
           {/* Error */}
-          {error && !loading && (
+          {error && !loading && !historyLoading && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex items-center gap-3 border border-red-955 bg-[#1a0505] p-5">
                 <AlertCircle size={18} className="flex-shrink-0 text-red-500" />
@@ -585,7 +656,7 @@ function Research() {
           value={reportSearch}
           onChange={(e) => setReportSearch(e.target.value)}
           placeholder="Search in report..."
-          className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-[#444444] font-medium"
+          className="flex-1 bg-transparent text-sm text-[#ffffff] outline-none placeholder:text-[#444444] font-medium"
         />
         {reportSearch && (
           <span className="text-[10px] font-bold text-[#555555] flex-shrink-0">
@@ -628,7 +699,7 @@ function InputBox({ query, setQuery, videoCount, setVideoCount, loading, onSubmi
       <div className="flex items-center justify-between px-4 pb-4">
         <div className="flex items-center gap-2">
           <button onClick={() => setShowOptions(!showOptions)} className="px-3 py-1.5 text-xs font-bold tracking-[0.2em] text-[#666666] border border-[#222222] hover:border-[#444444] hover:text-white transition-all">
-            {videoCount} VIDEO{videoCount !== 1 ? 'S' : ''} ▾
+            {videoCount} VIDEO{videoCount !== 1 ? 'S' : ''} ?
           </button>
           {showOptions && (
             <div className="flex items-center gap-1">
@@ -642,7 +713,7 @@ function InputBox({ query, setQuery, videoCount, setVideoCount, loading, onSubmi
           )}
         </div>
         <button onClick={onSubmit} disabled={loading || !query.trim()}
-          className="flex items-center gap-2 border border-white bg-white px-5 py-2 text-xs font-bold tracking-[0.25em] text-black transition-all hover:bg-black hover:text-white disabled:opacity-30 disabled:cursor-not-allowed">
+          className="flex items-center gap-2 border border-white bg-white px-5 py-2 text-xs font-bold tracking-[0.25em] text-[#000000] transition-all hover:bg-black hover:text-white disabled:opacity-30 disabled:cursor-not-allowed">
           {loading ? <Loader2 size={13} className="animate-spin" /> : <ArrowUp size={13} />}
           {loading ? 'RESEARCHING...' : 'RESEARCH'}
         </button>

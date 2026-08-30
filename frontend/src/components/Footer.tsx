@@ -10,12 +10,12 @@ export default function Footer() {
       <div className="mx-auto max-w-6xl px-6 py-16">
         <div className="grid gap-10 md:grid-cols-12">
           {/* Brand Info */}
-          <div className="md:col-span-5 space-y-4">
+          <div className="md:col-span-7 space-y-4">
             <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold tracking-[0.35em] text-white">
               RESEARCHTUBE
               <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] tracking-normal text-zinc-400">v1.0</span>
             </Link>
-            <p className="max-w-sm text-sm text-[#999999] leading-relaxed">
+            <p className="max-w-md text-sm text-[#999999] leading-relaxed">
               Automated multi-agent YouTube research platform. Extracts transcripts, computes pgvector embeddings, and synthesizes publication-grade research reports.
             </p>
             <div className="flex items-center gap-3 pt-2">
@@ -33,9 +33,9 @@ export default function Footer() {
           </div>
 
           {/* Quick Links */}
-          <div className="md:col-span-3 space-y-3">
+          <div className="md:col-span-5 space-y-3 md:text-right">
             <p className="text-xs font-semibold tracking-[0.2em] text-[#999999]">NAVIGATION</p>
-            <ul className="space-y-2 text-sm text-zinc-400">
+            <ul className="space-y-2 text-sm text-zinc-400 flex flex-col md:items-end">
               <li>
                 <Link to="/" className="hover:text-white transition-colors">Home</Link>
               </li>
@@ -49,20 +49,6 @@ export default function Footer() {
                 <Link to="/research" className="hover:text-white transition-colors">Research Dashboard</Link>
               </li>
             </ul>
-          </div>
-
-          {/* Technology */}
-          <div className="md:col-span-4 space-y-3">
-            <p className="text-xs font-semibold tracking-[0.2em] text-[#999999]">TECH STACK</p>
-            <div className="flex flex-wrap gap-2 text-xs text-zinc-400">
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2.5 py-1">FastAPI</span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2.5 py-1">LangGraph</span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2.5 py-1">Gemini 3.5</span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2.5 py-1">PostgreSQL</span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2.5 py-1">pgvector</span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2.5 py-1">React 19</span>
-              <span className="rounded border border-zinc-800 bg-zinc-900/60 px-2.5 py-1">TailwindCSS v4</span>
-            </div>
           </div>
         </div>
 

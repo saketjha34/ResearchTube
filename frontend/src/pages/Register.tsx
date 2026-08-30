@@ -1,4 +1,4 @@
-﻿import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Input from '../components/Input'
 import Button from '../components/Button'
@@ -7,7 +7,7 @@ import { useAuth } from '../context/AuthContext'
 
 function Register() {
   const navigate = useNavigate()
-  const { register } = useAuth()
+  const { register, setAuthActionLoading } = useAuth()
 
   const [fullName, setFullName] = useState('')
   const [username, setUsername] = useState('')
@@ -44,6 +44,13 @@ function Register() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleGoogleLogin = () => {
+    setAuthActionLoading('Connecting to Google Security...')
+    setTimeout(() => {
+      startGoogleLogin()
+    }, 200)
   }
 
   return (
@@ -114,7 +121,7 @@ function Register() {
           <div className="h-px flex-1 bg-[#222222]" />
         </div>
 
-        <Button variant="secondary" fullWidth onClick={startGoogleLogin} className="cursor-pointer">
+        <Button variant="secondary" fullWidth onClick={handleGoogleLogin} className="cursor-pointer">
           Continue with Google
         </Button>
 

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Input from '../components/Input'
 import Button from '../components/Button'
@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext'
 function Login() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, isAuthenticated } = useAuth()
+  const { login, isAuthenticated, setAuthActionLoading } = useAuth()
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search])
   const redirectTo = params.get('redirect') || '/research'
@@ -45,6 +45,13 @@ function Login() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleGoogleLogin = () => {
+    setAuthActionLoading('Connecting to Google Security...')
+    setTimeout(() => {
+      startGoogleLogin()
+    }, 200)
   }
 
   return (
@@ -86,7 +93,7 @@ function Login() {
           <Input
             label="Password"
             type="password"
-            placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+            placeholder="••••••••"
             helperText="Use your secure password for this workspace."
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -105,7 +112,7 @@ function Login() {
           <div className="h-px flex-1 bg-[#222222]" />
         </div>
 
-        <Button variant="secondary" fullWidth onClick={startGoogleLogin} className="cursor-pointer">
+        <Button variant="secondary" fullWidth onClick={handleGoogleLogin} className="cursor-pointer">
           Continue with Google
         </Button>
 

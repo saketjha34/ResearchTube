@@ -28,7 +28,7 @@ export default function About() {
           About ResearchTube
         </h1>
         <p className="mt-4 max-w-3xl text-lg text-[#999999] leading-relaxed">
-          ResearchTube is an open-source, multi-agent AI research pipeline designed to transform unsearchable YouTube video streams into structured, publication-grade technical intelligence.
+          ResearchTube is a multi-agent AI research pipeline designed to transform unsearchable YouTube video streams into structured, publication-grade technical intelligence.
         </p>
       </section>
 
@@ -49,11 +49,11 @@ export default function About() {
             <ul className="mt-4 space-y-3 text-xs text-zinc-300">
               <li className="flex items-start gap-2.5">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                <span>You cannot Ctrl+F or semantically search inside 45-minute video streams.</span>
+                <span>Watching 45-minute videos sequentially is extremely time inefficient.</span>
               </li>
               <li className="flex items-start gap-2.5">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-red-400 flex-shrink-0" />
-                <span>Scanning multiple videos to find specific code implementations wastes hours.</span>
+                <span>Basic search can't filter out low-quality or inaccurate tutorial fluff.</span>
               </li>
               <li className="flex items-start gap-2.5">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-red-400 flex-shrink-0" />
@@ -170,7 +170,7 @@ export default function About() {
               Saket Jha
             </h3>
             <p className="text-sm leading-relaxed text-zinc-400">
-              Designed and built as an open-source project exploring state-of-the-art multi-agent systems, pgvector similarity search, and FastAPI enterprise architecture.
+              Designed and built as an advanced AI platform exploring state-of-the-art multi-agent systems, pgvector similarity search, and FastAPI enterprise architecture.
             </p>
             <div className="pt-2 flex flex-wrap items-center gap-4">
               <a
@@ -200,7 +200,7 @@ export default function About() {
             <p><span className="text-zinc-500">LLM Model:</span> Gemini 3.5 Flash</p>
             <p><span className="text-zinc-500">Vector Store:</span> PostgreSQL pgvector</p>
             <p><span className="text-zinc-500">Orchestrator:</span> LangGraph 7-Node</p>
-            <p><span className="text-zinc-500">License:</span> MIT Open Source</p>
+            <p><span className="text-zinc-500">License:</span> MIT License</p>
           </div>
         </div>
       </section>
