@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, ExternalLink, Copy, Check, Search, X as XIcon } from 'lucide-react'
+import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon } from 'lucide-react'
 import { runResearch, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
 import { useToast, ToastContainer } from '../components/Toast'
 import KnowledgeGraph from '../components/KnowledgeGraph'

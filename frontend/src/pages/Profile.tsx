@@ -6,10 +6,7 @@ import { detectAuthProvider, getAuthSession, persistAuthSession } from '../api/a
 import { useAuth } from '../context/AuthContext'
 import { 
   BarChart2, 
-  Play, 
-  Cpu, 
   BookOpen, 
-  Hourglass, 
   Video, 
   Layers, 
   Award, 

@@ -6,8 +6,6 @@ import {
   BrainCircuit,
   Database,
   Zap,
-  Layers,
-  ShieldCheck,
   CheckCircle2,
   ChevronDown,
   Play,
@@ -34,6 +32,7 @@ const EXAMPLE_QUERIES = [
 // Authentic Technical Reports with Real YouTube Video URLs & Exact Creator Channel Metadata
 const DEMO_REPORTS: Record<string, ResearchResponse['report']> = {
   'Tell me the best resources to learn Postgres and pgvector for RAG': {
+    research_question: 'Tell me the best resources to learn Postgres and pgvector for RAG',
     executive_summary:
       'Using PostgreSQL with the pgvector extension is the leading architectural pattern for building production Retrieval-Augmented Generation (RAG) pipelines. It enables storing 768d to 1536d vector embeddings directly alongside relational database tables, executing Cosine Distance vector similarity queries, and eliminating the complexity of managing a separate vector database like Pinecone or Milvus.',
     recommended_resources: [
@@ -121,6 +120,7 @@ const DEMO_REPORTS: Record<string, ResearchResponse['report']> = {
   },
 
   'Best resources to learn building multi-agent AI systems with LangGraph': {
+    research_question: 'Best resources to learn building multi-agent AI systems with LangGraph',
     executive_summary:
       'LangGraph is the leading Python and TypeScript framework for orchestrating state-machine multi-agent AI applications. Unlike linear LLM chains, LangGraph models complex multi-agent workflows as Directed Acyclic Graphs (DAGs), where agents operate as nodes and decisions operate as conditional edges with persistent thread memory.',
     recommended_resources: [
@@ -207,6 +207,7 @@ const DEMO_REPORTS: Record<string, ResearchResponse['report']> = {
   },
 
   'Best resources to master Rust system programming and async Tokio': {
+    research_question: 'Best resources to master Rust system programming and async Tokio',
     executive_summary:
       'Mastering Rust system programming and async I/O with Tokio requires a deep understanding of ownership, lifetimes, memory pinning, and task execution scheduling. Tokio provides a non-blocking multithreaded runtime built on top of epoll/kqueue, allowing applications to process hundreds of thousands of concurrent connections with minimal memory overhead.',
     recommended_resources: [
