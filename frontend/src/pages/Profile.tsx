@@ -15,7 +15,9 @@ import {
   Loader2,
   Sparkles,
   Compass,
-  RefreshCw
+  RefreshCw,
+  Clock,
+  Database
 } from 'lucide-react'
 
 const STATS_CACHE_KEY = 'rt_user_analytics_stats'
@@ -69,7 +71,6 @@ function Profile() {
           setStatsLoading(false)
           return
         } catch {
-          // If parse fails, clear invalid cache and proceed to fetch
           localStorage.removeItem(STATS_CACHE_KEY)
         }
       }
@@ -256,7 +257,7 @@ function Profile() {
         <p className="mt-2 text-sm text-[#999999]">Your account and identity details.</p>
       </header>
 
-      <div className="border border-[#222222] bg-[#111111] p-6">
+      <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl">
         <dl className="grid gap-4 text-sm md:grid-cols-2">
           <div>
             <dt className="text-[#999999]">Full name</dt>
@@ -282,8 +283,8 @@ function Profile() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <form className="space-y-4 border border-[#222222] bg-[#111111] p-6" onSubmit={handleProfileUpdate}>
-          <h2 className="text-xl">Update Profile</h2>
+        <form className="space-y-4 border border-[#222222] bg-[#111111] p-6 rounded-xl" onSubmit={handleProfileUpdate}>
+          <h2 className="text-xl font-semibold">Update Profile</h2>
           <p className="text-sm text-[#999999]">Update your public account information.</p>
 
           {profileError ? (
@@ -318,8 +319,8 @@ function Profile() {
           </Button>
         </form>
 
-        <div className="border border-[#222222] bg-[#111111] p-6">
-          <h2 className="text-xl">Security</h2>
+        <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl">
+          <h2 className="text-xl font-semibold">Security</h2>
           <p className="mt-2 text-sm text-[#999999]">Keep your account protected.</p>
 
           {passwordMessage ? (
@@ -360,7 +361,7 @@ function Profile() {
 
       {passwordModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-lg rounded-md border border-[#222222] bg-[#111111] p-6">
+          <div className="w-full max-w-lg rounded-xl border border-[#222222] bg-[#111111] p-6">
             <div className="mb-4 flex items-center justify-between gap-4">
               <div>
                 <h3 className="text-2xl font-semibold">Change password</h3>
@@ -444,19 +445,20 @@ function Profile() {
         </header>
 
         {statsLoading ? (
-          <div className="border border-[#222222] bg-[#111111] p-12 flex flex-col items-center justify-center gap-3">
+          <div className="border border-[#222222] bg-[#111111] p-12 rounded-xl flex flex-col items-center justify-center gap-3">
             <Loader2 className="animate-spin text-purple-400" size={32} />
             <p className="text-xs text-[#999999]">Calculating your research statistics...</p>
           </div>
         ) : statsError ? (
-          <div className="border border-red-955 bg-red-950/10 p-6 flex items-center gap-3">
+          <div className="border border-red-955 bg-red-950/10 p-6 rounded-xl flex items-center gap-3">
             <XCircle className="text-red-500" size={20} />
             <p className="text-sm text-red-200">{statsError}</p>
           </div>
         ) : stats ? (
           <div className="space-y-6">
-            {/* Overview Stats Cards */}
+            {/* Overview Stats Cards (Top 4 Cards) */}
             <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+              {/* Card 1: TOTAL QUERIES */}
               <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-purple-900/50 transition-all group">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Total Queries</span>
@@ -468,6 +470,7 @@ function Profile() {
                 </div>
               </div>
 
+              {/* Card 2: COMPLETED */}
               <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-green-950/50 transition-all group">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Completed</span>
@@ -479,6 +482,7 @@ function Profile() {
                 </div>
               </div>
 
+              {/* Card 3: VIDEOS ANALYZED */}
               <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-[#333333] transition-all group">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Videos Analyzed</span>
@@ -490,6 +494,7 @@ function Profile() {
                 </div>
               </div>
 
+              {/* Card 4: AUDIENCE REACH */}
               <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-[#333333] transition-all group">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Audience Reach</span>
@@ -502,28 +507,46 @@ function Profile() {
               </div>
             </div>
 
-            {/* Performance Metrics & Quality Scores */}
+            {/* Performance Metrics & Insights Split Section */}
             <div className="grid gap-6 lg:grid-cols-2">
+              {/* Left Column: PIPELINE PERFORMANCE */}
               <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-6">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-[#666666] flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                   <Compass size={14} className="text-purple-400" /> Pipeline Performance
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-black/60 p-4 rounded-lg border border-[#222222]">
+
+                {/* Sub-stats 6-Card Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="bg-black/60 p-3.5 rounded-lg border border-[#222222]">
                     <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Avg Videos / Run</p>
                     <p className="text-xl font-bold text-white mt-1">{stats.average_videos_per_run}</p>
                   </div>
-                  <div className="bg-black/60 p-4 rounded-lg border border-[#222222]">
+
+                  <div className="bg-black/60 p-3.5 rounded-lg border border-[#222222]">
+                    <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Avg Run Duration</p>
+                    <p className="text-xl font-bold text-amber-400 mt-1 flex items-center gap-1">
+                      {stats.average_run_duration_seconds ? `${stats.average_run_duration_seconds.toFixed(1)}s` : '0.0s'}
+                    </p>
+                  </div>
+
+                  <div className="bg-black/60 p-3.5 rounded-lg border border-[#222222]">
                     <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Channels Discovered</p>
                     <p className="text-xl font-bold text-white mt-1">{stats.total_channels_discovered}</p>
                   </div>
-                  <div className="bg-black/60 p-4 rounded-lg border border-[#222222]">
-                    <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Vector Chunks</p>
+
+                  <div className="bg-black/60 p-3.5 rounded-lg border border-[#222222]">
+                    <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Vector Embeddings</p>
                     <p className="text-xl font-bold text-purple-400 mt-1">{stats.total_transcript_chunks}</p>
                   </div>
-                  <div className="bg-black/60 p-4 rounded-lg border border-[#222222]">
+
+                  <div className="bg-black/60 p-3.5 rounded-lg border border-[#222222]">
                     <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Beginner Friendly</p>
                     <p className="text-xl font-bold text-green-400 mt-1">{stats.total_beginner_friendly_videos}</p>
+                  </div>
+
+                  <div className="bg-black/60 p-3.5 rounded-lg border border-[#222222]">
+                    <p className="text-[10px] font-bold text-[#555555] uppercase tracking-wider">Failed Runs</p>
+                    <p className="text-xl font-bold text-red-400 mt-1">{stats.failed_research_runs}</p>
                   </div>
                 </div>
 
@@ -575,8 +598,8 @@ function Profile() {
                 </div>
               </div>
 
-              {/* Insights Columns */}
-              <div className="space-y-6">
+              {/* Right Column: Insights Columns */}
+              <div className="space-y-6 flex flex-col justify-between">
                 {/* Top Recommended Channels */}
                 <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4 flex-1">
                   <h3 className="text-sm font-bold uppercase tracking-wider text-[#666666] flex items-center gap-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
