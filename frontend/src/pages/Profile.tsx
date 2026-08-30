@@ -15,9 +15,7 @@ import {
   Loader2,
   Sparkles,
   Compass,
-  RefreshCw,
-  Clock,
-  Database
+  RefreshCw
 } from 'lucide-react'
 
 const STATS_CACHE_KEY = 'rt_user_analytics_stats'
