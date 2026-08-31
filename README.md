@@ -11,85 +11,95 @@
 
 ---
 
-## 🏗️ System Architecture (`block-beta`)
+## 📌 Project Overview & Mission
 
-```mermaid
-block-beta
-  columns 4
+Technical YouTube content—including architecture lectures, conference talks, and deep-dive coding tutorials—contains invaluable engineering knowledge. However, accessing this knowledge manually presents major challenges:
+- **Time Inefficiency:** Watching multiple 45-minute technical lectures to find specific code implementations is slow and tedious.
+- **Low Signal-to-Noise Ratio:** Traditional keyword search cannot evaluate code quality, tutorial rigor, or technical accuracy.
+- **Lack of Persistent Vector Indexing:** Notes taken manually lack semantic search indexes for instant evidence retrieval across hundreds of hours of video.
 
-  user(("Research User")):4
-  space:4
-
-  block:frontend:4
-    columns 4
-    ui["React 19 Dashboard"]
-    cache["Browser State Cache"]
-    graph_ui["2D Knowledge Graph"]
-    auth_ui["Auth Context"]
-  end
-
-  space:4
-
-  block:backend:4
-    columns 4
-    gateway["FastAPI API Gateway"]
-    auth_svc["JWT OAuth2 Service"]
-    stats_svc["User Analytics Service"]
-    pipeline["Research Pipeline Manager"]
-  end
-
-  space:4
-
-  block:agents:4
-    columns 4
-    agent1["Agent 1: Researcher"]
-    agent2["Agent 2: RAG Evaluator"]
-    agent3["Agent 3: Synthesizer"]
-    persist["Persistence Node"]
-  end
-
-  space:4
-
-  block:external:4
-    columns 3
-    youtube["YouTube API & 3-Layer Proxy Mesh"]
-    gemini_llm["Google Gemini 3.5 LLM"]
-    gemini_embed["Google text-embedding-004"]
-  end
-
-  space:4
-
-  block:storage:4
-    columns 2
-    db_relational[("PostgreSQL Relational DB")]
-    db_vector[("pgvector HNSW Vector Store")]
-  end
-
-  user --> ui
-  ui --> gateway
-  gateway --> auth_svc
-  gateway --> pipeline
-  pipeline --> agent1
-  agent1 --> youtube
-  agent1 --> agent2
-  agent2 --> gemini_embed
-  agent2 --> gemini_llm
-  agent2 --> agent3
-  agent3 --> persist
-  persist --> db_relational
-  agent2 --> db_vector
-
-  style user fill:#ffe0b2,stroke:#fb8c00
-  style frontend fill:#1e1e1e,stroke:#333333
-  style backend fill:#111827,stroke:#1f2937
-  style agents fill:#31103f,stroke:#581c87
-  style external fill:#064e3b,stroke:#047857
-  style storage fill:#1e3a8a,stroke:#1d4ed8
-```
+**ResearchTube** solves these problems by deploying an autonomous **Multi-Agent RAG Pipeline**:
+1. **Agent 1 (YouTube Researcher):** Decomposes research topics into targeted sub-queries, crawls YouTube metadata, and extracts video transcripts via a 3-layer proxy mesh.
+2. **Agent 2 (RAG Evaluator):** Slices transcripts into sliding-window chunks, generates 768-dimensional vector embeddings, performs Cosine Distance search (`<->`) against PostgreSQL `pgvector`, and grades content relevance and educational quality.
+3. **Agent 3 (Synthesizer):** Synthesizes evidence chunks into publication-grade Markdown research reports complete with score meters, step-by-step learning paths, and interactive 2D knowledge graphs.
 
 ---
 
-## 🌟 Key Features
+## ⚙️ Running Frontend & Backend (Setup Documentation)
+
+For detailed installation instructions, environment variables configuration, local development setups, and subsystem architecture specs, refer to the respective subsystem documentation:
+
+* ⚙️ **[Backend Documentation & Setup Guide](backend/README.md):** Complete guide for installing Python 3.12 dependencies, setting up `.env` secret keys, initializing PostgreSQL `pgvector` schemas, running FastAPI servers, and exploring interactive Swagger API docs.
+* 🎨 **[Frontend Documentation & Setup Guide](frontend/README.md):** Complete guide for setting up React 19 SPA, Node.js dependencies, Vite build configurations, Tailwind CSS v4 styling, component hierarchy, and routing.
+
+---
+
+## 🏗️ System Architecture Flowchart
+
+```mermaid
+flowchart TB
+    subgraph Clients ["🖥️ Client & Presentation Layer"]
+        Browser["User Browser (React 19 SPA)"]
+        AuthContext["Auth Context & Token Storage"]
+        StateCache["Browser LocalStorage Cache"]
+    end
+
+    subgraph GatewayLayer ["🚪 API Gateway & Security Infrastructure"]
+        APIGateway["FastAPI API Gateway / Nginx"]
+        RateLimiter["Rate-Limiting Middleware"]
+        JWTAuthFilter["JWT Bearer & Auth Filter"]
+    end
+
+    subgraph CoreServices ["⚙️ Core Application Services"]
+        AuthService["Auth & Identity Service"]
+        UserStatsService["User Analytics & Profile Service"]
+        ResearchManager["Research Pipeline Orchestrator"]
+        ShareService["Public Share Link Service"]
+    end
+
+    subgraph AgentEngine ["🤖 LangGraph Multi-Agent DAG (7-Node Engine)"]
+        N1["1. Input Validator"] --> N2["2. Agent 1: Query Planner"]
+        N2 --> N3["3. Agent 1: Scraper Mesh"]
+        N3 --> N4["4. Text Chunker & Embedder"]
+        N4 --> N5["5. Agent 2: RAG Evaluator"]
+        N5 --> N6["6. Agent 3: Synthesizer"]
+        N6 --> N7["7. Persistence Node"]
+    end
+
+    subgraph StorageLayer ["💾 PostgreSQL 16 + pgvector Infrastructure"]
+        tblRelational[(Relational Tables: users, runs, videos)]
+        tblVector[(Vector Engine: video_chunks HNSW Index)]
+    end
+
+    Browser --> APIGateway
+    APIGateway --> RateLimiter --> JWTAuthFilter
+    JWTAuthFilter --> AuthService & UserStatsService & ResearchManager & ShareService
+    ResearchManager --> N1
+    N4 -->|Store 768d Embeddings| tblVector
+    N5 <-->|Cosine Similarity Search <->| tblVector
+    N7 -->|Commit Run Data| tblRelational
+```
+
+> 📖 **Deep Technical Specs:** For comprehensive mathematical formulations, chunking algorithms, and sequence diagrams, refer to [docs/architecture.md](docs/architecture.md) and root [ARCHITECTURE.md](ARCHITECTURE.md).
+
+---
+
+## 🛠️ Detailed Technology Stack
+
+| Layer | Technology | Technical Purpose & Details |
+| :--- | :--- | :--- |
+| **Agent Orchestrator** | **LangGraph** | Manages multi-agent execution state machine across 7 nodes with typed state pass-through and cyclic reasoning capabilities. |
+| **Vector RAG Engine** | **PostgreSQL 16 + pgvector** | Stores 768-dimensional dense vector embeddings in `video_chunks` table with HNSW Cosine Distance indexes (`m=16`, `ef_construction=64`). |
+| **AI LLM & Embeddings** | **Google Gemini 3.5 & text-embedding-004** | Synthesizes technical reports, grades video depth/pros/cons, and generates 768-dimensional dense text embeddings. |
+| **Backend REST Gateway** | **FastAPI (Python 3.12)** | Asynchronous Python backend utilizing Pydantic v2 schemas, async SQLAlchemy ORM, and JWT authentication. |
+| **Frontend UI** | **React 19 + TypeScript + Vite** | High-performance Single Page Application using strict TypeScript, React Router v6, and Vite module bundling. |
+| **Styling & Icons** | **Tailwind CSS v4 + Lucide React** | Modern dark glassmorphic design system with custom keyframe route animations and Space Grotesk typography. |
+| **Proxy Scraper Mesh** | **Webshare Proxy Integration** | 3-layer anti-block scraper mesh using residential proxy authentication, system IP fallbacks, and sequential language tag scanning. |
+| **Containerization** | **Docker & Docker Compose** | Multi-container orchestrated development and production setup connecting Frontend, Backend, and PostgreSQL database. |
+
+---
+
+## 🌟 Core System Capabilities
 
 * **🤖 7-Node LangGraph DAG Orchestrator:** Coordinated state-machine execution across 3 specialized AI agents (Agent 1: YouTube Researcher, Agent 2: RAG Evaluator, Agent 3: Synthesizer).
 * **⚡ PostgreSQL pgvector Semantic RAG:** Transcripts are chunked into 1,000-character windows, embedded into 768-dimensional dense vectors via `text-embedding-004`, and indexed using HNSW Cosine Distance (`<->`).
@@ -102,89 +112,6 @@ block-beta
 
 ---
 
-## 🛠️ Technology Stack
-
-| Component | Technology | Description |
-| :--- | :--- | :--- |
-| **Frontend Framework** | React 19 + TypeScript | High-performance SPA with strict typing |
-| **Styling & Icons** | Tailwind CSS v4 + Lucide React | Modern dark mode glassmorphism UI |
-| **Build System** | Vite | Lightning-fast module bundling |
-| **Backend Framework** | FastAPI (Python 3.12) | High-performance asynchronous REST API |
-| **Agent Orchestrator** | LangGraph | State-machine multi-agent graph DAG |
-| **LLM & Embeddings** | Gemini 3.5 Flash & `text-embedding-004` | 768-dimensional dense vector embeddings |
-| **Database** | PostgreSQL 16 + `pgvector` | Relational storage & HNSW Cosine Distance vector search |
-| **Containerization** | Docker Compose | Multi-container orchestrated setup |
-
----
-
-## 🚀 Quickstart Guide
-
-### Prerequisites
-- [Docker & Docker Compose](https://docs.docker.com/get-docker/) installed.
-- [Google Gemini API Key](https://aistudio.google.com/) for LLM reasoning and embedding generation.
-- [YouTube Data API Key](https://console.cloud.google.com/) for YouTube video metadata search.
-
-### 1. Clone Repository & Setup Environment
-
-```bash
-git clone https://github.com/saketjha34/ResearchTube.git
-cd ResearchTube
-```
-
-Create a `.env` file in `backend/`:
-
-```env
-# Database Configuration
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/youtube_research
-POSTGRES_DB=youtube_research
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-
-# Secret Keys
-SECRET_KEY=your_super_secret_jwt_key_here
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-REFRESH_TOKEN_EXPIRE_DAYS=7
-
-# API Keys
-GEMINI_API_KEY=your_gemini_api_key
-YOUTUBE_API_KEY=your_youtube_api_key
-
-# Optional Proxy Configuration
-WEBSHARE_PROXY_USERNAME=
-WEBSHARE_PROXY_PASSWORD=
-```
-
-### 2. Launch Containers with Docker Compose
-
-```bash
-docker compose up --build
-```
-
-The services will spin up at:
-- **Frontend Dashboard:** `http://localhost:5173`
-- **Backend REST API:** `http://localhost:8000`
-- **Interactive Swagger Docs:** `http://localhost:8000/docs`
-
----
-
-## 🔌 API Endpoints Overview
-
-| Method | Endpoint | Description | Auth Required |
-| :--- | :--- | :--- | :---: |
-| `POST` | `/auth/register` | Create a new user account | ❌ |
-| `POST` | `/auth/login` | Authenticate & receive JWT access + refresh tokens | ❌ |
-| `GET` | `/auth/google` | Initiate Google OAuth2 login flow | ❌ |
-| `POST` | `/research/run` | Execute multi-agent research pipeline on a topic | ✅ |
-| `GET` | `/research/history` | Retrieve user's past research runs | ✅ |
-| `GET` | `/research/history/{run_id}` | Fetch detailed research run by ID | ✅ |
-| `POST` | `/research/share/{run_id}` | Toggle public sharing link | ✅ |
-| `GET` | `/research/public/{share_token}` | Access public research report | ❌ |
-| `GET` | `/user/stats` | Retrieve user research analytics metrics | ✅ |
-| `DELETE` | `/user/account` | Permanently wipe user account and data | ✅ |
-
----
-
 ## 📁 Repository Structure
 
 ```text
@@ -192,24 +119,16 @@ ResearchTube/
 ├── docs/
 │   └── architecture.md       # Detailed technical architecture specs & diagrams
 ├── ARCHITECTURE.md           # Root architectural overview reference
-├── README.md                 # Complete project documentation & setup guide
+├── README.md                 # Complete project overview & system design guide
 ├── docker-compose.yaml       # Orchestrates PostgreSQL, FastAPI backend & React frontend
 ├── backend/
-│   ├── app/
-│   │   ├── api/              # FastAPI route handlers (auth, research, user)
-│   │   ├── core/             # Config, DB initialization, JWT security utilities
-│   │   ├── models/           # SQLAlchemy ORM models (User, ResearchRun, Video, Chunk)
-│   │   ├── schemas/          # Pydantic data validation schemas
-│   │   └── services/         # LangGraph agents, proxy scraper, vector RAG logic
+│   ├── README.md             # Backend setup guide, API specs, and database docs
+│   ├── app/                  # FastAPI routes, models, schemas, and LangGraph services
 │   ├── Dockerfile            # Python 3.12 Docker configuration
-│   └── requirements.txt      # Python dependencies (FastAPI, LangGraph, pgvector, etc.)
+│   └── requirements.txt      # Python dependencies
 └── frontend/
-    ├── src/
-    │   ├── api/              # Axios client API handlers & token interceptors
-    │   ├── components/       # UI components (KnowledgeGraph, Sidebar, UserMenu, etc.)
-    │   ├── context/          # React AuthContext & full-screen loading screen
-    │   ├── layouts/          # Dashboard AppLayout with page transition keying
-    │   └── pages/            # Research, Profile, Landing, Library, About, Auth pages
+    ├── README.md             # Frontend setup guide, component specs, and styling docs
+    ├── src/                  # React 19 pages, components, context, and API handlers
     └── Dockerfile            # Vite React 19 Docker configuration
 ```
 
