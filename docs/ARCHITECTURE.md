@@ -249,66 +249,133 @@ sequenceDiagram
 
 ```mermaid
 erDiagram
-    users ||--o{ research_runs : "executes"
-    users ||--o{ refresh_tokens : "owns"
-    research_runs ||--o{ videos : "includes"
-    videos ||--o{ video_chunks : "contains"
-    research_runs ||--o| shared_reports : "publishes"
-
     users {
         uuid id PK
-        string full_name
-        string username UK
         string email UK
-        string password_hash
-        string profile_picture_url
+        string username UK
+        string full_name
+        text profile_picture_url
         boolean is_active
-        timestamp created_at
+        boolean is_verified
+        datetime created_at
+        datetime updated_at
+    }
+
+    user_auth {
+        uuid id PK
+        uuid user_id FK
+        text password_hash
+        datetime last_password_change
+        datetime created_at
+    }
+
+    oauth_accounts {
+        uuid id PK
+        uuid user_id FK
+        string provider
+        string provider_user_id UK
+        string provider_email
+        text access_token
+        text refresh_token
+        datetime expires_at
+        datetime created_at
+    }
+
+    refresh_tokens {
+        uuid id PK
+        uuid user_id FK
+        text token_hash UK
+        datetime expires_at
+        boolean revoked
+        datetime created_at
     }
 
     research_runs {
         uuid id PK
         uuid user_id FK
-        string query
+        text user_query
         integer video_count
         string status
-        jsonb report_json
-        jsonb knowledge_graph_json
-        float execution_duration_seconds
-        timestamp created_at
+        boolean is_public
+        text error_message
+        datetime started_at
+        datetime completed_at
+        datetime created_at
     }
 
-    videos {
+    youtube_videos {
         uuid id PK
-        uuid research_run_id FK
-        string youtube_id
-        string title
-        string channel_name
-        string url
+        string video_id UK
+        text title
+        text description
+        string channel
+        datetime published_at
+        text url
         integer views
         integer likes
-        float relevance_score
-        float educational_score
-        float coverage_score
+        integer comments
+        datetime created_at
     }
 
-    video_chunks {
+    research_videos {
         uuid id PK
+        uuid research_run_id FK
         uuid video_id FK
-        integer chunk_index
-        float start_timestamp
-        float end_timestamp
-        text text_content
-        vector768 embedding
+        integer position
+        boolean transcript_available
+        string transcript_language
+        datetime created_at
     }
 
-    shared_reports {
+    transcript_chunks {
         uuid id PK
-        uuid research_run_id FK UK
-        string share_token UK
-        boolean is_public
-        timestamp created_at
+        uuid research_run_id FK
+        uuid video_id FK
+        text text
+        vector embedding
+        string language
     }
+
+    resource_evaluations {
+        uuid id PK
+        uuid research_run_id FK
+        uuid video_id FK
+        float relevance_score
+        string technical_depth
+        json pros
+        json cons
+        text key_takeaways
+        datetime created_at
+    }
+
+    resource_rankings {
+        uuid id PK
+        uuid research_run_id FK
+        json rankings_list
+        datetime created_at
+    }
+
+    final_reports {
+        uuid id PK
+        uuid research_run_id FK
+        text content
+        datetime created_at
+    }
+
+    users ||--o{ research_runs : "creates"
+    users ||--o| user_auth : "has local"
+    users ||--o{ oauth_accounts : "links social"
+    users ||--o{ refresh_tokens : "signs"
+    
+    research_runs ||--o{ research_videos : "crawls"
+    research_runs ||--o{ transcript_chunks : "vectorizes"
+    research_runs ||--o{ resource_evaluations : "scores"
+    research_runs ||--|| resource_rankings : "orders"
+    research_runs ||--|| final_reports : "synthesizes"
+
+    youtube_videos ||--o{ research_videos : "assigned"
+    youtube_videos ||--o{ transcript_chunks : "chunked"
+    youtube_videos ||--o{ resource_evaluations : "evaluated"
 ```
 
 ---

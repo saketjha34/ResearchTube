@@ -11,6 +11,84 @@
 
 ---
 
+## 🏗️ System Architecture (`block-beta`)
+
+```mermaid
+block-beta
+  columns 4
+
+  user(("Research User")):4
+  space:4
+
+  block:frontend:4
+    columns 4
+    ui["React 19 Dashboard"]
+    cache["Browser State Cache"]
+    graph_ui["2D Knowledge Graph"]
+    auth_ui["Auth Context"]
+  end
+
+  space:4
+
+  block:backend:4
+    columns 4
+    gateway["FastAPI API Gateway"]
+    auth_svc["JWT OAuth2 Service"]
+    stats_svc["User Analytics Service"]
+    pipeline["Research Pipeline Manager"]
+  end
+
+  space:4
+
+  block:agents:4
+    columns 4
+    agent1["Agent 1: Researcher"]
+    agent2["Agent 2: RAG Evaluator"]
+    agent3["Agent 3: Synthesizer"]
+    persist["Persistence Node"]
+  end
+
+  space:4
+
+  block:external:4
+    columns 3
+    youtube["YouTube API & 3-Layer Proxy Mesh"]
+    gemini_llm["Google Gemini 3.5 LLM"]
+    gemini_embed["Google text-embedding-004"]
+  end
+
+  space:4
+
+  block:storage:4
+    columns 2
+    db_relational[("PostgreSQL Relational DB")]
+    db_vector[("pgvector HNSW Vector Store")]
+  end
+
+  user --> ui
+  ui --> gateway
+  gateway --> auth_svc
+  gateway --> pipeline
+  pipeline --> agent1
+  agent1 --> youtube
+  agent1 --> agent2
+  agent2 --> gemini_embed
+  agent2 --> gemini_llm
+  agent2 --> agent3
+  agent3 --> persist
+  persist --> db_relational
+  agent2 --> db_vector
+
+  style user fill:#ffe0b2,stroke:#fb8c00
+  style frontend fill:#1e1e1e,stroke:#333333
+  style backend fill:#111827,stroke:#1f2937
+  style agents fill:#31103f,stroke:#581c87
+  style external fill:#064e3b,stroke:#047857
+  style storage fill:#1e3a8a,stroke:#1d4ed8
+```
+
+---
+
 ## 🌟 Key Features
 
 * **🤖 7-Node LangGraph DAG Orchestrator:** Coordinated state-machine execution across 3 specialized AI agents (Agent 1: YouTube Researcher, Agent 2: RAG Evaluator, Agent 3: Synthesizer).
@@ -21,49 +99,6 @@
 * **🔗 Public Report Sharing:** Toggle public access on any research run to generate a shareable link.
 * **📈 Profile Research Analytics:** Detailed activity analytics tracking total queries, videos analyzed, audience reach, average RAG scores, vector embeddings stored, and top discovered channels.
 * **🔐 Enterprise Auth Security:** Short-lived JWT Access Tokens, Refresh Token rotation, bcrypt password hashing, and Google OAuth2 single sign-on.
-
----
-
-## 🏗️ System Architecture
-
-```mermaid
-flowchart TD
-    subgraph Frontend ["React 19 + TypeScript + Vite"]
-        UI[Dashboard & Search Interface]
-        Graph[2D Knowledge Graph Visualizer]
-        Report[Report Render Engine]
-    end
-
-    subgraph Backend ["FastAPI + Python 3.12"]
-        API[FastAPI REST API Router]
-        Auth[JWT & Google OAuth2 Auth Service]
-        Pipeline[Research Pipeline Engine]
-    end
-
-    subgraph LangGraph ["LangGraph 7-Node DAG Engine"]
-        N1[1. Input Validator] --> N2[2. Query Planner Agent 1]
-        N2 --> N3[3. YouTube Crawler & Proxy Scraper]
-        N3 --> N4[4. Text Chunker & Embedder]
-        N4 --> N5[5. RAG Evaluator Agent 2]
-        N5 --> N6[6. Report Synthesizer Agent 3]
-        N6 --> N7[7. Persistence Node]
-    end
-
-    subgraph Data ["PostgreSQL 16 + pgvector"]
-        Relational[(users, research_runs, videos)]
-        VectorDB[(video_chunks vector 768 HNSW)]
-    end
-
-    UI -->|REST / HTTP| API
-    API --> Auth
-    API --> Pipeline
-    Pipeline --> N1
-    N4 -->|Insert Embeddings| VectorDB
-    N5 -->|Cosine Distance Search| VectorDB
-    N7 -->|Save Complete Run| Relational
-```
-
-> 📖 **Deep Technical Specs:** For comprehensive mathematical formulations, chunking algorithms, and sequence diagrams, refer to [docs/architecture.md](docs/architecture.md).
 
 ---
 
