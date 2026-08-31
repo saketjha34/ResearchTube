@@ -34,53 +34,99 @@ For detailed installation instructions, environment variables configuration, loc
 
 ---
 
-## 🏗️ System Architecture Flowchart
+## Visual System Architecture Map & Data Flow
 
-```mermaid
-flowchart TB
-    subgraph Clients ["🖥️ Client & Presentation Layer"]
-        Browser["User Browser (React 19 SPA)"]
-        AuthContext["Auth Context & Token Storage"]
-        StateCache["Browser LocalStorage Cache"]
-    end
+```text
+===================================================================================================
+                       RESEARCHTUBE: COMPLETE SYSTEM ARCHITECTURE & DATA FLOW
+===================================================================================================
 
-    subgraph GatewayLayer ["🚪 API Gateway & Security Infrastructure"]
-        APIGateway["FastAPI API Gateway / Nginx"]
-        RateLimiter["Rate-Limiting Middleware"]
-        JWTAuthFilter["JWT Bearer & Auth Filter"]
-    end
-
-    subgraph CoreServices ["⚙️ Core Application Services"]
-        AuthService["Auth & Identity Service"]
-        UserStatsService["User Analytics & Profile Service"]
-        ResearchManager["Research Pipeline Orchestrator"]
-        ShareService["Public Share Link Service"]
-    end
-
-    subgraph AgentEngine ["🤖 LangGraph Multi-Agent DAG (7-Node Engine)"]
-        N1["1. Input Validator"] --> N2["2. Agent 1: Query Planner"]
-        N2 --> N3["3. Agent 1: Scraper Mesh"]
-        N3 --> N4["4. Text Chunker & Embedder"]
-        N4 --> N5["5. Agent 2: RAG Evaluator"]
-        N5 --> N6["6. Agent 3: Synthesizer"]
-        N6 --> N7["7. Persistence Node"]
-    end
-
-    subgraph StorageLayer ["💾 PostgreSQL 16 + pgvector Infrastructure"]
-        tblRelational[(Relational Tables: users, runs, videos)]
-        tblVector[(Vector Engine: video_chunks HNSW Index)]
-    end
-
-    Browser --> APIGateway
-    APIGateway --> RateLimiter --> JWTAuthFilter
-    JWTAuthFilter --> AuthService & UserStatsService & ResearchManager & ShareService
-    ResearchManager --> N1
-    N4 -->|Store 768d Embeddings| tblVector
-    N5 <-->|Cosine Similarity Search <->| tblVector
-    N7 -->|Commit Run Data| tblRelational
+ [ 👤 RESEARCH USER ]
+          │
+          │  1. Submit Research Query / Click Interactive Demo / Auth Actions
+          ▼
+ ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
+ │                                   CLIENT PRESENTATION LAYER                                   │
+ │                                    (React 19 SPA + Vite)                                      │
+ │                                                                                               │
+ │  ┌────────────────────────┐    ┌────────────────────────┐    ┌─────────────────────────────┐  │
+ │  │   React 19 Dashboard   │    │  LocalStorage Cache    │    │  2D Knowledge Graph (SVG)   │  │
+ │  │   (Search / History)   │    │ (rt_user_analytics_stats)   │  │  (Concept Nodes & Links)    │  │
+ │  └────────────────────────┘    └────────────────────────┘    └─────────────────────────────┘  │
+ │  ┌─────────────────────────────────────────────────────────────────────────────────────────┐  │
+ │  │                  AuthContext (JWT Bearer Token & Full-Screen Loading Overlay)           │  │
+ │  └─────────────────────────────────────────────────────────────────────────────────────────┘  │
+ └───────────────────────────────────────────────────────────────────────────────────────────────┘
+          │
+          │  2. HTTPS / JSON REST API Requests (Bearer Access Token: 30m / Refresh Token: 7d)
+          ▼
+ ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
+ │                                  SECURITY & API GATEWAY LAYER                                 │
+ │                                     (FastAPI + Python 3.12)                                    │
+ │                                                                                               │
+ │  ┌────────────────────────┐    ┌────────────────────────┐    ┌─────────────────────────────┐  │
+ │  │  Nginx Reverse Proxy   │───►│ Rate-Limiter Middleware│───►│ JWT Bearer Auth Filter      │  │
+ │  │  (SSL Termination)     │    │ (Token Bucket DDoS Protect) │ (Claims & Role Validator)   │  │
+ │  └────────────────────────┘    └────────────────────────┘    └─────────────────────────────┘  │
+ └───────────────────────────────────────────────────────────────────────────────────────────────┘
+          │
+          ├───► 3a. Auth & OAuth2 Routes (/auth/login, /auth/register, /auth/google)
+          ├───► 3b. Profile & Stats Routes (/user/stats, /user/account)
+          │
+          │  3c. POST /research/run { query, video_count }
+          ▼
+ ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
+ │                             LANGGRAPH MULTI-AGENT DAG ENGINE                                  │
+ │                                  (7-Node State Machine)                                       │
+ │                                                                                               │
+ │   ┌──────────────────────┐        ┌──────────────────────┐        ┌──────────────────────┐    │
+ │   │ Node 1: Validator    │───────►│ Node 2: Query Planner│───────►│ Node 3: YT Crawler   │    │
+ │   │ (Sanitize & Quotas)  │        │ (Agent 1: 3-5 Terms) │        │ (Agent 1: Scraper)   │    │
+ │   └──────────────────────┘        └──────────────────────┘        └──────────────────────┘    │
+ │                                                                               │               │
+ │                                                                               │ Transcripts   │
+ │                                                                               ▼               │
+ │   ┌──────────────────────┐        ┌──────────────────────┐        ┌──────────────────────┐    │
+ │   │ Node 6: Synthesizer  │◄───────│ Node 5: RAG Evaluator│◄───────│ Node 4: Chunker      │    │
+ │   │ (Agent 3: Markdown)  │        │ (Agent 2: Cosine RAG)│        │ (W=1000, O=150)      │    │
+ │   └──────────────────────┘        └──────────────────────┘        └──────────────────────┘    │
+ │              │                                                                                │
+ │              │ Final Report & Graph Nodes                                                     │
+ │              ▼                                                                                │
+ │   ┌──────────────────────┐                                                                    │
+ │   │ Node 7: Persistence  │                                                                    │
+ │   │ (Commit DB Trans)    │                                                                    │
+ │   └──────────────────────┘                                                                    │
+ └───────────────────────────────────────────────────────────────────────────────────────────────┘
+          │                                           │                                │
+          │ 4. Search & Scrape                        │ 5. Embed Chunks & Vector Search│ 6. LLM Prompts & Synthesize
+          ▼                                           ▼                                ▼
+ ┌──────────────────────────┐               ┌──────────────────────────┐    ┌──────────────────────────┐
+ │  YOUTUBE & PROXY MESH    │               │  GOOGLE EMBEDDING API    │    │  GOOGLE GEMINI 3.5 LLM   │
+ │                          │               │                          │    │                          │
+ │  • YouTube Data v3 API   │               │  • text-embedding-004    │    │  • Gemini 3.5 Flash      │
+ │  • Webshare Proxy Pool   │               │  • 768-Dim Dense Vectors │    │  • Sub-query Generation  │
+ │  • IP Rotation Scraper   │               │  • Chunk Vectorization   │    │  • Depth & Metrics Grade │
+ └──────────────────────────┘               └──────────────────────────┘    │  • Markdown Synthesis    │
+                                                                            └──────────────────────────┘
+          │                                           │
+          │ 7. Relational Data Commit                 │ 8. Cosine Similarity Query (<->)
+          ▼                                           ▼
+ ┌───────────────────────────────────────────────────────────────────────────────────────────────┐
+ │                           DATA & STORAGE INFRASTRUCTURE LAYER                                 │
+ │                               (PostgreSQL 16 + pgvector)                                      │
+ │                                                                                               │
+ │  ┌──────────────────────────────────────────────┐ ┌────────────────────────────────────────┐  │
+ │  │        Relational SQL Tables                 │ │        pgvector HNSW Store             │  │
+ │  │  • users (auth, bcrypt hash, profiles)       │ │  • video_chunks (chunk_text, embedding)│  │
+ │  │  • research_runs (query, json, graph_data)   │ │  • vector(768) Dense Embedding Column  │  │
+ │  │  • videos (channel, views, likes, metrics)   │ │  • HNSW Cosine Index (vector_cosine)  │  │
+ │  │  • shared_reports (share_token, public)      │ │    Fast Vector Retrieval (< 15ms)      │  │
+ │  └──────────────────────────────────────────────┘ └────────────────────────────────────────┘  │
+ └───────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-> 📖 **Deep Technical Specs:** For comprehensive mathematical formulations, chunking algorithms, and sequence diagrams, refer to [docs/architecture.md](docs/architecture.md) and root [ARCHITECTURE.md](ARCHITECTURE.md).
+> 📖 **Deep Technical Specs:** For comprehensive mathematical formulations, chunking algorithms, and sequence diagrams, refer to [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ---
 
@@ -139,9 +185,3 @@ ResearchTube/
 Designed and built by **Saket Jha**.
 - **GitHub:** [@saketjha34](https://github.com/saketjha34)
 - **Repository:** [https://github.com/saketjha34/ResearchTube](https://github.com/saketjha34/ResearchTube)
-
----
-
-## 📜 License
-
-This project is released under the [MIT License](LICENSE).
