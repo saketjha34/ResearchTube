@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "ResearchTube Multi-Agent Pipeline Lifecycle",
+    "subtitle": "States, retries, waits, terminal outcomes, and proxy failure recovery loops",
+    "output": "lifecycle_diagram.html",
+    "viewBox": [1080, 680]
+  },
+  "lanes": [
+    { "id": "main", "label": "Main Execution Flow" },
+    { "id": "waiting", "label": "Interruption Gates" },
+    { "id": "exceptions", "label": "Recovery & Retry Loop" },
+    { "id": "terminal", "label": "Terminal Outcomes" }
+  ],
+  "states": [
+    { "id": "queued", "type": "start", "label": "Queued", "sublabel": "request received", "lane": "main", "col": 0, "step": "01", "tag": "entry" },
+    { "id": "planning", "type": "active", "label": "Query Planning", "sublabel": "3-5 sub-queries", "lane": "main", "col": 1, "step": "02", "tag": "agent1" },
+    { "id": "crawling_vectorizing", "type": "active", "label": "Scrape & Embed", "sublabel": "Proxy & 768d vectors", "lane": "main", "col": 2, "step": "03", "tag": "crawler" },
+    { "id": "evaluating", "type": "decision", "label": "RAG Evaluation", "sublabel": "Cosine search (<15ms)", "lane": "main", "col": 3, "step": "04", "tag": "agent2" },
+    { "id": "completed", "type": "success", "label": "Synthesize & Commit", "sublabel": "Report & DB commit", "lane": "main", "col": 4, "step": "05", "tag": "done" },
+    { "id": "rate_limited", "type": "waiting", "label": "Rate Limited", "sublabel": "API quota pause", "lane": "waiting", "col": 1, "tag": "pause" },
+    { "id": "proxy_retry", "type": "failure", "label": "Proxy Fallback", "sublabel": "IP rotation retry", "lane": "exceptions", "col": 2, "tag": "retryable" },
+    { "id": "invalid_input", "type": "failure", "label": "Invalid Query", "sublabel": "Sanitization failure", "lane": "terminal", "col": 0, "tag": "terminal" },
+    { "id": "failed_run", "type": "failure", "label": "Pipeline Error", "sublabel": "Unrecoverable error", "lane": "terminal", "col": 2, "tag": "terminal" }
+  ],
+  "transitions": [
+    { "from": "queued", "to": "planning", "variant": "emphasis" },
+    { "from": "planning", "to": "crawling_vectorizing", "variant": "emphasis" },
+    { "from": "crawling_vectorizing", "to": "proxy_retry", "variant": "security", "fromSide": "bottom", "toSide": "top", "route": "straight" },
+    { "from": "crawling_vectorizing", "to": "evaluating", "variant": "emphasis" },
+    { "from": "evaluating", "to": "completed", "variant": "emphasis" },
+    { "from": "queued", "to": "invalid_input", "variant": "security", "fromSide": "bottom", "toSide": "top", "route": "straight" },
+    { "from": "evaluating", "to": "failed_run", "variant": "security", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Main Pipeline Path",
+      "items": [
+        "5 ordered phase states from request queueing to synthesis and database commit",
+        "Linear execution state pass-through inside LangGraph ResearchGraphState"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Proxy Recovery Mesh",
+      "items": [
+        "On YouTube transcript IP blocks, scraper loops through 3 proxy layers",
+        "Layer 1: Webshare Pool -> Layer 2: System IP -> Layer 3: Language Variant"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Terminal Out-of-Band Exits",
+      "items": [
+        "Invalid input query sanitization fails fast before agent invocation",
+        "Fatal unrecoverable errors record error state in research_runs table"
+      ]
+    }
+  ]
+}

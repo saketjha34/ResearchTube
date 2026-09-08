@@ -1,0 +1,231 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ResearchTube High-Level System Architecture Overview",
+    "output": "high_level_system_overview.html",
+    "viewBox": [1600, 750]
+  },
+  "components": [
+    {
+      "id": "ui",
+      "type": "frontend",
+      "brand": "react",
+      "label": "React 19 Dashboard",
+      "sublabel": "Vite / Tailwind v4 / D3 Graph",
+      "pos": [60, 340],
+      "size": [170, 64]
+    },
+    {
+      "id": "auth_mgr",
+      "type": "frontend",
+      "brand": "react",
+      "label": "Auth Token Manager",
+      "sublabel": "JWT & Loading Overlay",
+      "pos": [60, 440],
+      "size": [170, 64]
+    },
+    {
+      "id": "router",
+      "type": "backend",
+      "brand": "fastapi",
+      "label": "FastAPI Gateway",
+      "sublabel": "Async Router & CORS Shield",
+      "pos": [310, 340],
+      "size": [170, 64]
+    },
+    {
+      "id": "auth_svc",
+      "type": "security",
+      "brand": "python",
+      "label": "JWT & OAuth2 Service",
+      "sublabel": "Bcrypt / Google SSO",
+      "pos": [310, 440],
+      "size": [170, 64]
+    },
+    {
+      "id": "pipeline",
+      "type": "backend",
+      "brand": "python",
+      "label": "Research Orchestrator",
+      "sublabel": "Pipeline Manager",
+      "pos": [560, 340],
+      "size": [170, 64]
+    },
+    {
+      "id": "agent1",
+      "type": "backend",
+      "brand": "python",
+      "label": "Node 1 & 2: Planner",
+      "sublabel": "Agent 1: Sub-Queries",
+      "pos": [820, 340],
+      "size": [175, 64]
+    },
+    {
+      "id": "scraper",
+      "type": "cloud",
+      "brand": "youtube",
+      "label": "Node 3: Scraper Mesh",
+      "sublabel": "3-Layer Proxy Pool",
+      "pos": [820, 180],
+      "size": [175, 64]
+    },
+    {
+      "id": "embedder",
+      "type": "cloud",
+      "brand": "google-gemini",
+      "label": "Node 4: 768d Embedder",
+      "sublabel": "text-embedding-004",
+      "pos": [820, 500],
+      "size": [175, 64]
+    },
+    {
+      "id": "agent2",
+      "type": "backend",
+      "brand": "python",
+      "label": "Node 5: RAG Evaluator",
+      "sublabel": "Agent 2: Cosine Search",
+      "pos": [1080, 340],
+      "size": [175, 64]
+    },
+    {
+      "id": "agent3",
+      "type": "backend",
+      "brand": "python",
+      "label": "Node 6 & 7: Synthesizer",
+      "sublabel": "Agent 3: Persistence Node",
+      "pos": [1330, 340],
+      "size": [180, 64]
+    },
+    {
+      "id": "gemini",
+      "type": "cloud",
+      "brand": "google-gemini",
+      "label": "Google Gemini 3.5",
+      "sublabel": "Flash LLM Engine",
+      "pos": [1330, 180],
+      "size": [180, 64]
+    },
+    {
+      "id": "pg_vector",
+      "type": "database",
+      "brand": "postgresql",
+      "label": "PostgreSQL pgvector",
+      "sublabel": "Relational DB & HNSW Store",
+      "pos": [1330, 500],
+      "size": [180, 64]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Client Presentation Zone",
+      "wraps": ["ui", "auth_mgr"]
+    },
+    {
+      "kind": "security-group",
+      "label": "Security & Gateway Boundary",
+      "wraps": ["router", "auth_svc"]
+    },
+    {
+      "kind": "security-group",
+      "label": "LangGraph Agent Orchestration Zone",
+      "wraps": ["pipeline", "agent1", "scraper", "embedder", "agent2", "agent3"]
+    },
+    {
+      "kind": "region",
+      "label": "External AI & Data Store Mesh",
+      "wraps": ["gemini", "pg_vector"]
+    }
+  ],
+  "connections": [
+    {
+      "from": "ui",
+      "to": "router",
+      "label": "Primary Request",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -26
+    },
+    {
+      "from": "router",
+      "to": "pipeline",
+      "label": "Dispatch Pipeline",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -26
+    },
+    {
+      "from": "pipeline",
+      "to": "agent1",
+      "label": "1. Init State",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -26
+    },
+    {
+      "from": "agent1",
+      "to": "agent2",
+      "label": "2. Crawl & Scrape",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -26
+    },
+    {
+      "from": "agent2",
+      "to": "agent3",
+      "label": "3. RAG Evaluation",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -26
+    },
+    {
+      "from": "agent3",
+      "to": "gemini",
+      "label": "Synthesize",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "from": "agent3",
+      "to": "pg_vector",
+      "label": "Commit DB",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [1420, 418]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Presentation & Gateway Layer",
+      "items": [
+        "React 19 SPA dashboard with D3/SVG Knowledge Graph and JWT session context",
+        "FastAPI Gateway enforcing Token Bucket rate limiting and short-lived JWT authentication"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "7-Node LangGraph Agent Engine",
+      "items": [
+        "Coordinates Agent 1 (Planner), Agent 2 (RAG Evaluator), and Agent 3 (Synthesizer)",
+        "Executes 3-Layer Scraper Mesh (Webshare Residential -> System IP -> Language Variant)"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "pgvector & Gemini RAG Storage",
+      "items": [
+        "Sliding window transcript chunking (W=1000, O=150, S=850) with 768d text-embedding-004 vectors",
+        "Sub-15ms Cosine Distance search against PostgreSQL pgvector HNSW index for synthesis evidence"
+      ]
+    }
+  ]
+}

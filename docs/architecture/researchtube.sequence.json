@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "ResearchTube Complete Pipeline Execution Sequence",
+    "output": "sequence_diagram.html",
+    "viewBox": [1000, 720],
+    "column_fit": "spread"
+  },
+  "participants": [
+    { "id": "browser", "type": "external", "label": "Browser", "sublabel": "React 19 SPA" },
+    { "id": "gateway", "type": "backend", "label": "Gateway", "sublabel": "FastAPI Server" },
+    { "id": "planner", "type": "backend", "label": "Planner", "sublabel": "Agent 1 Gemini" },
+    { "id": "crawler", "type": "cloud", "label": "Crawler", "sublabel": "Scraper Mesh" },
+    { "id": "embedder", "type": "cloud", "label": "Embedder", "sublabel": "768d Vectors" },
+    { "id": "evaluator", "type": "backend", "label": "Evaluator", "sublabel": "Agent 2 RAG" },
+    { "id": "synthesizer", "type": "backend", "label": "Synthesizer", "sublabel": "Agent 3 Report" },
+    { "id": "db", "type": "database", "label": "pgvector", "sublabel": "PostgreSQL 16" }
+  ],
+  "segments": [
+    { "from": 150, "to": 280, "label": "1. Request Init & Query Decomposition" },
+    { "from": 290, "to": 420, "label": "2. Transcript Scraping & 768d Vector Indexing" },
+    { "from": 430, "to": 600, "label": "3. Sub-15ms pgvector RAG & Report Synthesis" }
+  ],
+  "messages": [
+    { "from": "browser", "to": "gateway", "y": 170, "label": "1. POST /research/run { query, video_count }", "variant": "emphasis" },
+    { "from": "gateway", "to": "planner", "y": 210, "label": "2. Init ResearchGraphState & Node 1 Validator", "variant": "emphasis" },
+    { "from": "planner", "to": "crawler", "y": 250, "label": "3. Decompose into 3-5 sub-queries", "variant": "default" },
+    { "from": "crawler", "to": "embedder", "y": 310, "label": "4. Scrape transcripts via Webshare proxy mesh", "variant": "default" },
+    { "from": "embedder", "to": "db", "y": 370, "label": "5. Insert 1000-char chunks & 768d vectors", "variant": "emphasis" },
+    { "from": "evaluator", "to": "db", "y": 440, "label": "6. Cosine Distance query (<->) against HNSW index", "variant": "emphasis" },
+    { "from": "db", "to": "evaluator", "y": 480, "label": "7. Return top-k evidence chunks (< 15ms)", "variant": "return" },
+    { "from": "evaluator", "to": "synthesizer", "y": 510, "label": "8. Grade relevance, depth & coverage (0-10)", "variant": "emphasis" },
+    { "from": "synthesizer", "to": "db", "y": 540, "label": "9. Synthesize Markdown report & commit run data", "variant": "emphasis" },
+    { "from": "gateway", "to": "browser", "y": 580, "label": "10. 200 OK Return complete report JSON & graph", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "browser", "from": 165, "to": 585, "type": "external" },
+    { "participant": "gateway", "from": 170, "to": 580, "type": "backend" },
+    { "participant": "planner", "from": 205, "to": 255, "type": "backend" },
+    { "participant": "crawler", "from": 245, "to": 315, "type": "cloud" },
+    { "participant": "embedder", "from": 305, "to": 375, "type": "cloud" },
+    { "participant": "evaluator", "from": 435, "to": 515, "type": "backend" },
+    { "participant": "synthesizer", "from": 505, "to": 545, "type": "backend" },
+    { "participant": "db", "from": 365, "to": 545, "type": "database" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "State Initialization & Decomposing",
+      "items": [
+        "React 19 SPA issues HTTPS request with Bearer JWT token",
+        "Agent 1 decomposes broad research prompt into targeted sub-queries via Gemini 3.5 Flash"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Sliding Window Vector Chunking",
+      "items": [
+        "Transcripts sliced into sliding windows (W=1000, O=150, S=850)",
+        "Google text-embedding-004 generates 768-dimensional dense vectors written to PostgreSQL"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Sub-15ms pgvector RAG & Report Synthesis",
+      "items": [
+        "Cosine Distance vector search retrieves top evidence chunks in under 15ms",
+        "Agent 3 compiles Markdown report, score meters, and D3 knowledge graph nodes"
+      ]
+    }
+  ]
+}

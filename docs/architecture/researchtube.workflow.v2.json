@@ -1,0 +1,247 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "ResearchTube Multi-Agent RAG Pipeline Workflow",
+    "subtitle": "7-Node LangGraph State Machine, 3-Layer Proxy Scraper & PostgreSQL pgvector Engine",
+    "output": "workflow_diagram.html",
+    "viewBox": [
+      1280,
+      776
+    ]
+  },
+  "lanes": [
+    {
+      "id": "ui",
+      "label": "User Interface"
+    },
+    {
+      "id": "gateway",
+      "label": "API Gateway"
+    },
+    {
+      "id": "agents",
+      "label": "Agent Engine"
+    },
+    {
+      "id": "scraper",
+      "label": "Scraper Mesh"
+    },
+    {
+      "id": "data",
+      "label": "Data Infrastructure"
+    }
+  ],
+  "phases": [
+    {
+      "id": "intake",
+      "label": "Intake & Validation",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "crawling",
+      "label": "Decompose & Scrape",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "synthesis",
+      "label": "Vector RAG & Report Synthesis",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "user",
+    "dashboard",
+    "api",
+    "planner",
+    "proxy_mesh",
+    "embedder",
+    "evaluator",
+    "synthesizer",
+    "final_report"
+  ],
+  "nodes": [
+    {
+      "id": "user",
+      "lane": "ui",
+      "col": 0,
+      "type": "external",
+      "label": "User",
+      "sublabel": "Inputs query",
+      "width": 110
+    },
+    {
+      "id": "dashboard",
+      "lane": "ui",
+      "col": 1,
+      "type": "frontend",
+      "label": "React 19 SPA",
+      "sublabel": "JWT & Dashboard",
+      "width": 120
+    },
+    {
+      "id": "api",
+      "lane": "gateway",
+      "col": 1,
+      "type": "backend",
+      "label": "API Gateway",
+      "sublabel": "FastAPI Server",
+      "width": 120
+    },
+    {
+      "id": "planner",
+      "lane": "agents",
+      "col": 2,
+      "type": "backend",
+      "label": "Planner",
+      "sublabel": "Agent 1 Sub-Queries",
+      "width": 125
+    },
+    {
+      "id": "proxy_mesh",
+      "lane": "scraper",
+      "col": 3,
+      "type": "cloud",
+      "label": "Scraper Mesh",
+      "sublabel": "3-Layer Proxy Pool",
+      "width": 125
+    },
+    {
+      "id": "embedder",
+      "lane": "agents",
+      "col": 3,
+      "type": "cloud",
+      "label": "Embedder",
+      "sublabel": "768d Vectors",
+      "width": 120
+    },
+    {
+      "id": "evaluator",
+      "lane": "agents",
+      "col": 4,
+      "type": "backend",
+      "label": "Evaluator",
+      "sublabel": "Agent 2 Cosine RAG",
+      "width": 125
+    },
+    {
+      "id": "synthesizer",
+      "lane": "agents",
+      "col": 5,
+      "type": "backend",
+      "label": "Synthesizer",
+      "sublabel": "Agent 3 Synthesis",
+      "width": 125
+    },
+    {
+      "id": "pgvector",
+      "lane": "data",
+      "col": 5,
+      "type": "database",
+      "label": "pgvector DB",
+      "sublabel": "PostgreSQL 16 HNSW",
+      "width": 125
+    },
+    {
+      "id": "final_report",
+      "lane": "ui",
+      "col": 5,
+      "type": "frontend",
+      "label": "Report View",
+      "sublabel": "Renders Report",
+      "width": 120
+    }
+  ],
+  "edges": [
+    {
+      "from": "user",
+      "to": "dashboard",
+      "variant": "default"
+    },
+    {
+      "from": "dashboard",
+      "to": "api",
+      "label": "HTTPS REST API",
+      "variant": "emphasis"
+    },
+    {
+      "from": "api",
+      "to": "planner",
+      "label": "Init DAG State",
+      "variant": "emphasis"
+    },
+    {
+      "from": "planner",
+      "to": "proxy_mesh",
+      "label": "Search terms",
+      "variant": "default"
+    },
+    {
+      "from": "proxy_mesh",
+      "to": "embedder",
+      "label": "Transcripts",
+      "variant": "default"
+    },
+    {
+      "from": "embedder",
+      "to": "evaluator",
+      "label": "768d vectors",
+      "variant": "emphasis"
+    },
+    {
+      "from": "evaluator",
+      "to": "synthesizer",
+      "label": "Score depth",
+      "variant": "emphasis"
+    },
+    {
+      "from": "evaluator",
+      "to": "pgvector",
+      "label": "Cosine RAG (<->)",
+      "variant": "emphasis"
+    },
+    {
+      "from": "synthesizer",
+      "to": "pgvector",
+      "label": "Commit DB",
+      "variant": "emphasis"
+    },
+    {
+      "from": "synthesizer",
+      "to": "final_report",
+      "label": "Report JSON",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "State Intake & Planning Phase",
+      "items": [
+        "React 19 SPA validates user query boundaries and passes Authorization Bearer JWT token",
+        "Agent 1 Planner prompts Gemini 3.5 Flash to decompose prompt into 3-5 sub-search queries"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Scraper & Sliding Window Embedding",
+      "items": [
+        "3-Layer Proxy Scraper Mesh downloads YouTube transcripts avoiding IP rate limit blocks",
+        "Text chunker embeds 1,000-character windows (O=150, S=850) into 768-dimensional dense vectors"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "pgvector Cosine Search & Synthesis",
+      "items": [
+        "Sub-15ms Cosine Distance vector search against PostgreSQL pgvector HNSW index",
+        "Agent 3 synthesizes publication-grade Markdown report and commits run state to database"
+      ]
+    }
+  ]
+}
