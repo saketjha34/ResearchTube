@@ -411,3 +411,11 @@ class ResearchAPIResponse(BaseModel):
     research_result: YouTubeResearchResult
 
     analysis: ResourceAnalysis
+
+
+class RenameHistoryRequest(BaseModel):
+
+    query: str = Field(
+        min_length=1,
+        description="New title/query for the research run."
+    )

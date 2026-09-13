@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db
 from app.db.models.user import User
-from app.services.auth_service import get_current_user
-from app.services.user_service import get_user_stats
+from app.services.auth.security_deps import get_current_user
+from app.services.user_service import user_service
 from app.schema.user_stats import UserStatsResponse
 from app.core.limiter import limiter
 
@@ -11,6 +11,7 @@ router = APIRouter(
     prefix="/user",
     tags=["User Settings / Stats"]
 )
+
 
 @router.get(
     "/stats",
@@ -26,7 +27,7 @@ async def get_stats(
     """
     Aggregate and return 15 detailed research statistics for the authenticated user.
     """
-    return await get_user_stats(db, current_user.id)
+    return await user_service.get_user_stats(db, current_user.id)
 
 
 @router.delete(

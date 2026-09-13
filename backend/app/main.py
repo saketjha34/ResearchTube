@@ -1,17 +1,13 @@
 from contextlib import asynccontextmanager
 import time
-# pyrefly: ignore [missing-import]
 import structlog
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
-# pyrefly: ignore [missing-import]
 from slowapi import _rate_limit_exceeded_handler
-# pyrefly: ignore [missing-import]
 from slowapi.errors import RateLimitExceeded
-# pyrefly: ignore [missing-import]
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.core.config import settings

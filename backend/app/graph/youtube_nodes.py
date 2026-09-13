@@ -23,17 +23,12 @@ import structlog
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.youtube_research_agent import (
+from app.agents.youtube import (
     youtube_research_agent,
-)
-
-from app.agents.youtube_context_analysis_agent import (
     context_analysis_agent,
-)
-
-from app.agents.youtube_final_report_agent import (
     final_report_agent,
 )
+
 
 from app.graph.youtube_state import ResearchState
 
@@ -44,7 +39,8 @@ from app.graph.persistence import (
     persist_final_report,
 )
 
-from app.rag.ingestor import ingest_transcripts
+from app.rag.youtube import ingest_transcripts
+
 
 
 logger = structlog.get_logger("nodes")
