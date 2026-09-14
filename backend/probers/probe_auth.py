@@ -34,12 +34,12 @@ def run_auth_prober():
     
     # 2. Login
     print(f"[*] Logging in...")
-    login_payload = {
-        "email": email,
+    login_data = {
+        "username": email,
         "password": password
     }
     
-    login_res = client.post("/auth/login", json=login_payload)
+    login_res = client.post("/auth/login", data=login_data)
     if login_res.status_code == 200:
         token_data = login_res.json()
         print("[+] Login successful.")
@@ -87,11 +87,11 @@ def run_auth_prober():
 
     # 6. Re-login with new password to get active token for other probers
     print("[*] Logging in again with new password to get active token for other probers...")
-    relogin_payload = {
-        "email": email,
+    relogin_data = {
+        "username": email,
         "password": new_password
     }
-    relogin_res = client.post("/auth/login", json=relogin_payload)
+    relogin_res = client.post("/auth/login", data=relogin_data)
     if relogin_res.status_code == 200:
         print("[+] Re-login successful.")
         return relogin_res.json().get("access_token")

@@ -25,8 +25,7 @@ def run_history_prober(token: str):
         print("[!] No history entries found. Run the research prober first to populate history.")
         return True
         
-    # 2. Get details for the first run
-    first_run_id = items[0]["id"]
+    first_run_id = items[0].get("run_id") or items[0].get("id")
     print(f"[*] Fetching details for run_id: {first_run_id}...")
     
     detail_res = client.get(f"/youtube/history/{first_run_id}")

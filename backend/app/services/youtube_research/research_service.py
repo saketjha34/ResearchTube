@@ -24,12 +24,13 @@ from app.schema.history import (
     HistoryEntry,
     HistoryListResponse,
 )
-from app.graph.youtube_graph import create_research_graph
-from app.graph.persistence import (
+from app.graph.youtube import (
+    create_research_graph,
     create_research_run,
     update_research_run_status,
 )
 from app.services.youtube_research.history_service import history_service
+
 
 
 _logger = structlog.get_logger("youtube_research_service")
