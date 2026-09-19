@@ -3,9 +3,10 @@ import time
 import structlog
 
 from fastapi import FastAPI, Request, Response
-from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -58,19 +59,48 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 # GZip compression — ~70% size reduction for responses > 1KB
-# Particularly effective for /youtube/history (40–50KB payloads)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# Particularly effective for /youtube/history (40-50KB payloads)
+# NOTE: We skip SSE (text/event-stream) routes because GZip buffers the entire
+# response before delivery, which breaks streaming. The custom middleware below
+# bypasses GZip for streaming responses.
+
+class SelectiveGZipMiddleware:
+    """GZip middleware that skips Server-Sent Event (SSE) responses.
+    
+    GZipMiddleware buffers the entire response before compressing, which
+    completely breaks streaming. We skip compression for any route that
+    streams SSE (Content-Type: text/event-stream or paths ending in /stream).
+    """
+    def __init__(self, app: ASGIApp, minimum_size: int = 1000) -> None:
+        self.app = app
+        self.gzip_app = GZipMiddleware(app, minimum_size=minimum_size)
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            path: str = scope.get("path", "")
+            # Skip GZip for streaming endpoints
+            if path.endswith("/stream") or path.endswith("/stream/"):
+                await self.app(scope, receive, send)
+                return
+        await self.gzip_app(scope, receive, send)
+
+app.add_middleware(SelectiveGZipMiddleware, minimum_size=1000)
 
 
 # ============================================================
 # CORS MIDDLEWARE
 # ============================================================
 
+# Strip trailing slashes from the runtime frontend URL for CORS matching.
+# Browsers send the origin WITHOUT a trailing slash, so "https://foo.com/"
+# would never match and every request would be rejected.
+_frontend_origin = settings.runtime_frontend_url.rstrip("/")
+
 app.add_middleware(
     CORSMiddleware,
 
     allow_origins=[
-        settings.runtime_frontend_url,
+        _frontend_origin,
         "http://localhost:5173",
         "http://127.0.0.1:5173",
 
@@ -89,6 +119,9 @@ app.add_middleware(
     allow_methods=["*"],
 
     allow_headers=["*"],
+
+    # Expose headers needed by the browser to read SSE responses
+    expose_headers=["Content-Type", "X-Accel-Buffering", "Cache-Control"],
 )
 
 

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   MessageSquare,
@@ -77,6 +77,9 @@ export default function Chat() {
   const [titleInput, setTitleInput] = useState('')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  // Set to the new session ID when we create a session ourselves to prevent
+  // the load-session effect from clearing our optimistic messages mid-stream.
+  const justCreatedSessionRef = useRef<string | null>(null)
 
   // Scroll to bottom smoothly
   const scrollToBottom = () => {
@@ -105,6 +108,14 @@ export default function Chat() {
     if (!sessionId) {
       setSession(null)
       setMessages([])
+      return
+    }
+
+
+    // If we just created this session ourselves (during handleSubmit), skip the
+    // re-fetch entirely so we do not clear the optimistic messages or interrupt
+    // the ongoing stream. The ref is cleared once streaming completes.
+    if (justCreatedSessionRef.current === sessionId) {
       return
     }
 
@@ -217,40 +228,56 @@ export default function Chat() {
     setInput('')
     setError(null)
 
-    let currentSessionId = sessionId
-
-    // If no session exists yet, create one
-    if (!currentSessionId) {
-      try {
-        const titleGen = textToSend.length > 45 ? `${textToSend.slice(0, 45)}...` : textToSend
-        const newSession = await createChatSession({
-          title: titleGen,
-          video_id: selectedVideo?.db_id || null,
-        })
-        currentSessionId = newSession.id
-        setSession({ ...newSession, messages: [] })
-        window.dispatchEvent(new Event('chat:updated'))
-        navigate(`/chat/${newSession.id}`, { replace: true })
-      } catch (err) {
-        setError('Failed to initialize chat session. Please try again.')
-        return
-      }
-    }
-
-    // Optimistic user message
-    const tempUserMsg: ChatMessage = {
-      id: `temp-${Date.now()}`,
-      session_id: currentSessionId,
-      role: 'user',
-      content: textToSend,
-      sources: null,
-      created_at: new Date().toISOString(),
-    }
-
-    setMessages((prev) => [...prev, tempUserMsg])
-    setIsStreaming(true)
-    setStreamingText('')
-
+    let currentSessionId = sessionId
+
+    // Build the optimistic user message upfront so we can display it
+    // immediately, even before navigate() triggers a re-render.
+    const tempUserMsg: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      session_id: currentSessionId ?? 'pending',
+      role: 'user',
+      content: textToSend,
+      sources: null,
+      created_at: new Date().toISOString(),
+    }
+
+    // If no session exists yet, create one
+    if (!currentSessionId) {
+      try {
+        const titleGen = textToSend.length > 45 ? `${textToSend.slice(0, 45)}...` : textToSend
+        const newSession = await createChatSession({
+          title: titleGen,
+          video_id: selectedVideo?.db_id || null,
+        })
+        currentSessionId = newSession.id
+        tempUserMsg.session_id = newSession.id
+
+        // Mark as freshly-created so the session-load useEffect does NOT
+        // clear our optimistic messages or interrupt the ongoing stream.
+        justCreatedSessionRef.current = newSession.id
+        setSession({ ...newSession, messages: [] })
+
+        // Set streaming state + optimistic message BEFORE navigate() so that
+        // when React re-renders due to the URL change, isStreaming=true and
+        // messages is non-empty - shows the message thread instead of the
+        // empty welcome screen.
+        setMessages([tempUserMsg])
+        setIsStreaming(true)
+        setStreamingText('')
+
+        window.dispatchEvent(new Event('chat:updated'))
+        navigate(`/chat/${newSession.id}`, { replace: true })
+      } catch (err) {
+        setError('Failed to initialize chat session. Please try again.')
+        return
+      }
+    } else {
+      // Existing session - append message and start streaming
+      setMessages((prev) => [...prev, tempUserMsg])
+      setIsStreaming(true)
+      setStreamingText('')
+    }
+
     let accumulated = ''
 
     await streamMessage(currentSessionId, textToSend, {
@@ -276,6 +303,7 @@ export default function Chat() {
         setMessages((prev) => [...prev, assistantMsg])
         setIsStreaming(false)
         setStreamingText('')
+        justCreatedSessionRef.current = null
         window.dispatchEvent(new Event('chat:updated'))
       },
       onError: (errMsg) => {
@@ -283,6 +311,7 @@ export default function Chat() {
         setError(`Error: ${errMsg}`)
         setIsStreaming(false)
         setStreamingText('')
+        justCreatedSessionRef.current = null
       },
     })
   }
