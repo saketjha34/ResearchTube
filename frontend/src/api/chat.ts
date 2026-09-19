@@ -1,10 +1,7 @@
 import client from './client'
 import { getAccessToken } from './auth'
+import { buildApiUrl } from './config'
 
-const apiBaseUrl =
-  import.meta.env.MODE === 'production'
-    ? (import.meta.env.VITE_API_URL_PROD || 'https://researchtubeai-197336418001.asia-south2.run.app')
-    : (import.meta.env.VITE_API_URL_DEV || 'http://localhost:8000')
 
 // --- Types ------------------------------------------------------------------
 
@@ -199,7 +196,7 @@ export async function streamMessage(
   callbacks: StreamCallbacks,
 ): Promise<void> {
   const token = getAccessToken()
-  const url = `${apiBaseUrl}/chat/sessions/${sessionId}/messages/stream`
+  const url = buildApiUrl(`/chat/sessions/${sessionId}/messages/stream`)
 
   let response: Response
   try {

@@ -1,3 +1,4 @@
+import { apiBaseUrl, buildApiUrl } from './config'
 import axios from 'axios'
 
 export type User = {
@@ -35,9 +36,6 @@ export type AuthSession = {
   user: User
 }
 
-const apiBaseUrl = import.meta.env.MODE === 'production'
-  ? (import.meta.env.VITE_API_URL_PROD || 'https://researchtubeai-197336418001.asia-south2.run.app')
-  : (import.meta.env.VITE_API_URL_DEV || 'http://localhost:8000');
 
 const authClient = axios.create({
   baseURL: apiBaseUrl,
@@ -122,7 +120,7 @@ export const logoutRequest = async (refreshToken: string): Promise<void> => {
 }
 
 export const startGoogleLogin = (): void => {
-  const googleAuthUrl = new URL(`${apiBaseUrl.replace(/\/$/, '')}/auth/google`)
+  const googleAuthUrl = new URL(buildApiUrl('/auth/google'))
   googleAuthUrl.searchParams.set('prompt', 'select_account')
   googleAuthUrl.searchParams.set('ts', String(Date.now()))
 

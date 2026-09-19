@@ -1,9 +1,8 @@
 import axios from 'axios'
 import { clearAuthSession, getAccessToken } from './auth'
 
-const apiBaseUrl = import.meta.env.MODE === 'production'
-  ? (import.meta.env.VITE_API_URL_PROD || 'https://researchtubeai-197336418001.asia-south2.run.app')
-  : (import.meta.env.VITE_API_URL_DEV || 'http://localhost:8000');
+import { apiBaseUrl, buildApiUrl } from './config'
+export { apiBaseUrl, buildApiUrl }
 
 const client = axios.create({
   baseURL: apiBaseUrl,
