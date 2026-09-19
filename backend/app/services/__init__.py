@@ -18,6 +18,10 @@ from app.services.youtube_research import (
     history_service,
     HistoryService,
 )
+from app.services.chat import (
+    chat_service,
+    ChatService,
+)
 
 __all__ = [
     "local_auth_service",
@@ -29,6 +33,9 @@ __all__ = [
     "HistoryService",
     "youtube_research_service",
     "YoutubeResearchService",
+    "chat_service",
+    "ChatService",
 ]
+
 
 

@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     )
 
     from app.db.models.youtube import ResearchRun
+    from app.db.models.chat import ChatSession
 
 
 # ============================================================
@@ -121,6 +122,15 @@ class User(Base):
     # ========================================================
 
     research_runs: Mapped[List["ResearchRun"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    # ========================================================
+    # CHAT
+    # ========================================================
+
+    chat_sessions: Mapped[List["ChatSession"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )

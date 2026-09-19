@@ -10,12 +10,20 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/katex": "^0.16.8",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "@vercel/analytics": "^2.0.1",
     "axios": "^1.19.0",
+    "katex": "^0.18.7",
     "lucide-react": "^1.31.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.2"
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.18.2",
+    "react-syntax-highlighter": "^16.1.1",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

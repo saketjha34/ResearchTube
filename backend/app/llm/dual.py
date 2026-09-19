@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Type, TypeVar
+from typing import Any, AsyncGenerator, Type, TypeVar
 
 # pyrefly: ignore [missing-import]
 import structlog
@@ -214,6 +214,92 @@ class DualLLMRunnable:
 
     async def ainvoke(self, input_prompt: Any, **kwargs: Any) -> Any:
         return await asyncio.to_thread(self.invoke, input_prompt, **kwargs)
+
+    async def astream(self, input_prompt: Any, **kwargs: Any) -> AsyncGenerator[str, None]:
+        """
+        Stream output tokens asynchronously.
+        Attempts OpenAI first, falling back to Gemini if an error occurs before streaming begins.
+        """
+        # 1. Attempt OpenAI primary
+        if self._openai_chat:
+            started = False
+            start_time = time.perf_counter()
+            logger.info(
+                "llm.stream.attempt",
+                provider="openai",
+                model=self.openai_model,
+            )
+            try:
+                async for chunk in self._openai_chat.astream(input_prompt, **kwargs):
+                    started = True
+                    text = chunk.content if hasattr(chunk, "content") else str(chunk)
+                    if isinstance(text, list):
+                        for block in text:
+                            if isinstance(block, dict) and "text" in block:
+                                yield block["text"]
+                            elif isinstance(block, str):
+                                yield block
+                    elif isinstance(text, str) and text:
+                        yield text
+                elapsed = time.perf_counter() - start_time
+                logger.info(
+                    "llm.stream.success",
+                    provider="openai",
+                    model=self.openai_model,
+                    latency=round(elapsed, 3),
+                )
+                return
+            except Exception as exc:
+                elapsed = time.perf_counter() - start_time
+                if started:
+                    logger.error(
+                        "llm.stream.interrupted",
+                        provider="openai",
+                        error=str(exc),
+                        latency=round(elapsed, 3),
+                    )
+                    raise
+                logger.warning(
+                    "llm.stream.fallback",
+                    failed_provider="openai",
+                    model=self.openai_model,
+                    error=str(exc),
+                    fallback_provider="gemini",
+                    fallback_model=self.gemini_model,
+                    latency=round(elapsed, 3),
+                )
+
+        # 2. Fallback to Gemini
+        start_time = time.perf_counter()
+        logger.info(
+            "llm.stream.attempt",
+            provider="gemini",
+            model=self.gemini_model,
+            is_fallback=True,
+        )
+        try:
+            async for chunk in self._gemini_chat.astream(input_prompt, **kwargs):
+                text = chunk.content if hasattr(chunk, "content") else str(chunk)
+                if isinstance(text, list):
+                    for block in text:
+                        if isinstance(block, dict) and "text" in block:
+                            yield block["text"]
+                        elif isinstance(block, str):
+                            yield block
+                elif isinstance(text, str) and text:
+                    yield text
+            elapsed = time.perf_counter() - start_time
+            logger.info(
+                "llm.stream.success",
+                provider="gemini",
+                model=self.gemini_model,
+                latency=round(elapsed, 3),
+                is_fallback=True,
+            )
+        except Exception as exc:
+            logger.error("llm.stream.failed", error=str(exc))
+            raise
+
 
 
 class DualLLM:

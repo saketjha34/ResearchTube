@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon } from 'lucide-react'
 import { runResearch, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
@@ -479,6 +479,16 @@ function Research() {
     void load()
   }, [activeRunId])
 
+  // Pre-fill search query if arrived from a shared report (e.g. /research?q=...)
+  useEffect(() => {
+    const qParam = searchParams.get('q')
+    if (qParam && !activeRunId) {
+      setQuery(qParam)
+      setSearchParams({})
+      setTimeout(() => inputRef.current?.focus(), 150)
+    }
+  }, [searchParams, activeRunId, setSearchParams])
+
   // Clear state on custom research:clear event
   useEffect(() => {
     const handleClear = () => {
@@ -613,7 +623,7 @@ function Research() {
                   {loadingStatus.toUpperCase()}
                 </p>
                 <p className="text-[10px] font-bold text-[#555555] tracking-[0.2em] uppercase">
-                  Synthesizing video knowledge graph • Please wait ~2 minutes
+                  Synthesizing video knowledge graph â€¢ Please wait ~2 minutes
                 </p>
               </div>
             </div>
@@ -723,3 +733,4 @@ function InputBox({ query, setQuery, videoCount, setVideoCount, loading, onSubmi
 }
 
 export default Research
+

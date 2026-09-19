@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -30,6 +30,9 @@ from sqlalchemy.orm import (
 from pgvector.sqlalchemy import Vector
 from app.db.models.user import User
 from app.db.database import Base
+
+if TYPE_CHECKING:
+    from app.db.models.chat import ChatSession
 
 
 # ============================================================
@@ -148,6 +151,12 @@ class ResearchRun(Base):
         cascade="all, delete-orphan",
     )
 
+    chat_sessions: Mapped[List["ChatSession"]] = relationship(
+        back_populates="research_run",
+        foreign_keys="ChatSession.research_run_id",
+        cascade="all, delete-orphan",
+    )
+
 
 # ============================================================
 # YOUTUBE VIDEO
@@ -240,6 +249,12 @@ class YouTubeVideo(Base):
 
     transcripts: Mapped[List["TranscriptChunk"]] = relationship(
         back_populates="video",
+        cascade="all, delete-orphan",
+    )
+
+    chat_sessions: Mapped[List["ChatSession"]] = relationship(
+        back_populates="video",
+        foreign_keys="ChatSession.video_id",
         cascade="all, delete-orphan",
     )
 

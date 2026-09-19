@@ -12,6 +12,7 @@ from .youtube import (
     TranscriptChunk,
     YouTubeVideo,
 )
+from .chat import ChatSession, ChatMessage, MessageRole
 
 __all__ = [
     "Base",
@@ -28,4 +29,7 @@ __all__ = [
     "ResourceRanking",
     "RankedResource",
     "FinalReport",
+    "ChatSession",
+    "ChatMessage",
+    "MessageRole",
 ]

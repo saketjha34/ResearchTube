@@ -19,6 +19,7 @@ from app.routes.auth import router as auth_router
 from app.routes.test import router as test_router
 from app.routes.youtube_research import router as research_router
 from app.routes.user import router as user_router
+from app.routes.chat import router as chat_router
 
 
 # ============================================================
@@ -127,6 +128,10 @@ app.include_router(
 
 app.include_router(
     user_router
+)
+
+app.include_router(
+    chat_router
 )
 
 

@@ -1,11 +1,47 @@
-import { UserRound, Menu, X, FlaskConical, PenSquare, Clock, Loader2, Trash2, MoreVertical, Share2, Pin, PinOff, Pencil, Search, ArrowUpRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+﻿import {
+  UserRound,
+  Menu,
+  X,
+  FlaskConical,
+  MessageSquare,
+  PenSquare,
+  Clock,
+  Loader2,
+  Trash2,
+  MoreVertical,
+  Share2,
+  Pin,
+  PinOff,
+  Pencil,
+  Search,
+  ArrowUpRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Check,
+  Copy,
+} from 'lucide-react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import UserMenu from './UserMenu'
-import { getHistory, deleteHistoryEntry, renameHistoryEntry, shareHistoryEntry, type HistoryItem } from '../api/research'
+import {
+  getHistory,
+  deleteHistoryEntry,
+  renameHistoryEntry,
+  shareHistoryEntry,
+  type HistoryItem,
+} from '../api/research'
+import {
+  listChatSessions,
+  deleteChatSession,
+  renameChatSession,
+  togglePinSession,
+  createShareLink,
+  type ChatSession,
+} from '../api/chat'
 
 const navItems = [
   { label: 'Research', icon: FlaskConical, to: '/research' },
+  { label: 'Chat', icon: MessageSquare, to: '/chat' },
   { label: 'Profile', icon: UserRound, to: '/profile' },
 ]
 
@@ -16,8 +52,26 @@ interface SidebarProps {
 
 function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [open, setOpen] = useState(false)
+  const location = useLocation()
+  const navigate = useNavigate()
+
+  // Tab: Research vs Chat
+  const [sidebarTab, setSidebarTab] = useState<'research' | 'chat'>(() =>
+    location.pathname.startsWith('/chat') ? 'chat' : 'research'
+  )
+
+  // Sync tab with route if user navigates via nav items
+  useEffect(() => {
+    if (location.pathname.startsWith('/chat')) {
+      setSidebarTab('chat')
+    } else if (location.pathname.startsWith('/research')) {
+      setSidebarTab('research')
+    }
+  }, [location.pathname])
+
+  // --- Research State --------------------------------------------------------
   const [history, setHistory] = useState<HistoryItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(false)
   const [activeMenuRunId, setActiveMenuRunId] = useState<string | null>(null)
   const [deleteTargetRunId, setDeleteTargetRunId] = useState<string | null>(null)
   const [renameTargetRunId, setRenameTargetRunId] = useState<string | null>(null)
@@ -26,6 +80,18 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [shareLoading, setShareLoading] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
   const [shareGeneratedUrl, setShareGeneratedUrl] = useState<string | null>(null)
+
+  // --- Chat State ------------------------------------------------------------
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
+  const [loadingChat, setLoadingChat] = useState(false)
+  const [activeMenuChatId, setActiveMenuChatId] = useState<string | null>(null)
+  const [deleteTargetChatId, setDeleteTargetChatId] = useState<string | null>(null)
+  const [renameTargetChatId, setRenameTargetChatId] = useState<string | null>(null)
+  const [chatRenameValue, setChatRenameValue] = useState('')
+  const [shareChatUrl, setShareChatUrl] = useState<string | null>(null)
+  const [shareChatCopied, setShareChatCopied] = useState(false)
+  const [shareChatLoading, setShareChatLoading] = useState(false)
+  const [shareChatModalOpen, setShareChatModalOpen] = useState(false)
 
   // Mobile long press menu triggers
   const touchTimeoutRef = useRef<any>(null)
@@ -41,7 +107,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         } catch (err) {}
       }
       setActiveMenuRunId(runId)
-    }, 600) // 600ms long press
+    }, 600)
   }
 
   const handleTouchEnd = (e: React.TouchEvent) => {
@@ -60,9 +126,13 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     }
   }
 
-  // Pinned runs — persisted in localStorage
+  // Pinned runs â€” persisted in localStorage
   const [pinnedRunIds, setPinnedRunIds] = useState<string[]>(() => {
-    try { return JSON.parse(localStorage.getItem('rt_pinned_runs') ?? '[]') } catch { return [] }
+    try {
+      return JSON.parse(localStorage.getItem('rt_pinned_runs') ?? '[]')
+    } catch {
+      return []
+    }
   })
   const togglePin = (runId: string) => {
     setPinnedRunIds((prev) => {
@@ -77,36 +147,70 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  const location = useLocation()
-  const navigate = useNavigate()
-
   const loadHistory = async () => {
-    setLoading(true)
+    setLoadingHistory(true)
     try {
       const data = await getHistory(1, 60)
       setHistory(data.items)
-    } catch { setHistory([]) }
-    finally { setLoading(false) }
+    } catch {
+      setHistory([])
+    } finally {
+      setLoadingHistory(false)
+    }
   }
 
-  useEffect(() => { void loadHistory() }, [])
+  const loadChats = async () => {
+    setLoadingChat(true)
+    try {
+      const data = await listChatSessions()
+      setChatSessions(data.sessions || [])
+    } catch {
+      setChatSessions([])
+    } finally {
+      setLoadingChat(false)
+    }
+  }
 
   useEffect(() => {
-    const handleClose = () => setActiveMenuRunId(null)
+    void loadHistory()
+    void loadChats()
+  }, [])
+
+  useEffect(() => {
+    const handleClose = () => {
+      setActiveMenuRunId(null)
+      setActiveMenuChatId(null)
+    }
     window.addEventListener('click', handleClose)
     return () => window.removeEventListener('click', handleClose)
   }, [])
 
   useEffect(() => {
-    const handleRefresh = () => { void loadHistory() }
-    window.addEventListener('research:created', handleRefresh)
-    return () => window.removeEventListener('research:created', handleRefresh)
+    const handleRefreshHistory = () => {
+      void loadHistory()
+    }
+    const handleRefreshChat = () => {
+      void loadChats()
+    }
+    window.addEventListener('research:created', handleRefreshHistory)
+    window.addEventListener('chat:updated', handleRefreshChat)
+    return () => {
+      window.removeEventListener('research:created', handleRefreshHistory)
+      window.removeEventListener('chat:updated', handleRefreshChat)
+    }
   }, [])
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setSearchOpen(true); setSearchQuery('') }
-      if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery('') }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+        setSearchQuery('')
+      }
+      if (e.key === 'Escape') {
+        setSearchOpen(false)
+        setSearchQuery('')
+      }
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
@@ -116,14 +220,19 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     if (searchOpen) setTimeout(() => searchInputRef.current?.focus(), 50)
   }, [searchOpen])
 
-  const handleNewResearch = () => {
-    navigate('/research')
-    window.history.pushState({}, '', '/research')
-    window.dispatchEvent(new Event('research:clear'))
+  const handleNewAction = () => {
+    if (sidebarTab === 'chat' || location.pathname.startsWith('/chat')) {
+      navigate('/chat')
+    } else {
+      navigate('/research')
+      window.history.pushState({}, '', '/research')
+      window.dispatchEvent(new Event('research:clear'))
+    }
   }
 
   const activeRunId = new URLSearchParams(location.search).get('run')
 
+  // --- Research Operations ---
   const confirmDelete = async () => {
     if (!deleteTargetRunId) return
     const runId = deleteTargetRunId
@@ -136,7 +245,9 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         window.dispatchEvent(new Event('research:clear'))
       }
       void loadHistory()
-    } catch { alert('Failed to delete research run.') }
+    } catch {
+      alert('Failed to delete research run.')
+    }
   }
 
   const generateShareLink = async () => {
@@ -170,7 +281,69 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       await renameHistoryEntry(runId, newName)
       window.dispatchEvent(new Event('research:created'))
       void loadHistory()
-    } catch { alert('Failed to rename research run.') }
+    } catch {
+      alert('Failed to rename research run.')
+    }
+  }
+
+  // --- Chat Operations ---
+  const confirmDeleteChat = async () => {
+    if (!deleteTargetChatId) return
+    const sId = deleteTargetChatId
+    setDeleteTargetChatId(null)
+    try {
+      await deleteChatSession(sId)
+      if (location.pathname === `/chat/${sId}`) {
+        navigate('/chat')
+      }
+      void loadChats()
+    } catch {
+      alert('Failed to delete chat session.')
+    }
+  }
+
+  const handleTogglePinChat = async (sId: string) => {
+    try {
+      await togglePinSession(sId)
+      void loadChats()
+    } catch {
+      alert('Failed to update pin status.')
+    }
+  }
+
+  const handleShareChat = async (sId: string) => {
+    setShareChatModalOpen(true)
+    setShareChatLoading(true)
+    try {
+      const res = await createShareLink(sId)
+      setShareChatUrl(`${window.location.origin}${res.share_url}`)
+    } catch {
+      alert('Failed to generate share link.')
+    } finally {
+      setShareChatLoading(false)
+    }
+  }
+
+  const handleCopyChatShareUrl = () => {
+    if (!shareChatUrl) return
+    void navigator.clipboard.writeText(shareChatUrl).then(() => {
+      setShareChatCopied(true)
+      setTimeout(() => setShareChatCopied(false), 2000)
+    })
+  }
+
+  const confirmRenameChat = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!renameTargetChatId || !chatRenameValue.trim()) return
+    const sId = renameTargetChatId
+    const newTitle = chatRenameValue.trim()
+    setRenameTargetChatId(null)
+    try {
+      await renameChatSession(sId, newTitle)
+      void loadChats()
+    } catch {
+      alert('Failed to rename chat session.')
+    }
   }
 
   const completedHistory = history.filter((item) => item.status === 'completed')
@@ -182,7 +355,9 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     : completedHistory.slice(0, 8)
 
   const handleSearchNavigate = (runId: string) => {
-    setSearchOpen(false); setSearchQuery(''); navigate(`/research?run=${runId}`)
+    setSearchOpen(false)
+    setSearchQuery('')
+    navigate(`/research?run=${runId}`)
   }
 
   // Shared history item renderer
@@ -197,17 +372,23 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
         className={`flex w-full items-start gap-2 rounded-md pl-2 pr-8 py-2 text-left text-xs transition-all duration-200 hover:bg-[#111111] ${
-          activeRunId === item.run_id ? 'bg-[#111111] text-white font-bold border-l-2 border-white' : 'text-[#888888] hover:text-white'
+          activeRunId === item.run_id
+            ? 'bg-[#111111] text-white font-bold border-l-2 border-white'
+            : 'text-[#888888] hover:text-white'
         }`}
       >
-        {pinnedRunIds.includes(item.run_id)
-          ? <Pin size={10} className="mt-0.5 flex-shrink-0 opacity-50 text-yellow-500" />
-          : <Clock size={11} className="mt-0.5 flex-shrink-0 opacity-50" />
-        }
+        {pinnedRunIds.includes(item.run_id) ? (
+          <Pin size={10} className="mt-0.5 flex-shrink-0 opacity-50 text-white" />
+        ) : (
+          <Clock size={11} className="mt-0.5 flex-shrink-0 opacity-50" />
+        )}
         <span className="line-clamp-2 leading-relaxed">{item.query}</span>
       </button>
       <button
-        onClick={(e) => { e.stopPropagation(); setActiveMenuRunId(activeMenuRunId === item.run_id ? null : item.run_id) }}
+        onClick={(e) => {
+          e.stopPropagation()
+          setActiveMenuRunId(activeMenuRunId === item.run_id ? null : item.run_id)
+        }}
         className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex show-on-touch items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
       >
         <MoreVertical size={13} />
@@ -217,43 +398,150 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           onClick={(e) => e.stopPropagation()}
           className="absolute right-2 top-8 z-50 w-44 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
         >
-                      <button
-              onClick={() => {
-                setShareTargetRunId(item.run_id)
-                setShareGeneratedUrl(null)
-                setShareCopied(false)
-                setActiveMenuRunId(null)
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
-            >
-              <Share2 size={12} className="opacity-70" /><span>Share conversation</span>
-            </button>
           <button
-            onClick={() => { togglePin(item.run_id); setActiveMenuRunId(null) }}
+            onClick={() => {
+              setShareTargetRunId(item.run_id)
+              setShareGeneratedUrl(null)
+              setShareCopied(false)
+              setActiveMenuRunId(null)
+            }}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
           >
-            {pinnedRunIds.includes(item.run_id)
-              ? <><PinOff size={12} className="opacity-70" /><span>Unpin</span></>
-              : <><Pin size={12} className="opacity-70" /><span>Pin</span></>
-            }
+            <Share2 size={12} className="opacity-70" />
+            <span>Share conversation</span>
           </button>
           <button
-            onClick={() => { setRenameTargetRunId(item.run_id); setRenameValue(item.query); setActiveMenuRunId(null) }}
+            onClick={() => {
+              togglePin(item.run_id)
+              setActiveMenuRunId(null)
+            }}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
           >
-            <Pencil size={12} className="opacity-70" /><span>Rename</span>
+            {pinnedRunIds.includes(item.run_id) ? (
+              <>
+                <PinOff size={12} className="opacity-70" />
+                <span>Unpin</span>
+              </>
+            ) : (
+              <>
+                <Pin size={12} className="opacity-70" />
+                <span>Pin</span>
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setRenameTargetRunId(item.run_id)
+              setRenameValue(item.query)
+              setActiveMenuRunId(null)
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+          >
+            <Pencil size={12} className="opacity-70" />
+            <span>Rename</span>
           </button>
           <hr className="border-[#222222] my-1" />
           <button
-            onClick={() => { setDeleteTargetRunId(item.run_id); setActiveMenuRunId(null) }}
+            onClick={() => {
+              setDeleteTargetRunId(item.run_id)
+              setActiveMenuRunId(null)
+            }}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#ef4444] hover:bg-[#181818]"
           >
-            <Trash2 size={12} className="opacity-70" /><span>Delete</span>
+            <Trash2 size={12} className="opacity-70" />
+            <span>Delete</span>
           </button>
         </div>
       )}
     </li>
   )
+
+  // Chat item renderer
+  const renderChatItem = (item: ChatSession) => {
+    const isChatActive = location.pathname === `/chat/${item.id}`
+    return (
+      <li key={item.id} className="relative group">
+        <button
+          onClick={() => navigate(`/chat/${item.id}`)}
+          className={`flex w-full items-start gap-2 rounded-md pl-2 pr-8 py-2 text-left text-xs transition-all duration-200 hover:bg-[#111111] ${
+            isChatActive
+              ? 'bg-[#111111] text-white font-bold border-l-2 border-white'
+              : 'text-[#888888] hover:text-white'
+          }`}
+        >
+          {item.is_pinned ? (
+            <Pin size={11} className="mt-0.5 flex-shrink-0 fill-white text-white" />
+          ) : (
+            <MessageSquare size={12} className={`mt-0.5 flex-shrink-0 ${isChatActive ? 'text-white' : 'opacity-50'}`} />
+          )}
+          <div className="min-w-0 flex-1">
+            <span className="line-clamp-1 leading-relaxed block">{item.title || 'New Chat'}</span>
+            <span className="text-[10px] text-[#555555] block">
+              {item.message_count} {item.message_count === 1 ? 'message' : 'messages'}
+            </span>
+          </div>
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            setActiveMenuChatId(activeMenuChatId === item.id ? null : item.id)
+          }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex show-on-touch items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
+        >
+          <MoreVertical size={13} />
+        </button>
+        {activeMenuChatId === item.id && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-2 top-8 z-50 w-36 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
+          >
+            <button
+              onClick={() => {
+                setActiveMenuChatId(null)
+                void handleTogglePinChat(item.id)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            >
+              <Pin size={12} className={item.is_pinned ? 'fill-white text-white' : 'opacity-70'} />
+              <span>{item.is_pinned ? 'Unpin' : 'Pin to top'}</span>
+            </button>
+            <button
+              onClick={() => {
+                setActiveMenuChatId(null)
+                void handleShareChat(item.id)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            >
+              <Share2 size={12} className="opacity-70" />
+              <span>Share chat</span>
+            </button>
+            <button
+              onClick={() => {
+                setRenameTargetChatId(item.id)
+                setChatRenameValue(item.title || '')
+                setActiveMenuChatId(null)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            >
+              <Pencil size={12} className="opacity-70" />
+              <span>Rename</span>
+            </button>
+            <hr className="border-[#222222] my-1" />
+            <button
+              onClick={() => {
+                setDeleteTargetChatId(item.id)
+                setActiveMenuChatId(null)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#ef4444] hover:bg-[#181818]"
+            >
+              <Trash2 size={12} className="opacity-70" />
+              <span>Delete</span>
+            </button>
+          </div>
+        )}
+      </li>
+    )
+  }
 
   return (
     <>
@@ -267,11 +555,16 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </button>
 
       <aside
-        className={`fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-[#181818] bg-black transition-all duration-300 md:translate-x-0 pb-16 md:pb-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-[#181818] bg-black transition-all duration-300 md:translate-x-0 pb-16 md:pb-0 ${
+          open ? 'translate-x-0' : '-translate-x-full'
+        }`}
         style={{ width: collapsed ? '64px' : '288px' }}
       >
         {/* Header */}
-        <div className="flex flex-shrink-0 items-center px-4 py-4" style={{ minHeight: '64px', justifyContent: collapsed ? 'center' : 'space-between' }}>
+        <div
+          className="flex flex-shrink-0 items-center px-4 py-4"
+          style={{ minHeight: '64px', justifyContent: collapsed ? 'center' : 'space-between' }}
+        >
           {!collapsed && (
             <Link to="/research" className="truncate text-xs font-bold tracking-[0.35em] text-white pl-12 md:pl-0">
               RESEARCHTUBE
@@ -279,7 +572,10 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           )}
           <div className="flex items-center gap-1">
             <button
-              onClick={() => { setSearchOpen(true); setSearchQuery('') }}
+              onClick={() => {
+                setSearchOpen(true)
+                setSearchQuery('')
+              }}
               className="hidden md:flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-[#666666] hover:bg-[#111111] hover:text-white transition-all"
               title="Search (Ctrl+K)"
             >
@@ -306,8 +602,8 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   title={collapsed ? label : undefined}
                   className={({ isActive }) =>
                     `flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition-all duration-300 ease-in-out ${
-                      isActive 
-                        ? 'border-[#555555] bg-[#141414] text-white font-bold shadow-[0_0_15px_rgba(255,255,255,0.05)]' 
+                      isActive
+                        ? 'border-[#555555] bg-[#141414] text-white font-bold shadow-[0_0_15px_rgba(255,255,255,0.05)]'
                         : 'border-transparent text-[#999999] hover:border-[#222222] hover:bg-[#111111] hover:text-white'
                     }`
                   }
@@ -321,51 +617,119 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </ul>
         </nav>
 
-        {/* New Research */}
+        {/* New Action Button */}
         <div className="px-3 py-2">
           <button
-            onClick={handleNewResearch}
-            title="New Research"
+            onClick={handleNewAction}
+            title={sidebarTab === 'chat' ? 'New Chat' : 'New Research'}
             className="flex w-full items-center gap-2.5 rounded-md border border-[#222222] bg-[#111111] px-3 py-2.5 text-sm text-white transition-all duration-200 hover:border-[#444444] hover:bg-[#181818]"
             style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}
           >
-            <PenSquare size={15} className="flex-shrink-0" />
-            {!collapsed && <span className="truncate font-semibold">New Research</span>}
+            <PenSquare size={15} className="flex-shrink-0 text-white" />
+            {!collapsed && (
+              <span className="truncate font-semibold">
+                {sidebarTab === 'chat' ? 'New Chat' : 'New Research'}
+              </span>
+            )}
           </button>
         </div>
 
         {/* History List */}
         {!collapsed && (
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 py-4">
-            {loading ? (
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 py-3">
+            {/* Tab Switcher */}
+            <div className="flex items-center gap-1 rounded-lg bg-[#111111] p-1 mb-3 border border-[#222222]">
+              <button
+                onClick={() => setSidebarTab('research')}
+                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition-all ${
+                  sidebarTab === 'research'
+                    ? 'bg-[#222222] text-white shadow-xs'
+                    : 'text-[#666666] hover:text-white'
+                }`}
+              >
+                Research ({completedHistory.length})
+              </button>
+              <button
+                onClick={() => setSidebarTab('chat')}
+                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition-all ${
+                  sidebarTab === 'chat'
+                    ? 'bg-[#222222] text-white shadow-xs'
+                    : 'text-[#666666] hover:text-white'
+                }`}
+              >
+                Chat ({chatSessions.length})
+              </button>
+            </div>
+
+            {sidebarTab === 'research' ? (
+              loadingHistory ? (
+                <div className="flex items-center gap-2 px-2 py-2 text-[#555555]">
+                  <Loader2 size={12} className="animate-spin" />
+                  <span className="text-xs">Loading history...</span>
+                </div>
+              ) : completedHistory.length === 0 ? (
+                <p className="px-2 py-2 text-xs text-[#555555]">No research runs yet.</p>
+              ) : (
+                <>
+                  {pinnedHistory.length > 0 && (
+                    <>
+                      <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555] flex items-center gap-1.5">
+                        <Pin size={10} className="text-white" /> Pinned
+                      </p>
+                      <ul className="space-y-0.5 mb-4">{pinnedHistory.map(renderHistoryItem)}</ul>
+                    </>
+                  )}
+
+                  <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555]">
+                    Recents
+                  </p>
+                  <ul className="space-y-0.5">{regularHistory.map(renderHistoryItem)}</ul>
+                </>
+              )
+            ) : loadingChat ? (
               <div className="flex items-center gap-2 px-2 py-2 text-[#555555]">
-                <Loader2 size={12} className="animate-spin" />
-                <span className="text-xs">Loading history...</span>
+                <Loader2 size={12} className="animate-spin text-white" />
+                <span className="text-xs">Loading chats...</span>
               </div>
-            ) : completedHistory.length === 0 ? (
-              <p className="px-2 py-2 text-xs text-[#555555]">No runs yet.</p>
+            ) : chatSessions.length === 0 ? (
+              <div className="px-2 py-4 text-center">
+                <p className="text-xs text-[#666666] mb-2">No chat sessions yet.</p>
+                <button
+                  onClick={() => navigate('/chat')}
+                  className="text-xs text-white hover:underline font-medium"
+                >
+                  Start a conversation &rarr;
+                </button>
+              </div>
             ) : (
-              <>
-                {/* Pinned section */}
-                {pinnedHistory.length > 0 && (
-                  <>
-                    <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555] flex items-center gap-1.5">
-                      <Pin size={10} className="text-yellow-500" /> Pinned
-                    </p>
-                    <ul className="space-y-0.5 mb-4">
-                      {pinnedHistory.map(renderHistoryItem)}
+              <div className="space-y-4">
+                {/* Pinned Chats Section */}
+                {chatSessions.some((s) => s.is_pinned) && (
+                  <div>
+                    <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#888888]">
+                      <Pin size={10} className="fill-white text-white" />
+                      <span>Pinned Chats</span>
+                    </div>
+                    <ul className="space-y-0.5 mt-1">
+                      {chatSessions.filter((s) => s.is_pinned).map(renderChatItem)}
                     </ul>
-                  </>
+                  </div>
                 )}
 
-                {/* Recents section */}
-                <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555]">
-                  Recents
-                </p>
-                <ul className="space-y-0.5">
-                  {regularHistory.map(renderHistoryItem)}
-                </ul>
-              </>
+                {/* Recent Chats Section */}
+                {chatSessions.some((s) => !s.is_pinned) && (
+                  <div>
+                    {chatSessions.some((s) => s.is_pinned) && (
+                      <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#666666]">
+                        <span>Recent Chats</span>
+                      </div>
+                    )}
+                    <ul className="space-y-0.5 mt-1">
+                      {chatSessions.filter((s) => !s.is_pinned).map(renderChatItem)}
+                    </ul>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -376,7 +740,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       </aside>
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Research Run Modal */}
       {deleteTargetRunId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
           <div className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
@@ -402,10 +766,100 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       )}
 
-      {/* Rename Modal */}
+      {/* Share Chat Modal */}
+      {shareChatModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-xs animate-fade-in">
+          <div className="w-full max-w-sm rounded-2xl border border-[#262626] bg-[#111111] p-6 shadow-2xl space-y-4 relative">
+            <button
+              onClick={() => setShareChatModalOpen(false)}
+              className="absolute right-4 top-4 text-[#888888] hover:text-white transition-colors"
+            >
+              <X size={16} />
+            </button>
+
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-white">
+              <Share2 size={18} />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-white tracking-tight">
+                Share Conversation
+              </h3>
+              <p className="mt-1 text-xs text-[#888888] leading-relaxed">
+                Anyone with this link can view this conversation and fork it into their own account.
+              </p>
+            </div>
+
+            {shareChatLoading ? (
+              <div className="flex items-center justify-center py-6 gap-2 text-xs text-[#888888]">
+                <Loader2 size={16} className="animate-spin text-white" />
+                <span>Generating share link...</span>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-1">
+                <div className="flex items-center gap-2 rounded-xl border border-[#262626] bg-[#0d0d0d] p-1.5 pl-3">
+                  <input
+                    type="text"
+                    readOnly
+                    value={shareChatUrl || ''}
+                    className="flex-1 bg-transparent text-xs text-[#cccccc] font-mono select-all focus:outline-none truncate"
+                  />
+                  <button
+                    onClick={handleCopyChatShareUrl}
+                    className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black hover:bg-zinc-200 transition-colors flex-shrink-0"
+                  >
+                    {shareChatCopied ? (
+                      <>
+                        <Check size={13} className="text-emerald-600" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={13} />
+                        <span>Copy link</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Chat Session Modal */}
+      {deleteTargetChatId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
+            <h3 className="text-base font-bold text-white">Delete Chat Session</h3>
+            <p className="text-xs text-[#888888] leading-relaxed">
+              Are you sure you want to delete this chat session and its complete message history?
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setDeleteTargetChatId(null)}
+                className="px-4 py-2 text-xs font-bold text-[#888888] hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void confirmDeleteChat()}
+                className="px-4 py-2 text-xs font-bold bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename Research Run Modal */}
       {renameTargetRunId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
-          <form onSubmit={(e) => void confirmRename(e)} className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
+          <form
+            onSubmit={(e) => void confirmRename(e)}
+            className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4"
+          >
             <h3 className="text-base font-bold text-white">Rename Research Run</h3>
             <input
               type="text"
@@ -434,13 +888,48 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       )}
 
+      {/* Rename Chat Session Modal */}
+      {renameTargetChatId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+          <form
+            onSubmit={(e) => void confirmRenameChat(e)}
+            className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4"
+          >
+            <h3 className="text-base font-bold text-white">Rename Chat Session</h3>
+            <input
+              type="text"
+              value={chatRenameValue}
+              onChange={(e) => setChatRenameValue(e.target.value)}
+              placeholder="Enter new conversation title..."
+              className="w-full bg-[#181818] border border-[#333333] rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-white transition-colors"
+              autoFocus
+            />
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRenameTargetChatId(null)}
+                className="px-4 py-2 text-xs font-bold text-[#888888] hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-xs font-bold bg-white text-black hover:bg-[#cccccc] rounded-lg transition-colors"
+              >
+                Save
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Share Modal */}
       {shareTargetRunId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
           <div className="w-full max-w-md border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Share2 size={16} className="text-purple-400" /> Share Research Report
+                <Share2 size={16} className="text-white" /> Share Research Report
               </h3>
               <button onClick={() => setShareTargetRunId(null)} className="text-[#555555] hover:text-white">
                 <X size={16} />
@@ -468,13 +957,13 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     type="text"
                     readOnly
                     value={shareGeneratedUrl}
-                    className="flex-1 bg-transparent text-xs text-purple-300 outline-none font-mono truncate"
+                    className="flex-1 bg-transparent text-xs text-[#cccccc] outline-none font-mono truncate"
                   />
                   <button
                     onClick={() => void copyShareLink()}
-                    className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-bold transition-colors flex-shrink-0"
+                    className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black hover:bg-zinc-200 transition-colors flex-shrink-0"
                   >
-                    {shareCopied ? 'Copied!' : 'Copy'}
+                    {shareCopied ? (<><Check size={13} className="text-emerald-600" /><span>Copied!</span></>) : (<><Copy size={13} /><span>Copy</span></>)}
                   </button>
                 </div>
                 <div className="flex justify-end">
@@ -538,3 +1027,8 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 }
 
 export default Sidebar
+
+
+
+
+
