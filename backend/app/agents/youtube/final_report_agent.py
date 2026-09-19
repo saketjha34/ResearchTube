@@ -53,7 +53,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.llm.gemini import GeminiLLM
+from app.llm.dual import DualLLM
 from app.schema.youtube import (
     YouTubeResearchResult,
     YouTubeVideoResult,
@@ -65,12 +65,12 @@ from app.prompts.youtube import FinalReportPromptTemplate
 
 
 # ============================================================
-# GEMINI & PROMPT TEMPLATE
+# DUAL LLM & PROMPT TEMPLATE
 # ============================================================
 
-gemini = GeminiLLM()
+llm_provider = DualLLM()
 
-report_llm = gemini.with_structured_output(
+report_llm = llm_provider.with_structured_output(
     FinalReport
 )
 
@@ -250,7 +250,7 @@ async def final_report_agent(
         context_text=context_text,
     )
 
-    print("\n[Agent 3] Generating final report with Gemini...")
+    print("\n[Agent 3: Final Report] Synthesizing final pedagogical report with Dual LLM...")
     raw_report = await asyncio.to_thread(
         report_llm.invoke,
         prompt,

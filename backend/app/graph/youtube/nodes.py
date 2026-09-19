@@ -57,6 +57,7 @@ from app.graph.youtube.persistence import (
     YouTubeGraphPersistence,
     youtube_graph_persistence,
 )
+from app.core.config import settings
 from app.rag.youtube import ingest_transcripts
 
 _logger = structlog.get_logger("graph_nodes")
@@ -86,7 +87,8 @@ class YouTubeGraphNodes:
         """
         run_id = UUID(state["research_run_id"])
         log = _logger.bind(node=1, run_id=str(run_id))
-        log.info("node.started", name="youtube_research")
+        log.info("node.started", name="youtube_research", primary_model=settings.OPENAI_MODEL, fallback_model=settings.GEMINI_MODEL)
+        print(f"\n{'='*60}\n>>> [Node 1] YouTube Research & Planning (Primary: OpenAI {settings.OPENAI_MODEL}, Fallback: Gemini {settings.GEMINI_MODEL})\n{'='*60}")
 
         user_query = state["user_query"]
         video_count = state.get("video_count", 3)
@@ -164,7 +166,8 @@ class YouTubeGraphNodes:
         """
         run_id = UUID(state["research_run_id"])
         log = _logger.bind(node=3, run_id=str(run_id))
-        log.info("node.started", name="ingest_transcripts")
+        log.info("node.started", name="ingest_transcripts", primary_embedding=settings.OPENAI_EMBEDDING_MODEL, fallback_embedding=settings.EMBEDDING_MODEL)
+        print(f"\n{'='*60}\n>>> [Node 3] Ingesting Transcripts & Generating Embeddings (Primary: OpenAI {settings.OPENAI_EMBEDDING_MODEL} [768-dim], Fallback: Gemini {settings.EMBEDDING_MODEL})\n{'='*60}")
 
         await self.persistence.update_research_run_status(
             session=self.session,
@@ -208,7 +211,8 @@ class YouTubeGraphNodes:
         """
         run_id = UUID(state["research_run_id"])
         log = _logger.bind(node=4, run_id=str(run_id))
-        log.info("node.started", name="context_analysis")
+        log.info("node.started", name="context_analysis", primary_model=settings.OPENAI_MODEL, fallback_model=settings.GEMINI_MODEL)
+        print(f"\n{'='*60}\n>>> [Node 4] Context Analysis & Ranking (Primary: OpenAI {settings.OPENAI_MODEL}, Fallback: Gemini {settings.GEMINI_MODEL})\n{'='*60}")
 
         await self.persistence.update_research_run_status(
             session=self.session,
@@ -291,7 +295,8 @@ class YouTubeGraphNodes:
         """
         run_id = UUID(state["research_run_id"])
         log = _logger.bind(node=6, run_id=str(run_id))
-        log.info("node.started", name="final_report")
+        log.info("node.started", name="final_report", primary_model=settings.OPENAI_MODEL, fallback_model=settings.GEMINI_MODEL)
+        print(f"\n{'='*60}\n>>> [Node 6] Final Pedagogical Report Synthesis (Primary: OpenAI {settings.OPENAI_MODEL}, Fallback: Gemini {settings.GEMINI_MODEL})\n{'='*60}")
 
         await self.persistence.update_research_run_status(
             session=self.session,

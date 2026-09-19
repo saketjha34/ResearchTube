@@ -13,6 +13,8 @@ from app.rag.chunker import (
 from app.rag.embeddings import (
     BaseEmbeddingService,
     GeminiEmbeddingService,
+    OpenAIEmbeddingService,
+    DualEmbeddingService,
 )
 
 from app.rag.retriever import (
@@ -32,6 +34,8 @@ __all__ = [
     "chunk_text",
     "BaseEmbeddingService",
     "GeminiEmbeddingService",
+    "OpenAIEmbeddingService",
+    "DualEmbeddingService",
     "BaseVectorRetriever",
     # YouTube RAG
     "PGVectorRetriever",

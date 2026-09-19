@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.llm.gemini import GeminiLLM
+from app.llm.dual import DualLLM
 from app.schema.youtube import (
     YouTubeResearchRequest,
     YouTubeResearchResult,
@@ -63,12 +63,12 @@ from app.prompts.youtube import PlanYouTubeResearchPromptTemplate
 
 
 # ============================================================
-# GEMINI & PROMPT TEMPLATE
+# DUAL LLM & PROMPT TEMPLATE
 # ============================================================
 
-gemini = GeminiLLM()
+llm_provider = DualLLM()
 
-planner_llm = gemini.with_structured_output(
+planner_llm = llm_provider.with_structured_output(
     YouTubeResearchRequest
 )
 
@@ -84,7 +84,8 @@ async def plan_youtube_research(
     num_videos: int,
 ) -> YouTubeResearchRequest:
     """
-    Plan the YouTube search query and collection strategy using Gemini.
+    Plan the YouTube search query and collection strategy using Dual LLM
+    (OpenAI gpt-5-mini primary, Gemini fallback).
 
     Parameters
     ----------
@@ -98,6 +99,8 @@ async def plan_youtube_research(
     YouTubeResearchRequest:
         Structured research plan with search parameters and fields.
     """
+    print(f"\n[Agent 1: Planner] Generating research plan for query: '{user_query}' (target videos: {num_videos})...")
+
     prompt = plan_prompt_template.render(
         user_query=user_query,
         num_videos=num_videos,

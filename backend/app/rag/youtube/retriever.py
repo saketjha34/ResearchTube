@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.youtube import TranscriptChunk
 from app.rag.embeddings import (
-    GeminiEmbeddingService,
+    DualEmbeddingService,
     BaseEmbeddingService,
 )
 
@@ -27,13 +27,14 @@ from app.rag.embeddings import (
 class YouTubeTranscriptRetriever:
     """
     Retriever specialized for YouTube video transcript chunks stored in PostgreSQL via pgvector.
+    Defaults to DualEmbeddingService (OpenAI primary, Gemini fallback).
     """
 
     def __init__(
         self,
         embedding_service: BaseEmbeddingService | None = None,
     ) -> None:
-        self.embedding_service = embedding_service or GeminiEmbeddingService()
+        self.embedding_service = embedding_service or DualEmbeddingService()
 
     async def similarity_search(
         self,

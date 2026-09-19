@@ -18,13 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.youtube import TranscriptChunk
 from app.rag.chunker import chunk_text
 from app.rag.embeddings import (
-    GeminiEmbeddingService,
+    DualEmbeddingService,
     BaseEmbeddingService,
 )
 from app.schema.youtube import YouTubeVideoResult
 
-# Module-level embedding service (shared)
-_default_embedding_service = GeminiEmbeddingService()
+# Module-level embedding service (default to DualEmbeddingService: OpenAI primary, Gemini fallback)
+_default_embedding_service = DualEmbeddingService()
 
 logger = structlog.get_logger("youtube_rag_ingestor")
 

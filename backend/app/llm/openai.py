@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from typing import Type
 
-# pyrefly: ignore [missing-import]
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
@@ -39,11 +38,11 @@ class OpenAILLM:
 
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
+        model: str | None = None,
         temperature: float = 0,
     ):
 
-        self.model = model
+        self.model = model or settings.OPENAI_MODEL
         self.temperature = temperature
 
         if not settings.OPENAI_API_KEY:

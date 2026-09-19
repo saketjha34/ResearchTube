@@ -59,7 +59,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.llm.gemini import GeminiLLM
+from app.llm.dual import DualLLM
 from app.rag.youtube import (
     YouTubeTranscriptRetriever as PGVectorRetriever,
 )
@@ -72,12 +72,12 @@ from app.prompts.youtube import ContextAnalysisPromptTemplate
 
 
 # ============================================================
-# GEMINI & PROMPT TEMPLATE
+# DUAL LLM & PROMPT TEMPLATE
 # ============================================================
 
-gemini = GeminiLLM()
+llm_provider = DualLLM()
 
-analysis_llm = gemini.with_structured_output(
+analysis_llm = llm_provider.with_structured_output(
     ResourceAnalysis
 )
 
@@ -290,7 +290,7 @@ async def context_analysis_agent(
         context_text=context_text,
     )
 
-    print("[Agent 2] Analyzing and ranking resources with Gemini...")
+    print("\n[Agent 2: Evaluation & Ranking] Analyzing and ranking resources with Dual LLM...")
     max_retries = 3
     for attempt in range(1, max_retries + 1):
         try:

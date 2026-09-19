@@ -20,10 +20,14 @@ class Settings(BaseSettings):
     PROD_DATABASE_URL: str | None = None
 
     # ========================================================
-    # RAG
+    # LLM & EMBEDDING MODELS
     # ========================================================
 
+    OPENAI_MODEL: str = "gpt-5-mini"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_MODEL: str = "gemini-embedding-001"
+    EMBEDDING_DIMENSION: int = 768
 
     # ========================================================
     # JWT
