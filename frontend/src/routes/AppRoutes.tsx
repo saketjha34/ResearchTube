@@ -1,4 +1,4 @@
-﻿import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 import AppLayout from '../layouts/AppLayout'
 import ProtectedRoute from '../components/ProtectedRoute'
 import ScrollToTop from '../components/ScrollToTop'
@@ -38,8 +38,7 @@ function AppRoutes() {
           {/* /dashboard redirects directly to /research */}
           <Route path="/dashboard" element={<Navigate to="/research" replace />} />
           <Route path="/research" element={<Research />} />
-          <Route path="/chat" element={<Chat />} />
-          <Route path="/chat/:sessionId" element={<Chat />} />
+          <Route path="/chat/:sessionId?" element={<Chat />} />
           <Route path="/auth-test" element={<AuthTest />} />
           <Route path="/profile" element={<Profile />} />
         </Route>

@@ -5,12 +5,13 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video } from 'lucide-react'
+import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video, Share } from 'lucide-react'
 import type { ChatMessage, SourceCitation } from '../../api/chat'
 
 interface ChatMessageItemProps {
   message: ChatMessage
   isStreaming?: boolean
+  onShare?: () => void
 }
 
 /**
@@ -146,7 +147,7 @@ const languageMetadata: Record<string, { label: string; dotColor: string; canoni
   md: { label: 'Markdown', dotColor: '#083fa1', canonical: 'markdown' },
 }
 
-function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
+const CodeBlock = React.memo(function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
   const [copied, setCopied] = useState(false)
   const match = /language-(\w+)/.exec(className || '')
   const rawLang = (match ? match[1] : '').toLowerCase()
@@ -211,9 +212,9 @@ function CodeBlock({ children, className }: { children: React.ReactNode; classNa
       </div>
     </div>
   )
-}
+})
 
-function SourcesList({ sources }: { sources: SourceCitation[] }) {
+const SourcesList = React.memo(function SourcesList({ sources }: { sources: SourceCitation[] }) {
   const [expanded, setExpanded] = useState(false)
   const topSources = sources.slice(0, 3)
 
@@ -288,9 +289,10 @@ function SourcesList({ sources }: { sources: SourceCitation[] }) {
       )}
     </div>
   )
-}
+})
 
-export function ChatMessageItem({ message, isStreaming = false }: ChatMessageItemProps) {
+export const ChatMessageItem = React.memo(
+  function ChatMessageItem({ message, isStreaming = false, onShare }: ChatMessageItemProps) {
   const [copied, setCopied] = useState(false)
   const isUser = message.role === 'user'
 
@@ -301,6 +303,14 @@ export function ChatMessageItem({ message, isStreaming = false }: ChatMessageIte
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
+  }
+
+  const handleShareClick = () => {
+    if (onShare) {
+      onShare()
+    } else {
+      window.dispatchEvent(new CustomEvent('chat:open-share'))
+    }
   }
 
   if (isUser) {
@@ -322,16 +332,30 @@ export function ChatMessageItem({ message, isStreaming = false }: ChatMessageIte
   return (
     <div className="w-full my-5 animate-fade-in">
       <div className="rounded-2xl bg-[#111111] border border-[#222222] p-6 md:p-8 text-[15px] text-white shadow-xl relative group">
-        <div className="absolute right-3.5 top-3.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={handleCopyText}
-            className="flex items-center gap-1.5 rounded bg-[#1f1f1f] border border-[#2a2a2a] px-2.5 py-1 text-[11px] text-[#888888] hover:text-white transition-colors shadow-sm"
-            title="Copy message"
-          >
-            {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-            <span>{copied ? 'Copied' : 'Copy'}</span>
-          </button>
-        </div>
+        {/* Top-Right Copy Button */}
+        {!isStreaming && message.content && (
+          <div className="absolute right-3.5 top-3.5 z-10 opacity-70 group-hover:opacity-100 hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleCopyText}
+              className="flex items-center gap-1.5 rounded-lg bg-[#1a1a1a] border border-[#2a2a2a] px-2.5 py-1 text-[11px] text-[#888888] hover:text-white hover:border-[#3a3a3a] transition-all shadow-sm"
+              title="Copy markdown"
+              aria-label="Copy entire response as markdown"
+            >
+              {copied ? (
+                <>
+                  <Check size={12} className="text-emerald-400" />
+                  <span className="text-emerald-400 font-medium">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={12} />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
 
         <div className="prose prose-invert max-w-none text-[15px] leading-[1.8] text-[#e5e5e5]">
           <ReactMarkdown
@@ -430,14 +454,57 @@ export function ChatMessageItem({ message, isStreaming = false }: ChatMessageIte
           </ReactMarkdown>
 
           {isStreaming && (
-            <span className="inline-block w-2 h-4 ml-1 bg-white animate-pulse align-middle" />
+            <span
+              aria-hidden="true"
+              className={`inline-block w-2 h-4.5 ${formattedContent ? 'ml-1.5' : 'ml-0'} bg-white/95 rounded-xs animate-pulse align-middle shadow-[0_0_8px_rgba(255,255,255,0.7)]`}
+            />
           )}
         </div>
 
         {message.sources && message.sources.length > 0 && (
           <SourcesList sources={message.sources} />
         )}
+
+        {/* Bottom Actions: Copy Markdown & Share Entire Chat */}
+        {!isStreaming && message.content && (
+          <div className="mt-4 pt-3 flex items-center gap-1 border-t border-[#1a1a1a] text-[#888888]">
+            <button
+              onClick={handleCopyText}
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[#888888] hover:text-white hover:bg-[#1c1c1c] transition-colors"
+              title="Copy markdown"
+              aria-label="Copy entire response as markdown"
+            >
+              {copied ? (
+                <>
+                  <Check size={14} className="text-emerald-400" />
+                  <span className="text-[11px] text-emerald-400 font-medium">Copied!</span>
+                </>
+              ) : (
+                <Copy size={14} />
+              )}
+            </button>
+
+            <button
+              onClick={handleShareClick}
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[#888888] hover:text-white hover:bg-[#1c1c1c] transition-colors"
+              title="Share entire conversation"
+              aria-label="Share entire conversation"
+            >
+              <Share size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
-}
+},
+  (prev, next) => {
+    return (
+      prev.isStreaming === next.isStreaming &&
+      prev.message.id === next.message.id &&
+      prev.message.content === next.message.content &&
+      prev.message.sources === next.message.sources &&
+      prev.onShare === next.onShare
+    )
+  }
+)

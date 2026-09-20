@@ -254,3 +254,16 @@ class ForkChatResponse(BaseModel):
     message_count: int
     created_at: datetime
 
+
+# ============================================================
+# GREETING SCHEMAS
+# ============================================================
+
+class ChatGreetingResponse(BaseModel):
+    """Personalized greeting response for new chat sessions."""
+
+    greeting: str
+    user_name: str
+    sentences: List[str]
+
+

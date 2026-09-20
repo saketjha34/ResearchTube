@@ -23,6 +23,7 @@
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import UserMenu from './UserMenu'
+import { ShareConversationModal } from './chat/ShareConversationModal'
 import {
   getHistory,
   deleteHistoryEntry,
@@ -36,6 +37,7 @@ import {
   renameChatSession,
   togglePinSession,
   createShareLink,
+  revokeShareLink,
   type ChatSession,
 } from '../api/chat'
 
@@ -92,6 +94,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const [shareChatCopied, setShareChatCopied] = useState(false)
   const [shareChatLoading, setShareChatLoading] = useState(false)
   const [shareChatModalOpen, setShareChatModalOpen] = useState(false)
+  const [shareChatSessionId, setShareChatSessionId] = useState<string | null>(null)
 
   // Mobile long press menu triggers
   const touchTimeoutRef = useRef<any>(null)
@@ -312,6 +315,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }
 
   const handleShareChat = async (sId: string) => {
+    setShareChatSessionId(sId)
     setShareChatModalOpen(true)
     setShareChatLoading(true)
     try {
@@ -321,6 +325,18 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       alert('Failed to generate share link.')
     } finally {
       setShareChatLoading(false)
+    }
+  }
+
+  const handleRevokeChatShare = async () => {
+    if (!shareChatSessionId) return
+    try {
+      await revokeShareLink(shareChatSessionId)
+      setShareChatUrl(null)
+      setShareChatModalOpen(false)
+      void loadChats()
+    } catch {
+      alert('Failed to revoke share link.')
     }
   }
 
@@ -470,16 +486,11 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           }`}
         >
           {item.is_pinned ? (
-            <Pin size={11} className="mt-0.5 flex-shrink-0 fill-white text-white" />
+            <Pin size={10} className="mt-0.5 flex-shrink-0 opacity-50 text-white" />
           ) : (
-            <MessageSquare size={12} className={`mt-0.5 flex-shrink-0 ${isChatActive ? 'text-white' : 'opacity-50'}`} />
+            <Clock size={11} className="mt-0.5 flex-shrink-0 opacity-50" />
           )}
-          <div className="min-w-0 flex-1">
-            <span className="line-clamp-1 leading-relaxed block">{item.title || 'New Chat'}</span>
-            <span className="text-[10px] text-[#555555] block">
-              {item.message_count} {item.message_count === 1 ? 'message' : 'messages'}
-            </span>
-          </div>
+          <span className="line-clamp-2 leading-relaxed">{item.title || 'New Chat'}</span>
         </button>
         <button
           onClick={(e) => {
@@ -493,18 +504,8 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {activeMenuChatId === item.id && (
           <div
             onClick={(e) => e.stopPropagation()}
-            className="absolute right-2 top-8 z-50 w-36 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
+            className="absolute right-2 top-8 z-50 w-44 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
           >
-            <button
-              onClick={() => {
-                setActiveMenuChatId(null)
-                void handleTogglePinChat(item.id)
-              }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
-            >
-              <Pin size={12} className={item.is_pinned ? 'fill-white text-white' : 'opacity-70'} />
-              <span>{item.is_pinned ? 'Unpin' : 'Pin to top'}</span>
-            </button>
             <button
               onClick={() => {
                 setActiveMenuChatId(null)
@@ -513,7 +514,17 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
             >
               <Share2 size={12} className="opacity-70" />
-              <span>Share chat</span>
+              <span>Share conversation</span>
+            </button>
+            <button
+              onClick={() => {
+                setActiveMenuChatId(null)
+                void handleTogglePinChat(item.id)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            >
+              <Pin size={12} className={item.is_pinned ? 'fill-white text-white' : 'opacity-70'} />
+              <span>{item.is_pinned ? 'Unpin' : 'Pin'}</span>
             </button>
             <button
               onClick={() => {
@@ -681,7 +692,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                   )}
 
                   <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555]">
-                    Recents
+                    Recent
                   </p>
                   <ul className="space-y-0.5">{regularHistory.map(renderHistoryItem)}</ul>
                 </>
@@ -702,34 +713,31 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 </button>
               </div>
             ) : (
-              <div className="space-y-4">
+              <>
                 {/* Pinned Chats Section */}
                 {chatSessions.some((s) => s.is_pinned) && (
-                  <div>
-                    <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#888888]">
-                      <Pin size={10} className="fill-white text-white" />
-                      <span>Pinned Chats</span>
-                    </div>
-                    <ul className="space-y-0.5 mt-1">
+                  <>
+                    <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555] flex items-center gap-1.5">
+                      <Pin size={10} className="text-white" /> Pinned
+                    </p>
+                    <ul className="space-y-0.5 mb-4">
                       {chatSessions.filter((s) => s.is_pinned).map(renderChatItem)}
                     </ul>
-                  </div>
+                  </>
                 )}
 
                 {/* Recent Chats Section */}
                 {chatSessions.some((s) => !s.is_pinned) && (
-                  <div>
-                    {chatSessions.some((s) => s.is_pinned) && (
-                      <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#666666]">
-                        <span>Recent Chats</span>
-                      </div>
-                    )}
-                    <ul className="space-y-0.5 mt-1">
+                  <>
+                    <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555]">
+                      Recent
+                    </p>
+                    <ul className="space-y-0.5">
                       {chatSessions.filter((s) => !s.is_pinned).map(renderChatItem)}
                     </ul>
-                  </div>
+                  </>
                 )}
-              </div>
+              </>
             )}
           </div>
         )}
@@ -767,65 +775,15 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       )}
 
       {/* Share Chat Modal */}
-      {shareChatModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-xs animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl border border-[#262626] bg-[#111111] p-6 shadow-2xl space-y-4 relative">
-            <button
-              onClick={() => setShareChatModalOpen(false)}
-              className="absolute right-4 top-4 text-[#888888] hover:text-white transition-colors"
-            >
-              <X size={16} />
-            </button>
-
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] text-white">
-              <Share2 size={18} />
-            </div>
-
-            <div>
-              <h3 className="text-base font-bold text-white tracking-tight">
-                Share Conversation
-              </h3>
-              <p className="mt-1 text-xs text-[#888888] leading-relaxed">
-                Anyone with this link can view this conversation and fork it into their own account.
-              </p>
-            </div>
-
-            {shareChatLoading ? (
-              <div className="flex items-center justify-center py-6 gap-2 text-xs text-[#888888]">
-                <Loader2 size={16} className="animate-spin text-white" />
-                <span>Generating share link...</span>
-              </div>
-            ) : (
-              <div className="space-y-4 pt-1">
-                <div className="flex items-center gap-2 rounded-xl border border-[#262626] bg-[#0d0d0d] p-1.5 pl-3">
-                  <input
-                    type="text"
-                    readOnly
-                    value={shareChatUrl || ''}
-                    className="flex-1 bg-transparent text-xs text-[#cccccc] font-mono select-all focus:outline-none truncate"
-                  />
-                  <button
-                    onClick={handleCopyChatShareUrl}
-                    className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-black hover:bg-zinc-200 transition-colors flex-shrink-0"
-                  >
-                    {shareChatCopied ? (
-                      <>
-                        <Check size={13} className="text-emerald-600" />
-                        <span>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={13} />
-                        <span>Copy link</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <ShareConversationModal
+        isOpen={shareChatModalOpen}
+        onClose={() => setShareChatModalOpen(false)}
+        shareUrl={shareChatUrl}
+        loading={shareChatLoading}
+        copied={shareChatCopied}
+        onCopy={handleCopyChatShareUrl}
+        onRevoke={handleRevokeChatShare}
+      />
 
       {/* Delete Chat Session Modal */}
       {deleteTargetChatId && (

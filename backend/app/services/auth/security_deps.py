@@ -4,6 +4,9 @@ security_deps — FastAPI dependencies for JWT-based authentication.
 Provides get_current_user dependency for route injection.
 """
 
+from __future__ import annotations
+
+from typing import Optional
 from uuid import UUID
 
 import jwt
@@ -111,3 +114,42 @@ async def get_current_user(
         )
 
     return user
+
+
+# ============================================================
+# OPTIONAL CURRENT USER DEPENDENCY
+# ============================================================
+
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+
+
+async def get_optional_user(
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[User]:
+    """
+    Returns the authenticated user if a valid Bearer token is provided,
+    otherwise returns None without raising an HTTPException.
+    """
+    if not token:
+        return None
+
+    try:
+        payload = decode_access_token(token)
+        if payload.get("type") != "access":
+            return None
+
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+
+        user_uuid = UUID(user_id)
+        from sqlalchemy import select
+        user = await db.scalar(select(User).where(User.id == user_uuid))
+        if user and user.is_active:
+            return user
+    except Exception:
+        return None
+
+    return None
+

@@ -200,6 +200,7 @@ export default function SharedChat() {
                 sources: msg.sources,
                 created_at: msg.created_at,
               }}
+              onShare={handleCopyLink}
             />
           ))}
         </div>

@@ -5,6 +5,12 @@ import { buildApiUrl } from './config'
 
 // --- Types ------------------------------------------------------------------
 
+export interface ChatGreetingResponse {
+  greeting: string
+  user_name: string
+  sentences: string[]
+}
+
 export interface AvailableVideo {
   db_id: string
   youtube_video_id: string
@@ -177,6 +183,13 @@ export async function getPublicSharedChat(shareToken: string): Promise<PublicSha
 
 export async function forkSharedChat(shareToken: string): Promise<ForkChatResponse> {
   const res = await client.post<ForkChatResponse>(`/chat/share/${shareToken}/fork`)
+  return res.data
+}
+
+export async function getChatGreeting(name?: string): Promise<ChatGreetingResponse> {
+  const res = await client.get<ChatGreetingResponse>('/chat/greeting', {
+    params: name ? { name } : undefined,
+  })
   return res.data
 }
 

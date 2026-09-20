@@ -16,7 +16,7 @@ interface ChatInputProps {
   onSelectVideo: (video: AvailableVideo | null) => void
 }
 
-export function ChatInput({
+export const ChatInput = React.memo(function ChatInput({
   input,
   setInput,
   onSubmit,
@@ -31,10 +31,11 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`
-    }
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    const nextHeight = Math.min(Math.max(textarea.scrollHeight, 24), 180)
+    textarea.style.height = `${nextHeight}px`
   }, [input])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -47,7 +48,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="relative w-full rounded-2xl border border-[#2a2a2a] bg-[#111111] p-3 shadow-2xl transition-all focus-within:border-[#555555]">
+    <div className="relative w-full rounded-2xl border border-[#2a2a2a] bg-[#111111] p-3 shadow-2xl transition-colors duration-200 focus-within:border-[#555555] focus-within:ring-1 focus-within:ring-white/10">
       <textarea
         ref={textareaRef}
         rows={1}
@@ -103,4 +104,4 @@ export function ChatInput({
       </div>
     </div>
   )
-}
+})

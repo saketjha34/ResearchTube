@@ -14,6 +14,7 @@ Route map:
 
 from __future__ import annotations
 
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
@@ -25,6 +26,7 @@ from app.db.database import get_db
 from app.db.models.user import User
 from app.schema.chat import (
     AvailableVideosResponse,
+    ChatGreetingResponse,
     ChatSessionDetailResponse,
     ChatSessionListResponse,
     ChatSessionResponse,
@@ -35,10 +37,32 @@ from app.schema.chat import (
     SendMessageResponse,
     ShareChatResponse,
 )
-from app.services.auth.security_deps import get_current_user
+from app.services.auth.security_deps import get_current_user, get_optional_user
 from app.services.chat import chat_service
 
 router = APIRouter()
+
+
+# ============================================================
+# GET /chat/greeting
+# ============================================================
+
+@router.get(
+    "/greeting",
+    response_model=ChatGreetingResponse,
+    summary="Get personalized greeting headline for new chat interface",
+)
+@limiter.limit("60/minute")
+async def get_chat_greeting(
+    request: Request,
+    name: Optional[str] = None,
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """
+    Returns a personalized greeting sentence (Claude / ChatGPT style)
+    interpolated with the user's display name, chosen from 30 curated templates.
+    """
+    return chat_service.get_chat_greeting(user=current_user, name_override=name)
 
 
 # ============================================================
