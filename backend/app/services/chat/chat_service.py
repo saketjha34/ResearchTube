@@ -35,7 +35,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models.chat import ChatSession, ChatMessage, MessageRole
 from app.db.models.youtube import YouTubeVideo, ResearchVideo, TranscriptChunk
 from app.llm.dual import DualLLM
-from app.prompts.base import JinjaPromptTemplate
+from app.prompts.chat import ChatRAGPromptTemplate, chat_rag_template
 from app.rag.youtube.retriever import YouTubeTranscriptRetriever
 from app.schema.chat import (
     AvailableVideoItem,
@@ -53,6 +53,7 @@ from app.schema.chat import (
     SendMessageResponse,
     ShareChatResponse,
     SourceCitation,
+    UpdateSessionScopeRequest,
 )
 
 
@@ -66,7 +67,7 @@ _RAG_TOP_K = 5
 
 # Minimum cosine similarity to include a chunk in the prompt (0.0–1.0)
 # Unrelated queries (math, general code, chit-chat) score below 0.35 and are cleanly dropped
-_RAG_MIN_SIMILARITY = 0.38
+_RAG_MIN_SIMILARITY = 0.20
 
 # Maximum sources to include after threshold filtering (top 3 sources only)
 _RAG_MAX_SOURCES = 3
@@ -99,10 +100,7 @@ class ChatService:
 
         self._llm = DualLLM()
         self._retriever = YouTubeTranscriptRetriever()
-        self._prompt = JinjaPromptTemplate.from_file(
-            "chat/chat_rag.txt",
-            required_vars=["user_message"],
-        )
+        self._prompt = chat_rag_template
         _logger.info("chat_service.initialized")
 
     # ===========================================================
@@ -210,6 +208,7 @@ class ChatService:
         session: AsyncSession,
         user_id: UUID,
         include_archived: bool = False,
+        archived_only: bool = False,
     ) -> ChatSessionListResponse:
         """Return all chat sessions for the user, pinned first, then newest updated."""
         stmt = (
@@ -218,7 +217,9 @@ class ChatService:
             .order_by(ChatSession.is_pinned.desc(), ChatSession.updated_at.desc())
         )
 
-        if not include_archived:
+        if archived_only:
+            stmt = stmt.where(ChatSession.is_archived.is_(True))
+        elif not include_archived:
             stmt = stmt.where(ChatSession.is_archived.is_(False))
 
         result = await session.execute(stmt)
@@ -304,6 +305,46 @@ class ChatService:
         chat_session.title = new_title[:255]
         await session.commit()
         await session.refresh(chat_session)
+        return ChatSessionResponse.model_validate(chat_session)
+
+    async def update_session_scope(
+        self,
+        session: AsyncSession,
+        user_id: UUID,
+        session_id: UUID,
+        payload: UpdateSessionScopeRequest,
+    ) -> ChatSessionResponse:
+        """
+        Update the video scope of an existing chat session mid-conversation.
+
+        - If `clear_video_scope=True` or `video_id=None`: removes video restriction.
+        - If `video_id` is provided: validates ownership and sets the new scope.
+        """
+        _logger.info(
+            "chat.update_session_scope",
+            session_id=str(session_id),
+            user_id=str(user_id),
+            video_id=str(payload.video_id) if payload.video_id else None,
+            clear_video_scope=payload.clear_video_scope,
+        )
+
+        chat_session = await self._get_session_or_404(session, session_id, user_id)
+
+        if payload.clear_video_scope or payload.video_id is None:
+            chat_session.video_id = None
+        else:
+            resolved_id = await self._resolve_and_assert_video(
+                session, payload.video_id, user_id
+            )
+            chat_session.video_id = resolved_id
+
+        await session.commit()
+        await session.refresh(chat_session)
+        _logger.info(
+            "chat.session_scope_updated",
+            session_id=str(session_id),
+            new_video_id=str(chat_session.video_id) if chat_session.video_id else None,
+        )
         return ChatSessionResponse.model_validate(chat_session)
 
     async def create_or_get_share_link(
@@ -574,6 +615,26 @@ class ChatService:
         # ── 1. Validate ────────────────────────────────────────
         chat_session = await self._get_session_or_404(session, session_id, user_id)
 
+        # ── 1b. Atomic scope switch (if requested) ─────────────
+        if payload.clear_video_scope:
+            chat_session.video_id = None
+            _logger.info("chat.scope_cleared", session_id=str(session_id))
+        elif payload.video_id is not None:
+            resolved_id = await self._resolve_and_assert_video(
+                session, payload.video_id, user_id
+            )
+            chat_session.video_id = resolved_id
+            _logger.info(
+                "chat.scope_switched",
+                session_id=str(session_id),
+                new_video_id=str(resolved_id),
+            )
+
+        # ── 1c. Auto-unarchive if session was archived ──────────
+        if chat_session.is_archived:
+            chat_session.is_archived = False
+            _logger.info("chat.auto_unarchived", session_id=str(session_id))
+
         # ── 2. Persist user message ────────────────────────────
         user_msg = ChatMessage(
             session_id=session_id,
@@ -675,6 +736,26 @@ class ChatService:
         try:
             # 1. Validate session
             chat_session = await self._get_session_or_404(session, session_id, user_id)
+
+            # 1b. Atomic scope switch (if requested)
+            if payload.clear_video_scope:
+                chat_session.video_id = None
+                _logger.info("chat.scope_cleared", session_id=str(session_id))
+            elif payload.video_id is not None:
+                resolved_id = await self._resolve_and_assert_video(
+                    session, payload.video_id, user_id
+                )
+                chat_session.video_id = resolved_id
+                _logger.info(
+                    "chat.scope_switched",
+                    session_id=str(session_id),
+                    new_video_id=str(resolved_id),
+                )
+
+            # 1c. Auto-unarchive if session was archived
+            if chat_session.is_archived:
+                chat_session.is_archived = False
+                _logger.info("chat.auto_unarchived", session_id=str(session_id))
 
             # 2. Persist user message
             user_msg = ChatMessage(

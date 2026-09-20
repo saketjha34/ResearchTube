@@ -19,6 +19,11 @@ from app.prompts.youtube import (
     final_report_template,
 )
 
+from app.prompts.chat import (
+    ChatRAGPromptTemplate,
+    chat_rag_template,
+)
+
 __all__ = [
     # Base
     "BasePromptTemplate",
@@ -28,8 +33,11 @@ __all__ = [
     "PlanYouTubeResearchPromptTemplate",
     "ContextAnalysisPromptTemplate",
     "FinalReportPromptTemplate",
+    "ChatRAGPromptTemplate",
     # Instances
     "plan_research_template",
     "context_analysis_template",
     "final_report_template",
+    "chat_rag_template",
 ]
+

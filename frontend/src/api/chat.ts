@@ -135,9 +135,15 @@ export async function createChatSession(payload: CreateSessionPayload): Promise<
   return res.data
 }
 
-export async function listChatSessions(includeArchived = false): Promise<{ sessions: ChatSession[]; total: number }> {
+export async function listChatSessions(
+  includeArchived = false,
+  archivedOnly = false,
+): Promise<{ sessions: ChatSession[]; total: number }> {
   const res = await client.get<{ sessions: ChatSession[]; total: number }>('/chat/sessions', {
-    params: { include_archived: includeArchived },
+    params: {
+      include_archived: includeArchived,
+      archived_only: archivedOnly,
+    },
   })
   return res.data
 }
@@ -176,6 +182,17 @@ export async function revokeShareLink(sessionId: string): Promise<ChatSession> {
   return res.data
 }
 
+
+export async function updateSessionScope(
+  sessionId: string,
+  videoId: string | null,
+): Promise<ChatSession> {
+  const res = await client.patch<ChatSession>(`/chat/sessions/${sessionId}/scope`, {
+    video_id: videoId || null,
+    clear_video_scope: videoId === null,
+  })
+  return res.data
+}
 export async function getPublicSharedChat(shareToken: string): Promise<PublicSharedChat> {
   const res = await client.get<PublicSharedChat>(`/chat/share/${shareToken}`)
   return res.data
@@ -193,10 +210,10 @@ export async function getChatGreeting(name?: string): Promise<ChatGreetingRespon
   return res.data
 }
 
-export async function sendMessageNonStream(sessionId: string, message: string) {
+export async function sendMessageNonStream(sessionId: string, message: string, videoId?: string | null) {
   const res = await client.post<{ user_message: ChatMessage; assistant_message: ChatMessage }>(
     `/chat/sessions/${sessionId}/messages`,
-    { message },
+    { message, video_id: videoId !== undefined ? (videoId || null) : undefined, clear_video_scope: videoId === null ? true : undefined },
   )
   return res.data
 }
@@ -207,6 +224,7 @@ export async function streamMessage(
   sessionId: string,
   message: string,
   callbacks: StreamCallbacks,
+  videoId?: string | null,
 ): Promise<void> {
   const token = getAccessToken()
   const url = buildApiUrl(`/chat/sessions/${sessionId}/messages/stream`)
@@ -219,7 +237,11 @@ export async function streamMessage(
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({
+        message,
+        video_id: videoId !== undefined ? (videoId || null) : undefined,
+        clear_video_scope: videoId === null ? true : undefined,
+      }),
     })
   } catch (err) {
     callbacks.onError?.(`Network error: ${String(err)}`)
@@ -277,3 +299,4 @@ export async function streamMessage(
     }
   }
 }
+

@@ -3,7 +3,8 @@ Chat Pydantic Schemas.
 
 Validation schemas for the Chat API endpoints.
 
-Request schemas:  CreateChatSessionRequest, SendMessageRequest
+Request schemas:  CreateChatSessionRequest, SendMessageRequest,
+                  UpdateSessionScopeRequest
 Response schemas: ChatSessionResponse, ChatMessageResponse,
                   ChatHistoryResponse, AvailableVideoItem
 """
@@ -108,6 +109,9 @@ class SendMessageRequest(BaseModel):
     """
     Send a user message in an existing chat session.
     The backend will respond with the assistant reply and optional source citations.
+
+    Optionally include `video_id` or `clear_video_scope` to switch the session's
+    video scope atomically on this turn (scope persists for all future turns).
     """
 
     message: str = Field(
@@ -116,6 +120,72 @@ class SendMessageRequest(BaseModel):
         max_length=8000,
         description="The user's message text.",
     )
+
+    video_id: Optional[Union[UUID, str]] = Field(
+        None,
+        description=(
+            "Optional DB UUID or YouTube video ID to switch the session's video scope "
+            "on this turn. The new scope persists for all subsequent turns."
+        ),
+    )
+
+    clear_video_scope: Optional[bool] = Field(
+        False,
+        description=(
+            "If True, clears the session's video scope so future RAG retrieval "
+            "queries across the user's entire video library."
+        ),
+    )
+
+    @field_validator("video_id", mode="before")
+    @classmethod
+    def _coerce_video_id(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            try:
+                return UUID(s)
+            except ValueError:
+                return s
+        return v
+
+
+class UpdateSessionScopeRequest(BaseModel):
+    """
+    Body for PATCH /chat/sessions/{session_id}/scope.
+
+    Either provide a `video_id` to switch the session to a specific video,
+    or set `clear_video_scope=True` to remove any video restriction so the
+    session queries across the user's entire video library.
+    """
+
+    video_id: Optional[Union[UUID, str]] = Field(
+        None,
+        description="DB UUID or YouTube video ID to switch the chat scope to.",
+    )
+
+    clear_video_scope: bool = Field(
+        False,
+        description="If True, clears the session's video scope (queries across all library videos).",
+    )
+
+    @field_validator("video_id", mode="before")
+    @classmethod
+    def _coerce_video_id(cls, v: Any) -> Any:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            try:
+                return UUID(s)
+            except ValueError:
+                return s
+        return v
 
 
 # ============================================================

@@ -2,14 +2,16 @@
 Chat Routes — REST API endpoints for the ResearchTube AI chat feature.
 
 Route map:
-    GET    /chat/available-videos          — list all researched videos user can scope to
-    POST   /chat/sessions                  — create a new chat session
-    GET    /chat/sessions                  — list all chat sessions for the user
-    GET    /chat/sessions/{session_id}     — get a session with full message history
-    DELETE /chat/sessions/{session_id}     — delete a session (cascade messages)
-    PATCH  /chat/sessions/{session_id}/archive  — toggle archive flag
-    PATCH  /chat/sessions/{session_id}/rename   — rename a session
-    POST   /chat/sessions/{session_id}/messages — send a message and get AI response
+    GET    /chat/available-videos                      — list all researched videos user can scope to
+    POST   /chat/sessions                              — create a new chat session
+    GET    /chat/sessions                              — list all chat sessions for the user
+    GET    /chat/sessions/{session_id}                 — get a session with full message history
+    DELETE /chat/sessions/{session_id}                 — delete a session (cascade messages)
+    PATCH  /chat/sessions/{session_id}/archive         — toggle archive flag
+    PATCH  /chat/sessions/{session_id}/rename          — rename a session
+    PATCH  /chat/sessions/{session_id}/scope           — update the session's video scope mid-conversation
+    POST   /chat/sessions/{session_id}/messages        — send a message and get AI response
+    POST   /chat/sessions/{session_id}/messages/stream — stream AI response via SSE
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from app.schema.chat import (
     SendMessageRequest,
     SendMessageResponse,
     ShareChatResponse,
+    UpdateSessionScopeRequest,
 )
 from app.services.auth.security_deps import get_current_user, get_optional_user
 from app.services.chat import chat_service
@@ -136,17 +139,20 @@ async def create_chat_session(
 async def list_chat_sessions(
     request: Request,
     include_archived: bool = False,
+    archived_only: bool = False,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     """
     Returns all chat sessions for the authenticated user, newest first.
     Pass `include_archived=true` to include archived sessions.
+    Pass `archived_only=true` to return only archived sessions.
     """
     return await chat_service.list_sessions(
         session=session,
         user_id=current_user.id,
         include_archived=include_archived,
+        archived_only=archived_only,
     )
 
 
@@ -250,6 +256,42 @@ async def rename_chat_session(
         user_id=current_user.id,
         session_id=session_id,
         new_title=payload.title,
+    )
+
+
+# ============================================================
+# PATCH /chat/sessions/{session_id}/scope
+# ============================================================
+
+@router.patch(
+    "/sessions/{session_id}/scope",
+    response_model=ChatSessionResponse,
+    summary="Update the video scope of a chat session mid-conversation",
+)
+@limiter.limit("30/minute")
+async def update_session_scope(
+    request: Request,
+    session_id: UUID,
+    payload: UpdateSessionScopeRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Dynamically change the video scope of an ongoing chat session.
+
+    - Provide `video_id` (DB UUID or YouTube video ID) to restrict RAG retrieval
+      to a specific video's transcript for all future turns in this session.
+    - Set `clear_video_scope=True` to remove the restriction, enabling retrieval
+      across the user's entire video library.
+
+    The new scope persists in the database and applies to every subsequent message
+    in this session until changed again.
+    """
+    return await chat_service.update_session_scope(
+        session=session,
+        user_id=current_user.id,
+        session_id=session_id,
+        payload=payload,
     )
 
 

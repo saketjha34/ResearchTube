@@ -19,6 +19,10 @@
   PanelLeftOpen,
   Check,
   Copy,
+  Archive,
+  ArchiveRestore,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
@@ -35,6 +39,7 @@ import {
   listChatSessions,
   deleteChatSession,
   renameChatSession,
+  archiveChatSession,
   togglePinSession,
   createShareLink,
   revokeShareLink,
@@ -85,6 +90,8 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   // --- Chat State ------------------------------------------------------------
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
+  const [archivedChatSessions, setArchivedChatSessions] = useState<ChatSession[]>([])
+  const [showArchivedSection, setShowArchivedSection] = useState(false)
   const [loadingChat, setLoadingChat] = useState(false)
   const [activeMenuChatId, setActiveMenuChatId] = useState<string | null>(null)
   const [deleteTargetChatId, setDeleteTargetChatId] = useState<string | null>(null)
@@ -165,10 +172,15 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const loadChats = async () => {
     setLoadingChat(true)
     try {
-      const data = await listChatSessions()
-      setChatSessions(data.sessions || [])
+      const [activeData, archivedData] = await Promise.all([
+        listChatSessions(false),
+        listChatSessions(false, true),
+      ])
+      setChatSessions(activeData.sessions || [])
+      setArchivedChatSessions(archivedData.sessions || [])
     } catch {
       setChatSessions([])
+      setArchivedChatSessions([])
     } finally {
       setLoadingChat(false)
     }
@@ -302,6 +314,16 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       void loadChats()
     } catch {
       alert('Failed to delete chat session.')
+    }
+  }
+
+  const handleToggleArchiveChat = async (sId: string) => {
+    try {
+      await archiveChatSession(sId)
+      window.dispatchEvent(new Event('chat:updated'))
+      void loadChats()
+    } catch {
+      alert('Failed to update archive status.')
     }
   }
 
@@ -537,6 +559,98 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
               <Pencil size={12} className="opacity-70" />
               <span>Rename</span>
             </button>
+            <button
+              onClick={() => {
+                setActiveMenuChatId(null)
+                void handleToggleArchiveChat(item.id)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            >
+              <Archive size={12} className="opacity-70" />
+              <span>Archive</span>
+            </button>
+            <hr className="border-[#222222] my-1" />
+            <button
+              onClick={() => {
+                setDeleteTargetChatId(item.id)
+                setActiveMenuChatId(null)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#ef4444] hover:bg-[#181818]"
+            >
+              <Trash2 size={12} className="opacity-70" />
+              <span>Delete</span>
+            </button>
+          </div>
+        )}
+      </li>
+    )
+  }
+
+  // Archived Chat item renderer
+  const renderArchivedChatItem = (item: ChatSession) => {
+    const isChatActive = location.pathname === `/chat/${item.id}`
+    return (
+      <li key={item.id} className="relative group">
+        <button
+          onClick={() => navigate(`/chat/${item.id}`)}
+          className={`flex w-full items-start gap-2 rounded-md pl-2 pr-14 py-2 text-left text-xs transition-all duration-200 hover:bg-[#111111] opacity-75 hover:opacity-100 ${
+            isChatActive
+              ? 'bg-[#111111] text-white font-bold border-l-2 border-zinc-500'
+              : 'text-[#888888] hover:text-white'
+          }`}
+        >
+          <Archive size={11} className="mt-0.5 flex-shrink-0 opacity-50" />
+          <span className="line-clamp-2 leading-relaxed">{item.title || 'New Chat'}</span>
+        </button>
+
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex show-on-touch items-center gap-0.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              void handleToggleArchiveChat(item.id)
+            }}
+            title="Unarchive conversation"
+            className="p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
+          >
+            <ArchiveRestore size={13} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setActiveMenuChatId(activeMenuChatId === item.id ? null : item.id)
+            }}
+            className="p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
+          >
+            <MoreVertical size={13} />
+          </button>
+        </div>
+
+        {activeMenuChatId === item.id && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-2 top-8 z-50 w-44 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
+          >
+            <button
+              onClick={() => {
+                setActiveMenuChatId(null)
+                void handleToggleArchiveChat(item.id)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-emerald-400"
+            >
+              <ArchiveRestore size={12} className="opacity-70" />
+              <span>Unarchive</span>
+            </button>
+            <button
+              onClick={() => {
+                setRenameTargetChatId(item.id)
+                setChatRenameValue(item.title || '')
+                setActiveMenuChatId(null)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            >
+              <Pencil size={12} className="opacity-70" />
+              <span>Rename</span>
+            </button>
             <hr className="border-[#222222] my-1" />
             <button
               onClick={() => {
@@ -736,6 +850,27 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       {chatSessions.filter((s) => !s.is_pinned).map(renderChatItem)}
                     </ul>
                   </>
+                )}
+
+                {/* Archived Chats Collapsible Section */}
+                {archivedChatSessions.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-[#181818]">
+                    <button
+                      onClick={() => setShowArchivedSection((prev) => !prev)}
+                      className="flex w-full items-center justify-between px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest text-[#555555] hover:text-[#999999] hover:bg-[#111111] transition-colors"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Archive size={11} className="text-[#666666]" />
+                        Archived ({archivedChatSessions.length})
+                      </span>
+                      {showArchivedSection ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    </button>
+                    {showArchivedSection && (
+                      <ul className="space-y-0.5 mt-1.5 animate-fade-in">
+                        {archivedChatSessions.map(renderArchivedChatItem)}
+                      </ul>
+                    )}
+                  </div>
                 )}
               </>
             )}

@@ -11,17 +11,21 @@ import {
   Share2,
   Pin,
   ChevronDown,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react'
 import {
   getAvailableVideos,
   getChatSession,
   createChatSession,
   renameChatSession,
+  archiveChatSession,
   togglePinSession,
   createShareLink,
   revokeShareLink,
   streamMessage,
   getChatGreeting,
+  updateSessionScope,
   type AvailableVideo,
   type ChatMessage,
   type ChatSessionDetail,
@@ -209,6 +213,18 @@ export default function Chat() {
     }
   }
 
+  // Toggle archive status
+  const handleToggleArchive = async () => {
+    if (!session) return
+    try {
+      const updated = await archiveChatSession(session.id)
+      setSession((prev) => (prev ? { ...prev, is_archived: updated.is_archived } : null))
+      window.dispatchEvent(new Event('chat:updated'))
+    } catch {
+      alert('Failed to update archive status.')
+    }
+  }
+
   // Open share modal & generate public link
   const handleOpenShare = useCallback(async () => {
     if (!session) return
@@ -271,6 +287,20 @@ export default function Chat() {
     }
   }
 
+  // Update video scope: immediately persist to backend if session is active
+  const handleSelectVideo = async (video: AvailableVideo | null) => {
+    setSelectedVideo(video)
+    const activeSessionId = sessionId || session?.id
+    if (activeSessionId) {
+      try {
+        const updated = await updateSessionScope(activeSessionId, video ? video.db_id : null)
+        setSession((prev) => prev ? { ...prev, video_id: updated.video_id } : null)
+        window.dispatchEvent(new Event('chat:updated'))
+      } catch (err) {
+        console.error('Failed to update session scope:', err)
+      }
+    }
+  }
   // Submit message and stream response
   const handleSubmit = async (customPrompt?: string) => {
     const textToSend = (customPrompt || input).trim()
@@ -278,6 +308,11 @@ export default function Chat() {
 
     setInput('')
     setError(null)
+
+    if (session?.is_archived) {
+      setSession((prev) => (prev ? { ...prev, is_archived: false } : null))
+      window.dispatchEvent(new Event('chat:updated'))
+    }
 
     let currentSessionId = sessionId || session?.id
 
@@ -505,7 +540,7 @@ export default function Chat() {
         animatedTextRef.current = ''
         justCreatedSessionRef.current = null
       },
-    })
+    }, selectedVideo ? selectedVideo.db_id : null)
   }
 
   return (
@@ -590,6 +625,20 @@ export default function Chat() {
                 <Share2 size={13} />
                 <span className="hidden sm:inline">Share</span>
               </button>
+
+              {/* Archive Toggle Button */}
+              <button
+                onClick={handleToggleArchive}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                  session.is_archived
+                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+                    : 'border-[#2a2a2a] bg-[#121212] text-[#888888] hover:border-[#444444] hover:text-white'
+                }`}
+                title={session.is_archived ? 'Unarchive conversation' : 'Archive conversation'}
+              >
+                {session.is_archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+                <span className="hidden sm:inline">{session.is_archived ? 'Unarchive' : 'Archive'}</span>
+              </button>
             </>
           )}
 
@@ -612,6 +661,23 @@ export default function Chat() {
           </div>
           <button onClick={() => setError(null)} className="p-1 hover:text-white">
             <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* Archived Notice Banner */}
+      {session?.is_archived && (
+        <div className="mb-3 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-300 backdrop-blur-xs">
+          <div className="flex items-center gap-2">
+            <Archive size={14} className="flex-shrink-0 text-amber-400" />
+            <span>This conversation is archived. Sending a new message will automatically unarchive it.</span>
+          </div>
+          <button
+            onClick={handleToggleArchive}
+            className="flex items-center gap-1 font-semibold text-amber-200 hover:text-white transition-colors underline underline-offset-2 ml-3 flex-shrink-0 cursor-pointer"
+          >
+            <ArchiveRestore size={13} />
+            <span>Unarchive</span>
           </button>
         </div>
       )}
@@ -642,7 +708,7 @@ export default function Chat() {
                 disabled={loadingSession}
                 videos={availableVideos}
                 selectedVideo={selectedVideo}
-                onSelectVideo={setSelectedVideo}
+                onSelectVideo={handleSelectVideo}
               />
             </div>
           </div>
@@ -702,7 +768,7 @@ export default function Chat() {
                 disabled={loadingSession}
                 videos={availableVideos}
                 selectedVideo={selectedVideo}
-                onSelectVideo={setSelectedVideo}
+                onSelectVideo={handleSelectVideo}
               />
             </div>
           </>
@@ -721,6 +787,8 @@ export default function Chat() {
     </div>
   )
 }
+
+
 
 
 
