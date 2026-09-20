@@ -160,7 +160,8 @@ class OpenAIEmbeddingService:
 
 class DualEmbeddingService:
     """
-    Dual Embedding Service routing to OpenAI first, with automatic Gemini fallback.
+    Dual Embedding Service routing to the configured primary provider (Gemini or OpenAI),
+    with fallback capabilities and per-step logging.
     Outputs vectors of dimension 768 in both cases.
     """
 
@@ -169,10 +170,14 @@ class DualEmbeddingService:
         openai_model: str | None = None,
         gemini_model: str | None = None,
         dimension: int = 768,
+        primary_provider: str | None = None,
     ) -> None:
         self.openai_model = openai_model or settings.OPENAI_EMBEDDING_MODEL
         self.gemini_model = gemini_model or settings.EMBEDDING_MODEL
         self.dimension = dimension
+        self.primary_provider = (
+            primary_provider or getattr(settings, "EMBEDDING_PROVIDER", "openai")
+        ).lower()
 
         self.openai_service: OpenAIEmbeddingService | None = None
         if settings.OPENAI_API_KEY:
@@ -191,103 +196,103 @@ class DualEmbeddingService:
         )
 
     def embed_text(self, text: str) -> list[float]:
-        # 1. Attempt OpenAI primary
-        if self.openai_service:
+        # Determine service order based on primary_provider
+        if self.primary_provider == "gemini":
+            primary_svc, primary_name, primary_model = self.gemini_service, "gemini", self.gemini_model
+            fallback_svc, fallback_name, fallback_model = self.openai_service, "openai", self.openai_model
+        else:
+            primary_svc, primary_name, primary_model = self.openai_service, "openai", self.openai_model
+            fallback_svc, fallback_name, fallback_model = self.gemini_service, "gemini", self.gemini_model
+
+        # 1. Attempt primary
+        if primary_svc:
             start_time = time.perf_counter()
-            logger.info("embedding.text.attempt", provider="openai", model=self.openai_model)
-            print(f"[Embedding] Generating query embedding using OpenAI ({self.openai_model}, dim={self.dimension})...")
+            logger.info("embedding.text.attempt", provider=primary_name, model=primary_model)
+            print(f"[Embedding] Generating query embedding using {primary_name.title()} ({primary_model}, dim={self.dimension})...")
             try:
-                vector = self.openai_service.embed_text(text)
+                vector = primary_svc.embed_text(text)
                 elapsed = time.perf_counter() - start_time
-                logger.info("embedding.text.success", provider="openai", latency=round(elapsed, 3))
-                print(f"[Embedding] Completed query embedding using OpenAI in {elapsed:.2f}s")
+                logger.info("embedding.text.success", provider=primary_name, latency=round(elapsed, 3))
+                print(f"[Embedding] Completed query embedding using {primary_name.title()} in {elapsed:.2f}s")
                 return vector
             except Exception as exc:
                 elapsed = time.perf_counter() - start_time
                 logger.warning(
                     "embedding.text.fallback",
-                    failed_provider="openai",
+                    failed_provider=primary_name,
                     error=str(exc),
-                    fallback_provider="gemini",
+                    fallback_provider=fallback_name,
                 )
-                print(f"[WARNING] OpenAI embedding failed: {exc}. Falling back to Gemini ({self.gemini_model})...")
+                print(f"[WARNING] {primary_name.title()} embedding failed: {exc}. Falling back to {fallback_name.title()} ({fallback_model})...")
 
-        # 2. Fallback to Gemini
-        start_time = time.perf_counter()
-        logger.info("embedding.text.attempt", provider="gemini", model=self.gemini_model, is_fallback=True)
-        print(f"[Embedding] [Fallback] Generating query embedding using Gemini ({self.gemini_model}, dim={self.dimension})...")
-        try:
-            vector = self.gemini_service.embed_text(text)
-            elapsed = time.perf_counter() - start_time
-            logger.info("embedding.text.success", provider="gemini", latency=round(elapsed, 3), is_fallback=True)
-            print(f"[Embedding] Completed query embedding using Gemini fallback in {elapsed:.2f}s")
-            return vector
-        except Exception as exc:
-            logger.error("embedding.text.failed", error=str(exc))
-            print(f"[ERROR] Both OpenAI and Gemini query embeddings failed: {exc}")
-            raise
+        # 2. Fallback
+        if fallback_svc:
+            start_time = time.perf_counter()
+            logger.info("embedding.text.attempt", provider=fallback_name, model=fallback_model, is_fallback=True)
+            print(f"[Embedding] [Fallback] Generating query embedding using {fallback_name.title()} ({fallback_model}, dim={self.dimension})...")
+            try:
+                vector = fallback_svc.embed_text(text)
+                elapsed = time.perf_counter() - start_time
+                logger.info("embedding.text.success", provider=fallback_name, latency=round(elapsed, 3), is_fallback=True)
+                print(f"[Embedding] Completed query embedding using {fallback_name.title()} fallback in {elapsed:.2f}s")
+                return vector
+            except Exception as exc:
+                logger.error("embedding.text.failed", error=str(exc))
+                print(f"[ERROR] Both primary and fallback query embeddings failed: {exc}")
+                raise
+
+        raise RuntimeError("No embedding service available.")
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
 
-        # 1. Attempt OpenAI primary
-        if self.openai_service:
+        # Determine service order based on primary_provider
+        if self.primary_provider == "gemini":
+            primary_svc, primary_name, primary_model = self.gemini_service, "gemini", self.gemini_model
+            fallback_svc, fallback_name, fallback_model = self.openai_service, "openai", self.openai_model
+        else:
+            primary_svc, primary_name, primary_model = self.openai_service, "openai", self.openai_model
+            fallback_svc, fallback_name, fallback_model = self.gemini_service, "gemini", self.gemini_model
+
+        # 1. Attempt primary
+        if primary_svc:
             start_time = time.perf_counter()
-            logger.info(
-                "embedding.documents.attempt",
-                provider="openai",
-                model=self.openai_model,
-                count=len(texts),
-            )
-            print(f"[Embedding] Generating {len(texts)} document embeddings using OpenAI ({self.openai_model}, dim={self.dimension})...")
+            logger.info("embedding.documents.attempt", provider=primary_name, model=primary_model, count=len(texts))
+            print(f"[Embedding] Generating {len(texts)} document embeddings using {primary_name.title()} ({primary_model}, dim={self.dimension})...")
             try:
-                vectors = self.openai_service.embed_documents(texts)
+                vectors = primary_svc.embed_documents(texts)
                 elapsed = time.perf_counter() - start_time
-                logger.info(
-                    "embedding.documents.success",
-                    provider="openai",
-                    count=len(texts),
-                    latency=round(elapsed, 3),
-                )
-                print(f"[Embedding] Completed {len(texts)} document embeddings using OpenAI in {elapsed:.2f}s")
+                logger.info("embedding.documents.success", provider=primary_name, count=len(texts), latency=round(elapsed, 3))
+                print(f"[Embedding] Completed {len(texts)} document embeddings using {primary_name.title()} in {elapsed:.2f}s")
                 return vectors
             except Exception as exc:
                 elapsed = time.perf_counter() - start_time
                 logger.warning(
                     "embedding.documents.fallback",
-                    failed_provider="openai",
+                    failed_provider=primary_name,
                     error=str(exc),
-                    fallback_provider="gemini",
+                    fallback_provider=fallback_name,
                 )
-                print(f"[WARNING] OpenAI document embeddings failed: {exc}. Falling back to Gemini ({self.gemini_model})...")
+                print(f"[WARNING] {primary_name.title()} document embeddings failed: {exc}. Falling back to {fallback_name.title()} ({fallback_model})...")
 
-        # 2. Fallback to Gemini
-        start_time = time.perf_counter()
-        logger.info(
-            "embedding.documents.attempt",
-            provider="gemini",
-            model=self.gemini_model,
-            count=len(texts),
-            is_fallback=True,
-        )
-        print(f"[Embedding] [Fallback] Generating {len(texts)} document embeddings using Gemini ({self.gemini_model}, dim={self.dimension})...")
-        try:
-            vectors = self.gemini_service.embed_documents(texts)
-            elapsed = time.perf_counter() - start_time
-            logger.info(
-                "embedding.documents.success",
-                provider="gemini",
-                count=len(texts),
-                latency=round(elapsed, 3),
-                is_fallback=True,
-            )
-            print(f"[Embedding] Completed {len(texts)} document embeddings using Gemini fallback in {elapsed:.2f}s")
-            return vectors
-        except Exception as exc:
-            logger.error("embedding.documents.failed", error=str(exc))
-            print(f"[ERROR] Both OpenAI and Gemini document embeddings failed: {exc}")
-            raise
+        # 2. Fallback
+        if fallback_svc:
+            start_time = time.perf_counter()
+            logger.info("embedding.documents.attempt", provider=fallback_name, model=fallback_model, count=len(texts), is_fallback=True)
+            print(f"[Embedding] [Fallback] Generating {len(texts)} document embeddings using {fallback_name.title()} ({fallback_model}, dim={self.dimension})...")
+            try:
+                vectors = fallback_svc.embed_documents(texts)
+                elapsed = time.perf_counter() - start_time
+                logger.info("embedding.documents.success", provider=fallback_name, count=len(texts), latency=round(elapsed, 3), is_fallback=True)
+                print(f"[Embedding] Completed {len(texts)} document embeddings using {fallback_name.title()} fallback in {elapsed:.2f}s")
+                return vectors
+            except Exception as exc:
+                logger.error("embedding.documents.failed", error=str(exc))
+                print(f"[ERROR] Both primary and fallback document embeddings failed: {exc}")
+                raise
+
+        raise RuntimeError("No embedding service available.")
 
     async def embed_text_async(self, text: str) -> list[float]:
         return await asyncio.to_thread(self.embed_text, text)

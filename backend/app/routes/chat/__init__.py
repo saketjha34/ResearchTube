@@ -1,18 +1,26 @@
 """
-app.routes.chat — Chat routes package.
+app.routes.chat — Chat Routes Package.
 
-Exposes the unified /chat router.
+Aggregates modular chat routers (sessions, messages, sharing, videos)
+under the unified `/chat` prefix.
 """
 
 from fastapi import APIRouter
 
-from app.routes.chat.chat_routes import router as chat_router
+from app.routes.chat.message_routes import router as message_router
+from app.routes.chat.session_routes import router as session_router
+from app.routes.chat.share_routes import router as share_router
+from app.routes.chat.video_routes import router as video_router
 
 router = APIRouter(
     prefix="/chat",
     tags=["Chat"],
 )
 
-router.include_router(chat_router)
+# Mount all modular sub-routers
+router.include_router(video_router)
+router.include_router(session_router)
+router.include_router(message_router)
+router.include_router(share_router)
 
 __all__ = ["router"]

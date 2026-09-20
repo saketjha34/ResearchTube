@@ -41,6 +41,13 @@ For research, educational resources, tutorials, courses, comparisons, recommenda
 - get_transcript = true
 - fields.transcript = true
 
+- If the user provides a direct YouTube video URL or video ID:
+  - Keep the URL or video ID in topic
+  - get_details = true
+  - get_transcript = true
+  - fields.transcript = true
+  - search_videos = true if {{ num_videos }} > 1 else false
+
 At minimum collect:
 
 - title

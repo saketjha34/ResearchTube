@@ -196,6 +196,7 @@ class SourceCitation(BaseModel):
     """A single RAG source chunk reference."""
 
     chunk_id: str
+    index: Optional[int] = None
     video_title: Optional[str] = None
     youtube_video_id: Optional[str] = None
     start_time: Optional[float] = None

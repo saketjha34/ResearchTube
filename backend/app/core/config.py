@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     OPENAI_MODEL: str = "gpt-5-mini"
     GEMINI_MODEL: str = "gemini-3.5-flash"
+    EMBEDDING_PROVIDER: str = "openai"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_MODEL: str = "gemini-embedding-001"
     EMBEDDING_DIMENSION: int = 768
