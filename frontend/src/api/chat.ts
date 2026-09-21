@@ -17,6 +17,15 @@ export interface AvailableVideo {
   title: string | null
   channel: string | null
   url: string | null
+  thumbnail_url?: string | null
+  views?: number | null
+  likes?: number | null
+  comments?: number | null
+  subscribers?: string | null
+  subscriber_count?: number | null
+  published_at?: string | null
+  description?: string | null
+  channel_avatar?: string | null
 }
 
 export interface SourceCitation {

@@ -34,6 +34,15 @@ class AvailableVideoItem(BaseModel):
     title: Optional[str] = Field(None, description="Video title")
     channel: Optional[str] = Field(None, description="Channel name")
     url: Optional[str] = Field(None, description="YouTube watch URL")
+    thumbnail_url: Optional[str] = Field(None, description="Video thumbnail image URL")
+    views: Optional[int] = Field(None, description="YouTube view count")
+    likes: Optional[int] = Field(None, description="YouTube like count")
+    comments: Optional[int] = Field(None, description="YouTube comment count")
+    subscribers: Optional[str] = Field(None, description="Formatted channel subscriber count (e.g. 1.5M)")
+    subscriber_count: Optional[int] = Field(None, description="Raw channel subscriber count")
+    published_at: Optional[datetime] = Field(None, description="Video publish date and time")
+    description: Optional[str] = Field(None, description="Video description snippet")
+    channel_avatar: Optional[str] = Field(None, description="YouTube channel avatar URL")
 
     model_config = {"from_attributes": True}
 

@@ -193,6 +193,7 @@ class YouTubeGraphPersistence:
                     views=video.views,
                     likes=video.likes,
                     comments=video.comments,
+                    published_at=video.published_at,
                 )
                 session.add(db_video)
                 await session.flush()
@@ -209,6 +210,8 @@ class YouTubeGraphPersistence:
                     db_video.likes = video.likes
                 if video.comments is not None:
                     db_video.comments = video.comments
+                if video.published_at is not None:
+                    db_video.published_at = video.published_at
 
                 await session.flush()
 

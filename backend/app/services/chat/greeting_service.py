@@ -7,6 +7,7 @@ all user-researched videos available for conversation scoping.
 
 from __future__ import annotations
 
+from datetime import datetime
 import random
 from typing import Any, Optional
 from uuid import UUID
@@ -62,8 +63,26 @@ GREETING_TEMPLATES = [
 ]
 
 
+# Cache for YouTube channel stats (subscribers, avatar) to avoid repeated API calls
+_CHANNEL_STATS_CACHE: dict[str, dict] = {}
+
+
+def _format_subscriber_count(count: Optional[int]) -> Optional[str]:
+    """Format numeric subscriber count to human-friendly string (e.g. 1.57M, 58.3K)."""
+    if count is None:
+        return None
+    if count >= 1_000_000:
+        return f"{count / 1_000_000:.2f}".rstrip("0").rstrip(".") + "M"
+    if count >= 1_000:
+        return f"{count / 1_000:.1f}".rstrip("0").rstrip(".") + "K"
+    return str(count)
+
+
 class GreetingService:
-    """Manages chat greetings and available researched videos."""
+    """Provides personalized user greetings and researched video discovery."""
+
+    def __init__(self) -> None:
+        _logger.info("greeting_service.initialized")
 
     def get_chat_greeting(
         self,
@@ -71,26 +90,24 @@ class GreetingService:
         name_override: Optional[str] = None,
     ) -> ChatGreetingResponse:
         """
-        Returns a personalized greeting sentence interpolated with user's name,
-        chosen from 30 curated Claude & ChatGPT style prompts for video research.
+        Generate a personalized chat greeting sentence.
         """
-        display_name = "there"
+        display_name: str = "there"
         if name_override and name_override.strip():
             display_name = name_override.strip()
-        elif user:
+        elif user is not None:
             full_name = getattr(user, "full_name", None)
-            username = getattr(user, "username", None)
-            email = getattr(user, "email", None)
+            if full_name and full_name.strip():
+                display_name = full_name.strip().split()[0]
+            else:
+                email = getattr(user, "email", None)
+                if email and "@" in email:
+                    display_name = email.split("@")[0]
 
-            if full_name and str(full_name).strip():
-                display_name = str(full_name).strip().split()[0]
-            elif username and str(username).strip():
-                display_name = str(username).strip()
-            elif email and "@" in str(email):
-                display_name = str(email).split("@")[0].capitalize()
+        template = random.choice(GREETING_TEMPLATES)
+        chosen = template.format(name=display_name)
 
-        interpolated = [tmpl.format(name=display_name) for tmpl in GREETING_TEMPLATES]
-        chosen = random.choice(interpolated)
+        interpolated = [t.format(name=display_name) for t in GREETING_TEMPLATES]
 
         return ChatGreetingResponse(
             greeting=chosen,
@@ -104,7 +121,7 @@ class GreetingService:
         user_id: UUID,
     ) -> AvailableVideosResponse:
         """
-        Return all YouTube videos that the user has researched.
+        Return all YouTube videos that the user has researched with full YouTube statistics.
 
         These are the videos whose transcripts are ingested in pgvector and can be
         used to scope a chat session.
@@ -124,15 +141,107 @@ class GreetingService:
         result = await session.execute(stmt)
         videos = result.scalars().all()
 
-        items = [
-            AvailableVideoItem(
-                db_id=v.id,
-                youtube_video_id=v.video_id,
-                title=v.title,
-                channel=v.channel,
-                url=v.url,
-            )
-            for v in videos
+        # Resolve channel stats (subscribers & avatar) and missing metadata in batch
+        unresolved_video_ids = [
+            v.video_id for v in videos
+            if (v.channel and v.channel not in _CHANNEL_STATS_CACHE) or (v.published_at is None)
         ]
+
+        video_snippet_map: dict[str, dict] = {}
+
+        if unresolved_video_ids:
+            try:
+                from app.tools.youtube_tools import youtube
+                # Batch request video snippets to get channel IDs and published dates (up to 50 videos)
+                chunk = unresolved_video_ids[:50]
+                v_res = youtube.videos().list(part="snippet,statistics", id=",".join(chunk)).execute()
+                channel_map: dict[str, str] = {}
+                db_updates = False
+                for item in v_res.get("items", []):
+                    v_id = item.get("id")
+                    snippet = item.get("snippet", {})
+                    c_id = snippet.get("channelId")
+                    c_title = snippet.get("channelTitle")
+                    if c_id and c_title:
+                        channel_map[c_id] = c_title
+                    if v_id:
+                        video_snippet_map[v_id] = snippet
+
+                # Persist missing published_at or description to database
+                for v in videos:
+                    v_item = video_snippet_map.get(v.video_id)
+                    if v_item:
+                        pub_str = v_item.get("publishedAt")
+                        if not v.published_at and pub_str:
+                            try:
+                                v.published_at = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+                                db_updates = True
+                            except Exception:
+                                pass
+                        if not v.description and v_item.get("description"):
+                            v.description = v_item.get("description")
+                            db_updates = True
+
+                if db_updates:
+                    try:
+                        await session.commit()
+                    except Exception:
+                        pass
+
+                if channel_map:
+                    c_res = youtube.channels().list(
+                        part="statistics,snippet",
+                        id=",".join(channel_map.keys()),
+                    ).execute()
+                    for c_item in c_res.get("items", []):
+                        stats = c_item.get("statistics", {})
+                        snippet = c_item.get("snippet", {})
+                        c_title = snippet.get("title")
+                        subs_str = stats.get("subscriberCount")
+                        subs_int = int(subs_str) if subs_str is not None else None
+                        avatar = snippet.get("thumbnails", {}).get("default", {}).get("url")
+                        cached_entry = {
+                            "subscriber_count": subs_int,
+                            "subscribers": _format_subscriber_count(subs_int),
+                            "channel_avatar": avatar,
+                        }
+                        if c_title:
+                            _CHANNEL_STATS_CACHE[c_title] = cached_entry
+                        _CHANNEL_STATS_CACHE[c_item["id"]] = cached_entry
+            except Exception as exc:
+                _logger.warning("chat.channel_stats_fetch_failed", error=str(exc))
+
+        items: list[AvailableVideoItem] = []
+        for v in videos:
+            channel_info = _CHANNEL_STATS_CACHE.get(v.channel or "") or {}
+            v_snippet = video_snippet_map.get(v.video_id) or {}
+            
+            published_val = v.published_at
+            if not published_val and v_snippet.get("publishedAt"):
+                try:
+                    published_val = datetime.fromisoformat(v_snippet["publishedAt"].replace("Z", "+00:00"))
+                except Exception:
+                    published_val = None
+
+            desc_val = v.description or v_snippet.get("description")
+
+            items.append(
+                AvailableVideoItem(
+                    db_id=v.id,
+                    youtube_video_id=v.video_id,
+                    title=v.title,
+                    channel=v.channel,
+                    url=v.url or f"https://www.youtube.com/watch?v={v.video_id}",
+                    thumbnail_url=f"https://i.ytimg.com/vi/{v.video_id}/mqdefault.jpg",
+                    views=v.views,
+                    likes=v.likes,
+                    comments=v.comments,
+                    subscribers=channel_info.get("subscribers"),
+                    subscriber_count=channel_info.get("subscriber_count"),
+                    published_at=published_val,
+                    description=desc_val,
+                    channel_avatar=channel_info.get("channel_avatar"),
+                )
+            )
 
         return AvailableVideosResponse(videos=items, total=len(items))

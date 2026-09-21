@@ -1,7 +1,6 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
-import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon, Calendar, Clock, MessageSquare } from 'lucide-react'
-import { createChatSession } from '../api/chat'
+import { useSearchParams } from 'react-router-dom'
+import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon, Calendar, Clock } from 'lucide-react'
 import { runResearch, getHistory, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
 import { useToast, ToastContainer } from '../components/Toast'
 import KnowledgeGraph from '../components/KnowledgeGraph'
@@ -402,16 +401,12 @@ export function ReportView({
   searchQuery = '',
   createdAt,
   completedAt,
-  onStartChat,
-  creatingChat,
 }: {
   report: ResearchResponse['report'] | HistoryItem
   query: string
   searchQuery?: string
   createdAt?: string | null
   completedAt?: string | null
-  onStartChat?: () => void
-  creatingChat?: boolean
 }) {
   const r = 'executive_summary' in report ? report : (report as HistoryItem)
   const exec = 'executive_summary' in r ? (r as ResearchResponse['report']).executive_summary : (r as HistoryItem).executive_summary ?? ''
@@ -476,34 +471,6 @@ export function ReportView({
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* AI Chat Session Callout Card */}
-      {onStartChat && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 border border-[#222222] bg-[#111111] rounded-xl animate-fade-in">
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-[#2a2a2a] bg-[#181818] text-white">
-              <MessageSquare size={18} />
-            </div>
-            <div>
-              <h3 className="text-xs font-bold tracking-[0.2em] text-white uppercase" style={{fontFamily: "'Space Grotesk',sans-serif"}}>
-                AI Chat Discussion
-              </h3>
-              <p className="mt-0.5 text-xs text-[#888888]">
-                Ask questions, explore deep dives, and interrogate the analyzed video knowledge graph.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onStartChat}
-            disabled={creatingChat}
-            className="flex items-center justify-center gap-2 border border-white bg-white hover:bg-black hover:text-white hover:border-white px-5 py-2.5 text-xs font-bold tracking-[0.15em] text-black transition-all cursor-pointer rounded-lg flex-shrink-0 disabled:opacity-50"
-          >
-            {creatingChat ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
-            <span>CHAT ABOUT THIS</span>
-          </button>
         </div>
       )}
 
@@ -598,8 +565,6 @@ export function ReportView({
 
 function Research() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
-  const [creatingChat, setCreatingChat] = useState(false)
   const [query, setQuery] = useState('')
   const [videoCount, setVideoCount] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -772,48 +737,6 @@ function Research() {
     return matches ? matches.length : 0
   }, [reportSearch, result, historyResult])
 
-  const handleStartChatFromReport = async () => {
-    const reportTitle =
-      activeQuery ||
-      (activeReport && 'research_question' in activeReport && activeReport.research_question
-        ? (activeReport.research_question as string)
-        : '') ||
-      (activeReport && 'query' in activeReport && (activeReport as any).query
-        ? (activeReport as any).query
-        : '') ||
-      'Research Analysis'
-    const runId = activeRunId || (activeReport && 'run_id' in activeReport ? (activeReport as any).run_id : null)
-
-    setCreatingChat(true)
-    try {
-      const newSession = await createChatSession({
-        title: reportTitle.length > 55 ? `${reportTitle.slice(0, 55)}...` : reportTitle,
-        research_run_id: runId,
-      })
-      window.dispatchEvent(new Event('chat:updated'))
-      toast('Chat session created! Redirecting to chat...', 'success')
-      navigate(`/chat/${newSession.id}`)
-    } catch {
-      toast('Failed to start chat session.', 'error')
-    } finally {
-      setCreatingChat(false)
-    }
-  }
-
-  const handleNew = () => {
-    setSearchParams({})
-    setResult(null)
-    setHistoryResult(null)
-    setHistoryQuery('')
-    setError(null)
-    setQuery('')
-    setAttachedVideos([])
-    setVideoInputOpen(false)
-    setVideoUrlInput('')
-    setVideoInputError('')
-    setTimeout(() => inputRef.current?.focus(), 50)
-  }
-
   const submit = async () => {
     const trimmed = query.trim()
     if (!trimmed && attachedVideos.length === 0) return
@@ -934,27 +857,6 @@ function Research() {
           <h1 className="text-xl font-bold tracking-tight text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>RESEARCHTUBE AI</h1>
           <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-[#555555]">DEEP TECHNICAL RESEARCH ENGINE</p>
         </div>
-        {(result || historyResult) && (
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <button
-              type="button"
-              onClick={handleStartChatFromReport}
-              disabled={creatingChat}
-              className="flex items-center gap-1.5 border border-[#333333] bg-[#141414] hover:bg-[#202020] hover:border-white px-4 py-2 text-xs font-bold tracking-[0.15em] text-white transition-all cursor-pointer disabled:opacity-50 rounded-lg"
-              title="Start an AI chat session about this research run"
-            >
-              {creatingChat ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
-              <span>CHAT ABOUT THIS</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleNew}
-              className="border border-white bg-white px-5 py-2 text-xs font-bold tracking-[0.2em] text-black hover:bg-black hover:text-white transition-all cursor-pointer rounded-lg"
-            >
-              NEW RESEARCH
-            </button>
-          </div>
-        )}
       </header>
 
       {/* Background research in progress banner when viewing a past report */}
@@ -1035,27 +937,6 @@ function Research() {
                 createdAt={historyResult?.created_at ?? freshRunTimestampRef.current ?? null}
                 completedAt={historyResult?.completed_at ?? freshRunTimestampRef.current ?? null}
               />
-
-              {/* Bottom Quick Chat Launcher */}
-              <div className="border border-[#222222] bg-[#111111] p-6 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-8">
-                <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <MessageSquare size={16} className="text-[#888888]" />
-                    Want to ask questions about these videos?
-                  </h3>
-                  <p className="text-xs text-[#777777] mt-1">
-                    Launch an interactive chat session scoped directly to the video transcripts from this research run.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleStartChatFromReport}
-                  disabled={creatingChat}
-                  className="border border-white bg-white text-black hover:bg-black hover:text-white px-4 py-2 text-xs font-bold tracking-[0.15em] uppercase transition-all rounded-lg cursor-pointer whitespace-nowrap disabled:opacity-50 flex-shrink-0"
-                >
-                  {creatingChat ? 'Creating Chat...' : 'Start Chat Session →'}
-                </button>
-              </div>
 
               <div ref={bottomRef} />
               {!activeRunId && (
