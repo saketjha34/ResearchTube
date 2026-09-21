@@ -1,5 +1,4 @@
-﻿import {
-  UserRound,
+﻿import { UserRound,
   Menu,
   X,
   FlaskConical,
@@ -23,9 +22,10 @@
   ArchiveRestore,
   ChevronDown,
   ChevronRight,
+  Plus,
 } from 'lucide-react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import UserMenu from './UserMenu'
 import { ShareConversationModal } from './chat/ShareConversationModal'
 import {
@@ -36,6 +36,7 @@ import {
   type HistoryItem,
 } from '../api/research'
 import {
+  createChatSession,
   listChatSessions,
   deleteChatSession,
   renameChatSession,
@@ -161,7 +162,45 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     setLoadingHistory(true)
     try {
       const data = await getHistory(1, 60)
-      setHistory(data.items)
+      let items = data.items
+
+      // Check if there is an active research run queued in localStorage
+      const storedActive = localStorage.getItem('rt_active_research')
+      if (storedActive) {
+        try {
+          const parsed = JSON.parse(storedActive)
+          if (Date.now() - (parsed.timestamp || 0) < 240000) {
+            const alreadyCompleted = items.some(
+              (it) => it.query === parsed.query && it.status === 'completed'
+            )
+            if (!alreadyCompleted) {
+              const pendingItem: HistoryItem = {
+                run_id: parsed.pendingId || ('pending-' + parsed.timestamp),
+                query: parsed.query,
+                status: 'in_progress',
+                video_count: parsed.videoCount || 1,
+                created_at: new Date(parsed.timestamp).toISOString(),
+                completed_at: null,
+                research_question: parsed.query,
+                executive_summary: null,
+                conclusion: null,
+                methodology: null,
+                learning_path: [],
+                key_topics: [],
+                limitations: [],
+                recommended_resources: [],
+                analysis_evaluations: [],
+                ranking_summary: null,
+                videos: [],
+              }
+              items = [pendingItem, ...items.filter((it) => it.run_id !== pendingItem.run_id)]
+            }
+          } else {
+            localStorage.removeItem('rt_active_research')
+          }
+        } catch {}
+      }
+      setHistory(items)
     } catch {
       setHistory([])
     } finally {
@@ -207,10 +246,21 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     const handleRefreshChat = () => {
       void loadChats()
     }
+    const handleResearchStarted = (e: any) => {
+      const pending = e?.detail as HistoryItem
+      if (pending) {
+        setHistory((prev) => [pending, ...prev.filter((it) => it.run_id !== pending.run_id)])
+      } else {
+        void loadHistory()
+      }
+    }
+
     window.addEventListener('research:created', handleRefreshHistory)
+    window.addEventListener('research:started', handleResearchStarted as EventListener)
     window.addEventListener('chat:updated', handleRefreshChat)
     return () => {
       window.removeEventListener('research:created', handleRefreshHistory)
+      window.removeEventListener('research:started', handleResearchStarted as EventListener)
       window.removeEventListener('chat:updated', handleRefreshChat)
     }
   }, [])
@@ -388,54 +438,182 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pinnedHistory = completedHistory.filter((item) => pinnedRunIds.includes(item.run_id))
   const regularHistory = completedHistory.filter((item) => !pinnedRunIds.includes(item.run_id))
 
-  const searchResults = searchQuery.trim()
-    ? completedHistory.filter((item) => item.query.toLowerCase().includes(searchQuery.toLowerCase()))
-    : completedHistory.slice(0, 8)
+  // --- Unified Search (Research Runs + Chat Sessions) ---
+  const [searchFilter, setSearchFilter] = useState<'all' | 'research' | 'chat'>('all')
 
-  const handleSearchNavigate = (runId: string) => {
+  const allSearchItems = useMemo(() => {
+    const researchItems = completedHistory.map((item) => ({
+      id: item.run_id,
+      type: 'research' as const,
+      title: item.query,
+      date: item.created_at,
+      isPinned: pinnedRunIds.includes(item.run_id),
+      isArchived: false,
+    }))
+
+    const chatItems = [
+      ...chatSessions.map((s) => ({
+        id: s.id,
+        type: 'chat' as const,
+        title: s.title || 'Untitled Chat',
+        date: s.updated_at || s.created_at,
+        isPinned: s.is_pinned,
+        isArchived: false,
+      })),
+      ...archivedChatSessions.map((s) => ({
+        id: s.id,
+        type: 'chat' as const,
+        title: s.title || 'Untitled Chat',
+        date: s.updated_at || s.created_at,
+        isPinned: s.is_pinned,
+        isArchived: true,
+      })),
+    ]
+
+    return { researchItems, chatItems }
+  }, [completedHistory, pinnedRunIds, chatSessions, archivedChatSessions])
+
+  const filteredSearchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    let pool: Array<{
+      id: string
+      type: 'research' | 'chat'
+      title: string
+      date?: string
+      isPinned?: boolean
+      isArchived?: boolean
+    }> = []
+
+    if (searchFilter === 'all') {
+      pool = [...allSearchItems.chatItems, ...allSearchItems.researchItems]
+    } else if (searchFilter === 'research') {
+      pool = allSearchItems.researchItems
+    } else if (searchFilter === 'chat') {
+      pool = allSearchItems.chatItems
+    }
+
+    if (q) {
+      return pool.filter((item) => item.title.toLowerCase().includes(q))
+    }
+
+    if (searchFilter === 'all') {
+      return [
+        ...allSearchItems.chatItems.slice(0, 5),
+        ...allSearchItems.researchItems.slice(0, 5),
+      ]
+    }
+    return pool.slice(0, 10)
+  }, [searchQuery, searchFilter, allSearchItems])
+
+  const handleSearchNavigate = (item: { id: string; type: 'research' | 'chat' }) => {
     setSearchOpen(false)
     setSearchQuery('')
-    navigate(`/research?run=${runId}`)
+    if (item.type === 'research') {
+      navigate(`/research?run=${item.id}`)
+    } else {
+      navigate(`/chat/${item.id}`)
+    }
+  }
+
+  const handleStartNewChatFromSearch = () => {
+    setSearchOpen(false)
+    setSearchQuery('')
+    navigate('/chat')
+    window.dispatchEvent(new Event('chat:new'))
+    window.dispatchEvent(new Event('chat:updated'))
+  }
+
+  const handleCreateChatFromHistory = async (item: HistoryItem) => {
+    setActiveMenuRunId(null)
+    try {
+      const session = await createChatSession({
+        title: item.query.length > 50 ? `${item.query.slice(0, 50)}...` : item.query,
+        research_run_id: item.run_id,
+      })
+      window.dispatchEvent(new Event('chat:updated'))
+      navigate(`/chat/${session.id}`)
+    } catch {
+      navigate('/chat')
+    }
   }
 
   // Shared history item renderer
-  const renderHistoryItem = (item: HistoryItem) => (
-    <li key={item.run_id} className="relative group">
-      <button
-        onClick={() => {
-          if (isLongPressRef.current) return
-          navigate(`/research?run=${item.run_id}`)
-        }}
-        onTouchStart={(e) => handleTouchStart(e, item.run_id)}
-        onTouchEnd={handleTouchEnd}
-        onTouchMove={handleTouchMove}
-        className={`flex w-full items-start gap-2 rounded-md pl-2 pr-8 py-2 text-left text-xs transition-all duration-200 hover:bg-[#111111] ${
-          activeRunId === item.run_id
-            ? 'bg-[#111111] text-white font-bold border-l-2 border-white'
-            : 'text-[#888888] hover:text-white'
-        }`}
-      >
-        {pinnedRunIds.includes(item.run_id) ? (
-          <Pin size={10} className="mt-0.5 flex-shrink-0 opacity-50 text-white" />
-        ) : (
-          <Clock size={11} className="mt-0.5 flex-shrink-0 opacity-50" />
+  const renderHistoryItem = (item: HistoryItem) => {
+    const isPending = item.status === 'in_progress' || item.status === 'planning' || item.status === 'researching' || item.run_id.startsWith('pending-')
+
+    return (
+      <li key={item.run_id} className="relative group">
+        <button
+          onClick={() => {
+            if (isLongPressRef.current) return
+            if (isPending) {
+              navigate('/research')
+            } else {
+              navigate(`/research?run=${item.run_id}`)
+            }
+          }}
+          onTouchStart={(e) => handleTouchStart(e, item.run_id)}
+          onTouchEnd={handleTouchEnd}
+          onTouchMove={handleTouchMove}
+          className={`flex w-full items-start gap-2 rounded-md pl-2 pr-14 py-2 text-left text-xs transition-all duration-200 hover:bg-[#111111] ${
+            activeRunId === item.run_id
+              ? 'bg-[#111111] text-white font-bold border-l-2 border-white'
+              : isPending
+              ? 'text-white/90 bg-white/5'
+              : 'text-[#888888] hover:text-white'
+          }`}
+        >
+          {isPending ? (
+            <Loader2 size={11} className="mt-0.5 flex-shrink-0 animate-spin text-white" />
+          ) : pinnedRunIds.includes(item.run_id) ? (
+            <Pin size={10} className="mt-0.5 flex-shrink-0 opacity-50 text-white" />
+          ) : (
+            <Clock size={11} className="mt-0.5 flex-shrink-0 opacity-50" />
+          )}
+          <span className="line-clamp-2 leading-relaxed">
+            {item.query}
+            {isPending && <span className="ml-1 text-[10px] text-[#888888] font-mono">(Running...)</span>}
+          </span>
+        </button>
+
+        {!isPending && (
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex show-on-touch items-center gap-0.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleCreateChatFromHistory(item)
+              }}
+              title="Chat about this research"
+              className="flex items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
+            >
+              <MessageSquare size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setActiveMenuRunId(activeMenuRunId === item.run_id ? null : item.run_id)
+              }}
+              title="More options"
+              className="flex items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
+            >
+              <MoreVertical size={13} />
+            </button>
+          </div>
         )}
-        <span className="line-clamp-2 leading-relaxed">{item.query}</span>
-      </button>
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          setActiveMenuRunId(activeMenuRunId === item.run_id ? null : item.run_id)
-        }}
-        className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex show-on-touch items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
-      >
-        <MoreVertical size={13} />
-      </button>
       {activeMenuRunId === item.run_id && (
         <div
           onClick={(e) => e.stopPropagation()}
           className="absolute right-2 top-8 z-50 w-44 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
         >
+          <button
+            onClick={() => void handleCreateChatFromHistory(item)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+          >
+            <MessageSquare size={12} className="opacity-70" />
+            <span>Chat about this</span>
+          </button>
           <button
             onClick={() => {
               setShareTargetRunId(item.run_id)
@@ -492,7 +670,8 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </div>
       )}
     </li>
-  )
+    )
+  }
 
   // Chat item renderer
   const renderChatItem = (item: ChatSession) => {
@@ -1079,33 +1258,135 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {searchOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/80 px-4 backdrop-blur-xs">
           <div className="w-full max-w-lg border border-[#222222] bg-[#111111] shadow-2xl animate-fade-in rounded-2xl overflow-hidden">
+            {/* Search Input Row */}
             <div className="flex items-center gap-3 border-b border-[#222222] px-4 py-3">
-              <Search size={16} className="text-[#555555]" />
+              <Search size={16} className="text-[#666666]" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search past research runs..."
+                placeholder="Search research runs & chat sessions..."
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-[#555555]"
               />
-              <span className="border border-[#222222] bg-black px-2 py-0.5 text-[10px] font-bold text-[#555555] rounded">
+              <button
+                type="button"
+                onClick={() => setSearchOpen(false)}
+                className="border border-[#222222] bg-black px-2 py-0.5 text-[10px] font-bold text-[#555555] rounded hover:text-white transition-colors cursor-pointer"
+              >
                 ESC
-              </span>
+              </button>
             </div>
-            <div className="max-h-72 overflow-y-auto p-2 custom-scrollbar">
-              {searchResults.length === 0 ? (
-                <p className="p-4 text-center text-xs text-[#555555]">No matching research runs found.</p>
+
+            {/* Filter Tags Bar & New Chat Quick Action */}
+            <div className="flex items-center justify-between border-b border-[#1f1f1f] bg-[#0c0c0d] px-4 py-2 text-xs select-none">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setSearchFilter('all')}
+                  className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
+                    searchFilter === 'all'
+                      ? 'bg-white text-black font-semibold shadow-sm'
+                      : 'bg-[#161616] text-[#888888] hover:text-white hover:bg-[#202020]'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchFilter('research')}
+                  className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
+                    searchFilter === 'research'
+                      ? 'bg-white text-black font-semibold shadow-sm'
+                      : 'bg-[#161616] text-[#888888] hover:text-white hover:bg-[#202020]'
+                  }`}
+                >
+                  Research
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchFilter('chat')}
+                  className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
+                    searchFilter === 'chat'
+                      ? 'bg-white text-black font-semibold shadow-sm'
+                      : 'bg-[#161616] text-[#888888] hover:text-white hover:bg-[#202020]'
+                  }`}
+                >
+                  Chat
+                </button>
+              </div>
+
+              {/* Quick Action: Start New Chat */}
+              <button
+                type="button"
+                onClick={handleStartNewChatFromSearch}
+                className="flex items-center gap-1.5 rounded-lg border border-[#2a2a2a] bg-[#161616] px-2.5 py-1 text-[11px] font-medium text-white hover:border-[#444444] hover:bg-[#222222] transition-all cursor-pointer group"
+                title="Start a fresh new AI chat"
+              >
+                <Plus size={12} className="text-[#aaaaaa] group-hover:text-white transition-colors" />
+                <span>New Chat</span>
+              </button>
+            </div>
+
+            {/* Results List */}
+            <div className="max-h-80 overflow-y-auto p-2 custom-scrollbar">
+              {filteredSearchResults.length === 0 ? (
+                <div className="py-8 px-4 text-center">
+                  <p className="text-xs text-[#666666]">
+                    No matching {searchFilter === 'all' ? 'research runs or chats' : searchFilter === 'research' ? 'research runs' : 'chat sessions'} found.
+                  </p>
+                  <button
+                    onClick={handleStartNewChatFromSearch}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#333333] bg-[#161616] px-3 py-1.5 text-xs text-white hover:border-[#555555] hover:bg-[#222222] transition-all cursor-pointer"
+                  >
+                    <Plus size={13} />
+                    <span>Start a New Chat</span>
+                  </button>
+                </div>
               ) : (
                 <ul className="space-y-1">
-                  {searchResults.map((item) => (
-                    <li key={item.run_id}>
+                  {filteredSearchResults.map((item) => (
+                    <li key={`${item.type}-${item.id}`}>
                       <button
-                        onClick={() => handleSearchNavigate(item.run_id)}
-                        className="flex w-full items-center justify-between rounded-lg p-2.5 text-left text-xs text-[#cccccc] hover:bg-[#181818] hover:text-white transition-colors"
+                        onClick={() => handleSearchNavigate(item)}
+                        className="flex w-full items-center justify-between rounded-xl p-2.5 text-left text-xs text-[#cccccc] hover:bg-[#181818] hover:text-white transition-all group cursor-pointer"
                       >
-                        <span className="truncate pr-4">{item.query}</span>
-                        <ArrowUpRight size={13} className="text-[#555555] flex-shrink-0" />
+                        <div className="flex items-center gap-2.5 min-w-0 pr-3">
+                          {/* Tag: Research vs Chat (Clean dark greyish-black, no icons) */}
+                          {item.type === 'research' ? (
+                            <span className="rounded-md bg-[#161616] border border-[#282828] px-2 py-0.5 text-[10px] font-medium text-[#8e8e8e] flex-shrink-0">
+                              Research
+                            </span>
+                          ) : (
+                            <span className="rounded-md bg-[#161616] border border-[#282828] px-2 py-0.5 text-[10px] font-medium text-[#8e8e8e] flex-shrink-0">
+                              Chat
+                            </span>
+                          )}
+
+                          {item.isPinned && (
+                            <Pin size={10} className="text-white flex-shrink-0 opacity-70" />
+                          )}
+
+                          {item.isArchived && (
+                            <span className="rounded bg-amber-500/10 border border-amber-500/20 px-1 py-0.2 text-[9px] text-amber-300 flex-shrink-0">
+                              Archived
+                            </span>
+                          )}
+
+                          <span className="truncate font-medium">{item.title}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {item.date && (
+                            <span className="text-[10px] text-[#555555] font-mono group-hover:text-[#777777] transition-colors hidden sm:inline">
+                              {new Date(item.date).toLocaleDateString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </span>
+                          )}
+                          <ArrowUpRight size={13} className="text-[#555555] group-hover:text-white transition-colors" />
+                        </div>
                       </button>
                     </li>
                   ))}

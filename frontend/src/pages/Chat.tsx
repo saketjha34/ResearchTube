@@ -2,17 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import {
-  Plus,
   Edit2,
   Check,
   X,
   AlertCircle,
   Loader2,
-  Share2,
-  Pin,
   ChevronDown,
   Archive,
   ArchiveRestore,
+  Calendar,
 } from 'lucide-react'
 import {
   getAvailableVideos,
@@ -20,7 +18,6 @@ import {
   createChatSession,
   renameChatSession,
   archiveChatSession,
-  togglePinSession,
   createShareLink,
   revokeShareLink,
   streamMessage,
@@ -36,8 +33,39 @@ import { ShareConversationModal } from '../components/chat/ShareConversationModa
 
 
 
+function formatChatCreationDate(dateString?: string | null): string {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return ''
+  const dateFormatted = date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+  const timeFormatted = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+  return `${dateFormatted} at ${timeFormatted}`
+}
+
 export default function Chat() {
   const { sessionId } = useParams<{ sessionId?: string }>()
+  // Reset state on global 'chat:new' event
+  useEffect(() => {
+    const handleNew = () => {
+      setSession(null)
+      setMessages([])
+      setInput('')
+      setError(null)
+      setSelectedVideo(null)
+    }
+    window.addEventListener('chat:new', handleNew)
+    return () => window.removeEventListener('chat:new', handleNew)
+  }, [])
+
   const navigate = useNavigate()
   const { user } = useAuth()
 
@@ -96,6 +124,7 @@ export default function Chat() {
   const animatedTextRef = useRef('')
   const streamRafIdRef = useRef<number | null>(null)
   const isStreamActiveRef = useRef(false)
+  const streamingStartTimeRef = useRef<string | null>(null)
 
   // Track window scroll position to determine if user is pinned near bottom
   useEffect(() => {
@@ -191,27 +220,7 @@ export default function Chat() {
     void load()
   }, [sessionId, availableVideos])
 
-  // Start new chat
-  const handleNewChat = () => {
-    navigate('/chat')
-    setSession(null)
-    setMessages([])
-    setInput('')
-    setError(null)
-    setSelectedVideo(null)
-  }
 
-  // Toggle pin status
-  const handleTogglePin = async () => {
-    if (!session) return
-    try {
-      const updated = await togglePinSession(session.id)
-      setSession((prev) => (prev ? { ...prev, is_pinned: updated.is_pinned } : null))
-      window.dispatchEvent(new Event('chat:updated'))
-    } catch {
-      alert('Failed to update pin status.')
-    }
-  }
 
   // Toggle archive status
   const handleToggleArchive = async () => {
@@ -334,7 +343,7 @@ export default function Chat() {
 
       sources: null,
 
-      created_at: new Date().toISOString(),
+      created_at: streamingStartTimeRef.current || new Date().toISOString(),
 
     }
 
@@ -418,6 +427,7 @@ export default function Chat() {
     rawStreamBufferRef.current = ''
     animatedTextRef.current = ''
     isStreamActiveRef.current = true
+    streamingStartTimeRef.current = new Date().toISOString()
     setIsStreaming(true)
     setStreamingText('')
     // Smooth scroll down to optimistic message
@@ -519,6 +529,7 @@ export default function Chat() {
           setStreamingText('')
           rawStreamBufferRef.current = ''
           animatedTextRef.current = ''
+          streamingStartTimeRef.current = null
           justCreatedSessionRef.current = currentSessionId
           window.dispatchEvent(new Event('chat:updated'))
           navigate(`/chat/${currentSessionId}`, { replace: true })
@@ -538,6 +549,7 @@ export default function Chat() {
         setStreamingText('')
         rawStreamBufferRef.current = ''
         animatedTextRef.current = ''
+        streamingStartTimeRef.current = null
         justCreatedSessionRef.current = null
       },
     }, selectedVideo ? selectedVideo.db_id : null)
@@ -546,41 +558,41 @@ export default function Chat() {
   return (
     <div className="flex flex-col min-h-[calc(100vh-8rem)] w-full">
       {/* Header Bar */}
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-[#1c1c1c] pb-4">
-        <div className="flex items-center gap-3">
-          <div>
-            {editingTitle ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={titleInput}
-                  onChange={(e) => setTitleInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && void handleRename()}
-                  className="rounded bg-[#1a1a1a] border border-[#333333] px-2 py-1 text-sm font-semibold text-white focus:border-[#555555] focus:outline-none"
-                  autoFocus
-                />
-                <button
-                  onClick={() => void handleRename()}
-                  className="p-1 text-emerald-400 hover:text-emerald-300"
-                >
-                  <Check size={14} />
-                </button>
-                <button
-                  onClick={() => setEditingTitle(false)}
-                  className="p-1 text-[#888888] hover:text-white"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold tracking-tight text-white line-clamp-1">
-                  {session?.title || 'Interactive AI Research Chat'}
-                </h1>
-                {session && (
+      {Boolean(session?.title && session?.title !== 'Interactive AI Research Chat') && (
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-[#1c1c1c] pb-4">
+          <div className="flex items-center gap-3">
+            <div>
+              {editingTitle ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={titleInput}
+                    onChange={(e) => setTitleInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && void handleRename()}
+                    className="rounded bg-[#1a1a1a] border border-[#333333] px-2 py-1 text-sm font-semibold text-white focus:border-[#555555] focus:outline-none"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => void handleRename()}
+                    className="p-1 text-emerald-400 hover:text-emerald-300"
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    onClick={() => setEditingTitle(false)}
+                    className="p-1 text-[#888888] hover:text-white"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <h1 className="text-base sm:text-lg font-bold tracking-tight text-white line-clamp-1">
+                    {session?.title}
+                  </h1>
                   <button
                     onClick={() => {
-                      setTitleInput(session.title || '')
+                      setTitleInput(session?.title || '')
                       setEditingTitle(true)
                     }}
                     className="text-[#666666] hover:text-white transition-colors"
@@ -588,69 +600,12 @@ export default function Chat() {
                   >
                     <Edit2 size={12} />
                   </button>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-
-        {/* Header Right: Pin, Share & New Chat */}
-        <div className="flex items-center gap-2">
-          {session && (
-            <>
-              {/* Pin Toggle */}
-              <button
-                onClick={handleTogglePin}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
-                  session.is_pinned
-                    ? 'border-white/40 bg-white/10 text-white'
-                    : 'border-[#2a2a2a] bg-[#121212] text-[#888888] hover:border-[#444444] hover:text-white'
-                }`}
-                title={session.is_pinned ? 'Unpin conversation' : 'Pin conversation to top'}
-              >
-                <Pin size={13} className={session.is_pinned ? 'fill-white text-white' : ''} />
-                <span className="hidden sm:inline">{session.is_pinned ? 'Pinned' : 'Pin'}</span>
-              </button>
-
-              {/* Share Button */}
-              <button
-                onClick={handleOpenShare}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
-                  session.is_shared
-                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-                    : 'border-[#2a2a2a] bg-[#121212] text-[#888888] hover:border-[#444444] hover:text-white'
-                }`}
-                title="Share conversation"
-              >
-                <Share2 size={13} />
-                <span className="hidden sm:inline">Share</span>
-              </button>
-
-              {/* Archive Toggle Button */}
-              <button
-                onClick={handleToggleArchive}
-                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
-                  session.is_archived
-                    ? 'border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
-                    : 'border-[#2a2a2a] bg-[#121212] text-[#888888] hover:border-[#444444] hover:text-white'
-                }`}
-                title={session.is_archived ? 'Unarchive conversation' : 'Archive conversation'}
-              >
-                {session.is_archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
-                <span className="hidden sm:inline">{session.is_archived ? 'Unarchive' : 'Archive'}</span>
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={handleNewChat}
-            className="flex items-center gap-1.5 rounded-lg border border-[#333333] bg-[#141414] px-3.5 py-1.5 text-xs font-semibold text-white hover:border-[#666666] hover:bg-[#202020] transition-all"
-          >
-            <Plus size={14} />
-            <span>New Chat</span>
-          </button>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Error alert */}
       {error && (
@@ -716,6 +671,18 @@ export default function Chat() {
           /* Active Message Thread + Sticky Bottom Chat Box */
           <>
             <div className="flex-1 overflow-y-auto space-y-6 pb-8">
+              {/* Chat Creation Date & Time Header (Marked in Green by user) */}
+              {(session?.created_at || (messages.length > 0 && messages[0]?.created_at)) && (
+                <div className="flex items-center justify-center pt-2 pb-1 select-none animate-fade-in">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-[#262626] bg-[#121212]/90 backdrop-blur-md px-4 py-1.5 text-xs text-[#8e8e8e] shadow-md hover:border-[#383838] transition-colors">
+                    <Calendar size={13} className="text-[#888888]" />
+                    <span className="font-medium tracking-wide">
+                      Created {formatChatCreationDate(session?.created_at || messages[0]?.created_at)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {messages.map((msg) => (
                 <ChatMessageItem
                   key={msg.id}
@@ -734,7 +701,7 @@ export default function Chat() {
                     role: 'assistant',
                     content: streamingText,
                     sources: null,
-                    created_at: new Date().toISOString(),
+                    created_at: streamingStartTimeRef.current || new Date().toISOString(),
                   }}
                   isStreaming={true}
                   onShare={handleOpenShare}

@@ -12,6 +12,7 @@ import Research from '../pages/Research'
 import Chat from '../pages/Chat'
 import AuthTest from '../pages/AuthTest'
 import Profile from '../pages/Profile'
+import Settings from '../pages/Settings'
 import { SharedReport } from '../pages/SharedReport'
 import SharedChat from '../pages/SharedChat'
 import ShareResolver from '../pages/ShareResolver'
@@ -41,6 +42,7 @@ function AppRoutes() {
           <Route path="/chat/:sessionId?" element={<Chat />} />
           <Route path="/auth-test" element={<AuthTest />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

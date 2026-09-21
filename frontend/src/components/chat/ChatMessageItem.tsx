@@ -5,7 +5,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video, Share } from 'lucide-react'
+import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video, Share , Clock } from 'lucide-react'
 import type { ChatMessage, SourceCitation } from '../../api/chat'
 
 interface ChatMessageItemProps {
@@ -56,6 +56,38 @@ function formatLaTeX(content: string): string {
       return text
     })
     .join('')
+}
+
+function formatMessageTime(dateString?: string | null): string {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return ''
+  const now = new Date()
+  const isToday = date.toDateString() === now.toDateString()
+
+  const timeFormatted = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+
+  if (isToday) {
+    return `Today at ${timeFormatted}`
+  }
+
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday at ${timeFormatted}`
+  }
+
+  const isCurrentYear = date.getFullYear() === now.getFullYear()
+  const dateFormatted = date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(isCurrentYear ? {} : { year: 'numeric' }),
+  })
+  return `${dateFormatted}, ${timeFormatted}`
 }
 
 function formatTime(seconds: number | null | undefined): string {
@@ -316,13 +348,21 @@ export const ChatMessageItem = React.memo(
   if (isUser) {
     return (
       <div className="flex w-full justify-end my-5 animate-fade-in">
-        <div className="flex max-w-[85%] md:max-w-[75%] items-start gap-3">
-          <div className="rounded-2xl rounded-tr-sm bg-[#1c1c1c] border border-[#2b2b2b] px-5 py-3.5 text-[15px] text-white shadow-lg leading-relaxed">
-            <p className="whitespace-pre-wrap select-text">{message.content}</p>
+        <div className="flex flex-col items-end max-w-[85%] md:max-w-[75%]">
+          <div className="flex items-start gap-3">
+            <div className="rounded-2xl rounded-tr-sm bg-[#1c1c1c] border border-[#2b2b2b] px-5 py-3.5 text-[15px] text-white shadow-lg leading-relaxed">
+              <p className="whitespace-pre-wrap select-text">{message.content}</p>
+            </div>
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#2a2a2a] text-[#aaaaaa]">
+              <User size={15} />
+            </div>
           </div>
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#2a2a2a] text-[#aaaaaa]">
-            <User size={15} />
-          </div>
+          {message.created_at && (
+            <div className="mt-1 mr-11 flex items-center gap-1 text-[11px] text-[#666666] font-mono select-none">
+              <Clock size={10} className="opacity-60 text-[#888888]" />
+              <span>{formatMessageTime(message.created_at)}</span>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -465,33 +505,53 @@ export const ChatMessageItem = React.memo(
           <SourcesList sources={message.sources} />
         )}
 
-        {/* Bottom Actions: Copy Markdown & Share Entire Chat */}
-        {!isStreaming && message.content && (
-          <div className="mt-4 pt-3 flex items-center gap-1 border-t border-[#1a1a1a] text-[#888888]">
-            <button
-              onClick={handleCopyText}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[#888888] hover:text-white hover:bg-[#1c1c1c] transition-colors"
-              title="Copy markdown"
-              aria-label="Copy entire response as markdown"
-            >
-              {copied ? (
+        {/* Bottom Actions & AI Response Timestamp */}
+        {(message.content || message.created_at) && (
+          <div className="mt-4 pt-3 flex items-center justify-between border-t border-[#1a1a1a] text-[#888888]">
+            <div className="flex items-center gap-1">
+              {!isStreaming && message.content && (
                 <>
-                  <Check size={14} className="text-emerald-400" />
-                  <span className="text-[11px] text-emerald-400 font-medium">Copied!</span>
-                </>
-              ) : (
-                <Copy size={14} />
-              )}
-            </button>
+                  <button
+                    onClick={handleCopyText}
+                    className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[#888888] hover:text-white hover:bg-[#1c1c1c] transition-colors"
+                    title="Copy markdown"
+                    aria-label="Copy entire response as markdown"
+                  >
+                    {copied ? (
+                      <>
+                        <Check size={14} className="text-emerald-400" />
+                        <span className="text-[11px] text-emerald-400 font-medium">Copied!</span>
+                      </>
+                    ) : (
+                      <Copy size={14} />
+                    )}
+                  </button>
 
-            <button
-              onClick={handleShareClick}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[#888888] hover:text-white hover:bg-[#1c1c1c] transition-colors"
-              title="Share entire conversation"
-              aria-label="Share entire conversation"
-            >
-              <Share size={14} />
-            </button>
+                  <button
+                    onClick={handleShareClick}
+                    className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[#888888] hover:text-white hover:bg-[#1c1c1c] transition-colors"
+                    title="Share entire conversation"
+                    aria-label="Share entire conversation"
+                  >
+                    <Share size={14} />
+                  </button>
+                </>
+              )}
+              {isStreaming && (
+                <span className="flex items-center gap-2 text-[11px] text-[#888888]">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  <span>Generating response...</span>
+                </span>
+              )}
+            </div>
+
+            {/* AI Response Timestamp */}
+            {message.created_at && (
+              <div className="flex items-center gap-1.5 text-[11px] text-[#71717a] font-mono select-none">
+                <Clock size={11} className="text-[#52525b]" />
+                <span>{formatMessageTime(message.created_at)}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -504,6 +564,7 @@ export const ChatMessageItem = React.memo(
       prev.message.id === next.message.id &&
       prev.message.content === next.message.content &&
       prev.message.sources === next.message.sources &&
+      prev.message.created_at === next.message.created_at &&
       prev.onShare === next.onShare
     )
   }

@@ -1,7 +1,8 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon } from 'lucide-react'
-import { runResearch, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon, Calendar, Clock, MessageSquare } from 'lucide-react'
+import { createChatSession } from '../api/chat'
+import { runResearch, getHistory, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
 import { useToast, ToastContainer } from '../components/Toast'
 import KnowledgeGraph from '../components/KnowledgeGraph'
 import { Onboarding } from '../components/Onboarding'
@@ -24,6 +25,40 @@ const PLACEHOLDER_TOPICS = [
   "Best roadmaps to transition into AI engineering",
   "Cracking large-scale system design interviews",
 ];
+
+
+function YoutubeIcon({ className = 'h-3.5 w-3.5', size = 14 }: { className?: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  )
+}
+
+export interface AttachedVideo {
+  id: string
+  url: string
+}
+
+const YOUTUBE_REGEX = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:[^ \n\t\r"'<]*&)?v=|embed\/|v\/|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/
+
+function extractYoutubeId(input: string): string | null {
+  if (!input) return null
+  const trimmed = input.trim()
+  const match = trimmed.match(YOUTUBE_REGEX)
+  if (match && match[1]) return match[1]
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed
+  return null
+}
+
+function extractAllYoutubeIds(text: string): string[] {
+  if (!text) return []
+  const globalRegex = /(?:https?:\/\/)?(?:www\.|m\.)?(?:youtube\.com\/(?:watch\?(?:[^ \n\t\r"'<]*&)?v=|embed\/|v\/|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/g
+  const matches = [...text.matchAll(globalRegex)]
+  const ids = matches.map((m) => m[1]).filter(Boolean)
+  return Array.from(new Set(ids))
+}
+
 
 function useTypingEffect(items: string[], speed = 55, pause = 2200) {
   const [text, setText] = useState('')
@@ -82,6 +117,56 @@ function useLoadingStatus(statuses: string[], interval = 3500) {
     return () => clearInterval(t)
   }, [statuses, interval])
   return { status: statuses[index], fade }
+}
+
+function formatChatCreationDate(dateString?: string | null): string {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return ''
+  const dateFormatted = date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+  const timeFormatted = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+  return `${dateFormatted} at ${timeFormatted}`
+}
+
+function formatMessageTime(dateString?: string | null): string {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return ''
+  const now = new Date()
+  const isToday = date.toDateString() === now.toDateString()
+
+  const timeFormatted = date.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+
+  if (isToday) {
+    return `Today at ${timeFormatted}`
+  }
+
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday at ${timeFormatted}`
+  }
+
+  const isCurrentYear = date.getFullYear() === now.getFullYear()
+  const dateFormatted = date.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(isCurrentYear ? {} : { year: 'numeric' }),
+  })
+  return `${dateFormatted}, ${timeFormatted}`
 }
 
 // Copy Button
@@ -311,7 +396,23 @@ interface RecommendedResource {
   recommendation_reason: string | null; thumbnail_url?: string | null
 }
 
-export function ReportView({ report, query, searchQuery = '' }: { report: ResearchResponse['report'] | HistoryItem; query: string; searchQuery?: string }) {
+export function ReportView({
+  report,
+  query,
+  searchQuery = '',
+  createdAt,
+  completedAt,
+  onStartChat,
+  creatingChat,
+}: {
+  report: ResearchResponse['report'] | HistoryItem
+  query: string
+  searchQuery?: string
+  createdAt?: string | null
+  completedAt?: string | null
+  onStartChat?: () => void
+  creatingChat?: boolean
+}) {
   const r = 'executive_summary' in report ? report : (report as HistoryItem)
   const exec = 'executive_summary' in r ? (r as ResearchResponse['report']).executive_summary : (r as HistoryItem).executive_summary ?? ''
   const resources: RecommendedResource[] = ('recommended_resources' in r ? ((r as any).recommended_resources ?? []) : [])
@@ -321,13 +422,36 @@ export function ReportView({ report, query, searchQuery = '' }: { report: Resear
   const method = 'methodology' in r ? (r as ResearchResponse['report']).methodology : (r as HistoryItem).methodology ?? ''
   const limits: string[] = ('limitations' in r ? ((r as any).limitations ?? []) : [])
 
+  const effectiveCreatedAt = createdAt || ('created_at' in report ? (report as HistoryItem).created_at : null)
+  const effectiveCompletedAt = completedAt || ('completed_at' in report ? (report as HistoryItem).completed_at : null)
+
   return (
     <div className="space-y-10 animate-slide-up">
-      {/* User query bubble */}
-      <div className="flex justify-end">
-        <div className="max-w-2xl border border-[#222222] bg-[#111111] px-6 py-5">
-          <p className="text-base font-bold tracking-wide text-white">{query}</p>
+      {/* Research Creation Date & Time Header (Centered, matching Chat interface) */}
+      {effectiveCreatedAt && (
+        <div className="flex items-center justify-center pt-2 pb-1 select-none animate-fade-in">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#262626] bg-[#121212]/90 backdrop-blur-md px-4 py-1.5 text-xs text-[#8e8e8e] shadow-md hover:border-[#383838] transition-colors">
+            <Calendar size={13} className="text-[#888888]" />
+            <span className="font-medium tracking-wide">
+              Created {formatChatCreationDate(effectiveCreatedAt)}
+            </span>
+          </div>
         </div>
+      )}
+
+      {/* User query bubble */}
+      <div className="flex flex-col items-end">
+        <div className="max-w-2xl border border-[#222222] bg-[#111111] px-6 py-5">
+          <p className="text-base font-bold tracking-wide text-white whitespace-pre-wrap">
+            {query || (report as any)?.research_question || (report as any)?.query || 'Research Query'}
+          </p>
+        </div>
+        {effectiveCreatedAt && (
+          <div className="mt-1.5 mr-1 flex items-center gap-1.5 text-[11px] text-[#666666] font-mono select-none">
+            <Clock size={10} className="opacity-60 text-[#888888]" />
+            <span>{formatMessageTime(effectiveCreatedAt)}</span>
+          </div>
+        )}
       </div>
 
       {/* Executive Summary */}
@@ -341,6 +465,45 @@ export function ReportView({ report, query, searchQuery = '' }: { report: Resear
             <CopyButton text={exec} />
           </div>
           <p className="text-lg leading-8 text-[#cccccc] font-medium"><Highlight text={exec} query={searchQuery} /></p>
+
+          {/* Date and time below the response */}
+          {(effectiveCompletedAt || effectiveCreatedAt) && (
+            <div className="mt-6 pt-4 border-t border-[#1c1c1c] flex items-center justify-between text-[#888888] text-xs">
+              <span className="text-[11px] text-[#666666]">Research Report</span>
+              <div className="flex items-center gap-1.5 text-[11px] text-[#71717a] font-mono select-none">
+                <Clock size={11} className="text-[#52525b]" />
+                <span>{formatMessageTime(effectiveCompletedAt || effectiveCreatedAt)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* AI Chat Session Callout Card */}
+      {onStartChat && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 border border-[#222222] bg-[#111111] rounded-xl animate-fade-in">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border border-[#2a2a2a] bg-[#181818] text-white">
+              <MessageSquare size={18} />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold tracking-[0.2em] text-white uppercase" style={{fontFamily: "'Space Grotesk',sans-serif"}}>
+                AI Chat Discussion
+              </h3>
+              <p className="mt-0.5 text-xs text-[#888888]">
+                Ask questions, explore deep dives, and interrogate the analyzed video knowledge graph.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onStartChat}
+            disabled={creatingChat}
+            className="flex items-center justify-center gap-2 border border-white bg-white hover:bg-black hover:text-white hover:border-white px-5 py-2.5 text-xs font-bold tracking-[0.15em] text-black transition-all cursor-pointer rounded-lg flex-shrink-0 disabled:opacity-50"
+          >
+            {creatingChat ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
+            <span>CHAT ABOUT THIS</span>
+          </button>
         </div>
       )}
 
@@ -435,6 +598,8 @@ export function ReportView({ report, query, searchQuery = '' }: { report: Resear
 
 function Research() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const [creatingChat, setCreatingChat] = useState(false)
   const [query, setQuery] = useState('')
   const [videoCount, setVideoCount] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -442,8 +607,14 @@ function Research() {
   const [result, setResult] = useState<ResearchResponse | null>(null)
   const [historyResult, setHistoryResult] = useState<HistoryItem | null>(null)
   const [historyQuery, setHistoryQuery] = useState('')
+  const [lastSubmittedQuery, setLastSubmittedQuery] = useState('')
+  const freshRunTimestampRef = useRef<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showOptions, setShowOptions] = useState(false)
+  const [attachedVideos, setAttachedVideos] = useState<AttachedVideo[]>([])
+  const [videoInputOpen, setVideoInputOpen] = useState(false)
+  const [videoUrlInput, setVideoUrlInput] = useState('')
+  const [videoInputError, setVideoInputError] = useState('')
   const { toasts, toast, dismiss } = useToast()
   const [reportSearch, setReportSearch] = useState('')
   const [reportSearchOpen, setReportSearchOpen] = useState(false)
@@ -489,9 +660,80 @@ function Research() {
     }
   }, [searchParams, activeRunId, setSearchParams])
 
+  // Restore active research run on browser refresh
+  useEffect(() => {
+    const stored = localStorage.getItem('rt_active_research')
+    if (!stored) return
+
+    try {
+      const parsed = JSON.parse(stored)
+      const age = Date.now() - (parsed.timestamp || 0)
+      if (age < 240000) {
+        setLoading(true)
+        setLastSubmittedQuery(parsed.query || '')
+        if (parsed.videoCount) setVideoCount(parsed.videoCount)
+
+        const interval = setInterval(async () => {
+          try {
+            const historyData = await getHistory(1, 10)
+            const match = historyData.items.find(
+              (it) =>
+                (it.query === parsed.query || it.research_question === parsed.query) &&
+                it.status === 'completed' &&
+                Boolean(it.executive_summary)
+            )
+
+            if (match) {
+              clearInterval(interval)
+              const fullEntry = await getHistoryEntry(match.run_id)
+              setHistoryResult(fullEntry)
+              setHistoryQuery(fullEntry.query)
+              setLastSubmittedQuery(fullEntry.query)
+              setLoading(false)
+              localStorage.removeItem('rt_active_research')
+              window.dispatchEvent(new CustomEvent('research:created'))
+              toast('Research compiled successfully!', 'success')
+            } else {
+              const failed = historyData.items.find(
+                (it) =>
+                  (it.query === parsed.query || it.research_question === parsed.query) &&
+                  it.status === 'failed'
+              )
+              if (failed) {
+                clearInterval(interval)
+                setError('Research pipeline failed. Please try again.')
+                setLoading(false)
+                localStorage.removeItem('rt_active_research')
+                window.dispatchEvent(new CustomEvent('research:created'))
+              }
+            }
+          } catch {
+            // Keep polling
+          }
+        }, 3500)
+
+        const timeout = setTimeout(() => {
+          clearInterval(interval)
+          localStorage.removeItem('rt_active_research')
+          setLoading(false)
+        }, 180000)
+
+        return () => {
+          clearInterval(interval)
+          clearTimeout(timeout)
+        }
+      } else {
+        localStorage.removeItem('rt_active_research')
+      }
+    } catch {
+      localStorage.removeItem('rt_active_research')
+    }
+  }, [])
+
   // Clear state on custom research:clear event
   useEffect(() => {
     const handleClear = () => {
+      freshRunTimestampRef.current = null
       setResult(null)
       setHistoryResult(null)
       setHistoryQuery('')
@@ -530,6 +772,34 @@ function Research() {
     return matches ? matches.length : 0
   }, [reportSearch, result, historyResult])
 
+  const handleStartChatFromReport = async () => {
+    const reportTitle =
+      activeQuery ||
+      (activeReport && 'research_question' in activeReport && activeReport.research_question
+        ? (activeReport.research_question as string)
+        : '') ||
+      (activeReport && 'query' in activeReport && (activeReport as any).query
+        ? (activeReport as any).query
+        : '') ||
+      'Research Analysis'
+    const runId = activeRunId || (activeReport && 'run_id' in activeReport ? (activeReport as any).run_id : null)
+
+    setCreatingChat(true)
+    try {
+      const newSession = await createChatSession({
+        title: reportTitle.length > 55 ? `${reportTitle.slice(0, 55)}...` : reportTitle,
+        research_run_id: runId,
+      })
+      window.dispatchEvent(new Event('chat:updated'))
+      toast('Chat session created! Redirecting to chat...', 'success')
+      navigate(`/chat/${newSession.id}`)
+    } catch {
+      toast('Failed to start chat session.', 'error')
+    } finally {
+      setCreatingChat(false)
+    }
+  }
+
   const handleNew = () => {
     setSearchParams({})
     setResult(null)
@@ -537,29 +807,96 @@ function Research() {
     setHistoryQuery('')
     setError(null)
     setQuery('')
+    setAttachedVideos([])
+    setVideoInputOpen(false)
+    setVideoUrlInput('')
+    setVideoInputError('')
     setTimeout(() => inputRef.current?.focus(), 50)
   }
 
   const submit = async () => {
     const trimmed = query.trim()
-    if (!trimmed || loading) return
+    if (!trimmed && attachedVideos.length === 0) return
+    if (loading) return
+
+    // Build final query payload: direct video URLs + user prompt
+    let finalQuery = trimmed
+    if (attachedVideos.length > 0) {
+      const urls = attachedVideos.map((v) => v.url).join(' ')
+      if (trimmed) {
+        finalQuery = `${urls}\n${trimmed}`
+      } else {
+        finalQuery = urls
+      }
+    }
+
+    const finalVideoCount = Math.max(videoCount, attachedVideos.length)
+
     setError(null)
     setResult(null)
     setHistoryResult(null)
     setHistoryQuery('')
     setSearchParams({})
+    setLastSubmittedQuery(finalQuery)
     setLoading(true)
 
+    // 1. Toast immediately when research run is created
+    toast('Research run created! Analyzing videos...', 'info')
+
+    // 2. Optimistic pending run for sidebar & refresh resilience
+    const pendingId = 'pending-' + Date.now()
+    const pendingItem: HistoryItem = {
+      run_id: pendingId,
+      query: finalQuery,
+      status: 'in_progress',
+      video_count: finalVideoCount,
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      research_question: finalQuery,
+      executive_summary: null,
+      conclusion: null,
+      methodology: null,
+      learning_path: [],
+      key_topics: [],
+      limitations: [],
+      recommended_resources: [],
+      analysis_evaluations: [],
+      ranking_summary: null,
+      videos: [],
+    }
+
+    localStorage.setItem(
+      'rt_active_research',
+      JSON.stringify({
+        pendingId,
+        query: finalQuery,
+        videoCount: finalVideoCount,
+        timestamp: Date.now(),
+      })
+    )
+
+    // Notify sidebar to immediately show recent pending research run
+    window.dispatchEvent(new CustomEvent('research:started', { detail: pendingItem }))
+
     try {
-      const data = await runResearch(trimmed, videoCount)
+      const data = await runResearch(finalQuery, finalVideoCount)
+      freshRunTimestampRef.current = new Date().toISOString()
       setResult(data)
+      setLastSubmittedQuery(finalQuery)
       setQuery('')
+      setAttachedVideos([])
+      setVideoInputOpen(false)
+      setVideoUrlInput('')
+      setVideoInputError('')
+      localStorage.removeItem('rt_active_research')
       toast('Research compiled successfully!', 'success')
       // Invalidate user analytics stats cache so fresh profile stats fetch next time
       localStorage.removeItem('rt_user_analytics_stats')
       window.dispatchEvent(new CustomEvent('research:created'))
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200)
     } catch (err: any) {
+      localStorage.removeItem('rt_active_research')
+      window.dispatchEvent(new CustomEvent('research:created'))
       const msg = err?.response?.data?.detail || (err instanceof Error ? err.message : 'Research pipeline failed. Please try again.')
       setError(msg)
       toast(msg, 'error')
@@ -576,8 +913,17 @@ function Research() {
   }
 
   const activeReport = historyResult ?? result?.report ?? null
-  const activeQuery = historyQuery || query
-  const showHome = !loading && !historyLoading && !activeReport && !error
+  const activeQuery =
+    historyQuery ||
+    lastSubmittedQuery ||
+    (activeReport && 'research_question' in activeReport && activeReport.research_question
+      ? (activeReport.research_question as string)
+      : '') ||
+    (activeReport && 'query' in activeReport && (activeReport as any).query
+      ? (activeReport as any).query
+      : '') ||
+    query
+  const showHome = !activeRunId && !activeReport && !loading && !historyLoading && !error
 
   return (
     <>
@@ -589,27 +935,66 @@ function Research() {
           <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-[#555555]">DEEP TECHNICAL RESEARCH ENGINE</p>
         </div>
         {(result || historyResult) && (
-          <button onClick={handleNew} className="border border-white bg-white px-5 py-2 text-xs font-bold tracking-[0.2em] text-black hover:bg-black hover:text-white transition-all">
-            NEW RESEARCH
-          </button>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onClick={handleStartChatFromReport}
+              disabled={creatingChat}
+              className="flex items-center gap-1.5 border border-[#333333] bg-[#141414] hover:bg-[#202020] hover:border-white px-4 py-2 text-xs font-bold tracking-[0.15em] text-white transition-all cursor-pointer disabled:opacity-50 rounded-lg"
+              title="Start an AI chat session about this research run"
+            >
+              {creatingChat ? <Loader2 size={13} className="animate-spin" /> : <MessageSquare size={13} />}
+              <span>CHAT ABOUT THIS</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleNew}
+              className="border border-white bg-white px-5 py-2 text-xs font-bold tracking-[0.2em] text-black hover:bg-black hover:text-white transition-all cursor-pointer rounded-lg"
+            >
+              NEW RESEARCH
+            </button>
+          </div>
         )}
       </header>
 
-      {/* Empty State Centered Search Dialog */}
+      {/* Background research in progress banner when viewing a past report */}
+      {loading && activeRunId && (
+        <div className="mb-6 flex items-center justify-between rounded-xl border border-[#2a2a2a] bg-[#121212] px-4 py-2.5 text-xs text-[#cccccc] shadow-lg animate-fade-in">
+          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+            <Loader2 size={14} className="animate-spin text-white flex-shrink-0" />
+            <span className="truncate">
+              Your research <span className="font-semibold text-white">"{lastSubmittedQuery || 'in progress'}"</span> is compiling in background...
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchParams({})
+              setHistoryResult(null)
+              setHistoryQuery('')
+            }}
+            className="rounded-lg border border-[#333333] bg-[#1e1e1e] hover:bg-[#282828] hover:text-white px-3 py-1 text-[11px] font-semibold text-[#cccccc] transition-all cursor-pointer flex-shrink-0"
+          >
+            View Live Progress
+          </button>
+        </div>
+      )}
+
+      {/* Empty State Centered Search Dialog (only when no run is active and not loading) */}
       {showHome ? (
         <div className="flex flex-col justify-center flex-1 max-w-2xl mx-auto w-full animate-fade-in py-12">
           <div className="w-full flex flex-col items-start">
             <h2 className="text-base md:text-lg font-bold tracking-tight text-left text-[#cccccc] mb-6" style={{fontFamily:"'Space Grotesk',sans-serif"}}>{greeting}</h2>
-            <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} />
+            <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} attachedVideos={attachedVideos} setAttachedVideos={setAttachedVideos} videoInputOpen={videoInputOpen} setVideoInputOpen={setVideoInputOpen} videoUrlInput={videoUrlInput} setVideoUrlInput={setVideoUrlInput} videoInputError={videoInputError} setVideoInputError={setVideoInputError} />
           </div>
         </div>
       ) : (
         <div className="space-y-10 flex-1">
-          {/* History Run Toggle Skeleton Loader */}
+          {/* History Run Skeleton Loader */}
           {historyLoading && <ReportSkeletonLoader />}
 
-          {/* Loading */}
-          {loading && !historyLoading && (
+          {/* Full Screen Live Loading Animation (when activeRunId is NOT set) */}
+          {!activeRunId && loading && !historyLoading && (
             <div className="flex flex-col items-center justify-center gap-8 py-24 animate-fade-in flex-1">
               <div className="relative flex items-center justify-center h-24 w-24">
                 <div className="absolute inset-0 rounded-full border border-white/10 animate-ping" />
@@ -623,32 +1008,60 @@ function Research() {
                   {loadingStatus.toUpperCase()}
                 </p>
                 <p className="text-[10px] font-bold text-[#555555] tracking-[0.2em] uppercase">
-                  Synthesizing video knowledge graph â€¢ Please wait ~2 minutes
+                  Synthesizing video knowledge graph • Please wait ~2 minutes
                 </p>
               </div>
             </div>
           )}
 
-          {/* Error */}
+          {/* Error display */}
           {error && !loading && !historyLoading && (
             <div className="space-y-6 animate-fade-in">
               <div className="flex items-center gap-3 border border-red-955 bg-[#1a0505] p-5">
                 <AlertCircle size={18} className="flex-shrink-0 text-red-500" />
                 <p className="text-sm font-bold text-red-400">{error}</p>
               </div>
-              <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} />
+              <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} attachedVideos={attachedVideos} setAttachedVideos={setAttachedVideos} videoInputOpen={videoInputOpen} setVideoInputOpen={setVideoInputOpen} videoUrlInput={videoUrlInput} setVideoUrlInput={setVideoUrlInput} videoInputError={videoInputError} setVideoInputError={setVideoInputError} />
             </div>
           )}
 
-          {/* Report */}
-          {activeReport && !loading && !historyLoading && (
+          {/* Report View (renders whenever activeReport is present and not currently loading history) */}
+          {activeReport && !historyLoading && (
             <div className="space-y-10">
-              <ReportView report={activeReport} query={activeQuery} searchQuery={reportSearch} />
+              <ReportView
+                report={activeReport}
+                query={activeQuery}
+                searchQuery={reportSearch}
+                createdAt={historyResult?.created_at ?? freshRunTimestampRef.current ?? null}
+                completedAt={historyResult?.completed_at ?? freshRunTimestampRef.current ?? null}
+              />
+
+              {/* Bottom Quick Chat Launcher */}
+              <div className="border border-[#222222] bg-[#111111] p-6 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-8">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <MessageSquare size={16} className="text-[#888888]" />
+                    Want to ask questions about these videos?
+                  </h3>
+                  <p className="text-xs text-[#777777] mt-1">
+                    Launch an interactive chat session scoped directly to the video transcripts from this research run.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleStartChatFromReport}
+                  disabled={creatingChat}
+                  className="border border-white bg-white text-black hover:bg-black hover:text-white px-4 py-2 text-xs font-bold tracking-[0.15em] uppercase transition-all rounded-lg cursor-pointer whitespace-nowrap disabled:opacity-50 flex-shrink-0"
+                >
+                  {creatingChat ? 'Creating Chat...' : 'Start Chat Session →'}
+                </button>
+              </div>
+
               <div ref={bottomRef} />
               {!activeRunId && (
                 <div className="border-t border-[#181818] pt-8 max-w-2xl mx-auto w-full">
                   <p className="mb-4 text-xs font-bold tracking-[0.3em] text-[#555555] text-left">NEW RESEARCH</p>
-                  <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} />
+                  <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} attachedVideos={attachedVideos} setAttachedVideos={setAttachedVideos} videoInputOpen={videoInputOpen} setVideoInputOpen={setVideoInputOpen} videoUrlInput={videoUrlInput} setVideoUrlInput={setVideoUrlInput} videoInputError={videoInputError} setVideoInputError={setVideoInputError} />
                 </div>
               )}
             </div>
@@ -688,42 +1101,274 @@ function Research() {
 }
 
 interface InputBoxProps {
-  query: string; setQuery: (v: string) => void
-  videoCount: number; setVideoCount: (v: number) => void
-  loading: boolean; onSubmit: () => void
+  query: string
+  setQuery: (v: string) => void
+  videoCount: number
+  setVideoCount: (v: number | ((prev: number) => number)) => void
+  loading: boolean
+  onSubmit: () => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   inputRef: React.RefObject<HTMLTextAreaElement | null>
-  placeholder: string; showOptions: boolean; setShowOptions: (v: boolean) => void
+  placeholder: string
+  showOptions: boolean
+  setShowOptions: (v: boolean) => void
+  attachedVideos: AttachedVideo[]
+  setAttachedVideos: React.Dispatch<React.SetStateAction<AttachedVideo[]>>
+  videoInputOpen: boolean
+  setVideoInputOpen: (v: boolean) => void
+  videoUrlInput: string
+  setVideoUrlInput: (v: string) => void
+  videoInputError: string
+  setVideoInputError: (v: string) => void
 }
 
-function InputBox({ query, setQuery, videoCount, setVideoCount, loading, onSubmit, onKeyDown, inputRef, placeholder, showOptions, setShowOptions }: InputBoxProps) {
+function InputBox({
+  query,
+  setQuery,
+  videoCount,
+  setVideoCount,
+  loading,
+  onSubmit,
+  onKeyDown,
+  inputRef,
+  placeholder,
+  showOptions,
+  setShowOptions,
+  attachedVideos,
+  setAttachedVideos,
+  videoInputOpen,
+  setVideoInputOpen,
+  videoUrlInput,
+  setVideoUrlInput,
+  videoInputError,
+  setVideoInputError,
+}: InputBoxProps) {
+  const handleAddVideo = () => {
+    const raw = videoUrlInput.trim()
+    if (!raw) return
+    const ids = extractAllYoutubeIds(raw)
+    const singleId = extractYoutubeId(raw)
+    const combinedIds = Array.from(new Set([...ids, ...(singleId ? [singleId] : [])]))
+
+    if (combinedIds.length === 0) {
+      setVideoInputError('Please enter a valid YouTube video URL or ID.')
+      return
+    }
+
+    const newVideos = combinedIds
+      .filter((id) => !attachedVideos.some((v) => v.id === id))
+      .map((id) => ({
+        id,
+        url: `https://www.youtube.com/watch?v=${id}`,
+      }))
+
+    if (newVideos.length === 0) {
+      setVideoInputError('Video(s) already added.')
+      return
+    }
+
+    const next = [...attachedVideos, ...newVideos]
+    setAttachedVideos(next)
+    setVideoCount((prev: number) => Math.max(prev, next.length))
+    setVideoUrlInput('')
+    setVideoInputError('')
+  }
+
+  const handleRemoveVideo = (idToRemove: string) => {
+    setAttachedVideos((prev) => prev.filter((v) => v.id !== idToRemove))
+  }
+
+  const handleTextareaPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = e.clipboardData.getData('text')
+    const detectedIds = extractAllYoutubeIds(pastedText)
+    if (detectedIds.length > 0) {
+      const newVideos = detectedIds
+        .filter((id) => !attachedVideos.some((v) => v.id === id))
+        .map((id) => ({
+          id,
+          url: `https://www.youtube.com/watch?v=${id}`,
+        }))
+
+      if (newVideos.length > 0) {
+        const next = [...attachedVideos, ...newVideos]
+        setAttachedVideos(next)
+        setVideoCount((prev: number) => Math.max(prev, next.length))
+
+        // If the pasted content was solely a YouTube link, avoid duplicating in textarea
+        if (extractYoutubeId(pastedText.trim()) === pastedText.trim() || pastedText.trim().match(YOUTUBE_REGEX)?.[0] === pastedText.trim()) {
+          e.preventDefault()
+        }
+      }
+    }
+  }
+
   return (
-    <div className="w-full border border-[#222222] bg-[#111111] transition-all focus-within:border-[#444444]">
-      <div className="px-5 pt-5">
-        <textarea ref={inputRef} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKeyDown} rows={3}
-          placeholder={placeholder || 'Research best resources to learn...'}
+    <div className="w-full border border-[#222222] bg-[#111111] transition-all focus-within:border-[#444444] rounded-2xl shadow-xl overflow-hidden">
+      {/* Attached Video Chips (Rendered when videos are linked) */}
+      {attachedVideos.length > 0 && (
+        <div className="px-5 pt-4 pb-2 flex flex-wrap items-center gap-2 border-b border-[#1c1c1c] bg-[#0c0c0d]">
+          {attachedVideos.map((v) => (
+            <div
+              key={v.id}
+              className="flex items-center gap-2 bg-[#161616] border border-[#2c2c2c] hover:border-[#444444] rounded-lg px-2.5 py-1 text-xs text-white transition-all group"
+            >
+              <img
+                src={`https://img.youtube.com/vi/${v.id}/default.jpg`}
+                alt="Thumbnail"
+                className="h-4 w-6 rounded object-cover border border-[#333333] flex-shrink-0"
+                onError={(e) => { (e.target as HTMLElement).style.display = 'none' }}
+              />
+              <span className="font-mono text-[11px] text-[#cccccc] max-w-[140px] truncate">
+                {v.id}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleRemoveVideo(v.id)}
+                className="text-[#666666] hover:text-white transition-colors cursor-pointer p-0.5"
+                title="Remove video"
+              >
+                <XIcon size={12} />
+              </button>
+            </div>
+          ))}
+          <span className="text-[10px] text-[#777777] font-semibold tracking-wider uppercase">
+            {attachedVideos.length} custom video{attachedVideos.length > 1 ? 's' : ''} detected
+          </span>
+        </div>
+      )}
+
+      {/* Main Textarea */}
+      <div className="px-5 pt-4">
+        <textarea
+          ref={inputRef}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onKeyDown}
+          onPaste={handleTextareaPaste}
+          rows={3}
+          placeholder={
+            attachedVideos.length > 0
+              ? 'Enter inquiry or research prompt for these videos (e.g. Compare architectural patterns, key insights)...'
+              : placeholder || 'Research best resources to learn...'
+          }
           disabled={loading}
           className="w-full resize-none bg-transparent text-base font-semibold tracking-wide text-white outline-none placeholder:text-[#444444] disabled:opacity-50"
-          style={{fontFamily:"'Manrope',sans-serif"}} />
+          style={{ fontFamily: "'Manrope',sans-serif" }}
+        />
       </div>
-      <div className="flex items-center justify-between px-4 pb-4">
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowOptions(!showOptions)} className="px-3 py-1.5 text-xs font-bold tracking-[0.2em] text-[#666666] border border-[#222222] hover:border-[#444444] hover:text-white transition-all">
+
+      {/* Video URL Input Dropdown / Expansion */}
+      {videoInputOpen && (
+        <div className="px-5 pb-3 animate-fade-in space-y-1.5">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 flex items-center border border-[#2b2b2b] bg-[#0c0c0d] px-3 py-1.5 focus-within:border-[#555555] transition-colors rounded-lg">
+              <YoutubeIcon size={14} className="text-[#777777] mr-2 flex-shrink-0" />
+              <input
+                type="text"
+                value={videoUrlInput}
+                onChange={(e) => {
+                  setVideoUrlInput(e.target.value)
+                  setVideoInputError('')
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleAddVideo()
+                  }
+                }}
+                placeholder="Paste YouTube link or video ID (e.g. youtube.com/watch?v=...)"
+                className="w-full bg-transparent text-xs text-white outline-none placeholder:text-[#555555]"
+                autoFocus
+              />
+              {Boolean(extractYoutubeId(videoUrlInput)) && (
+                <span className="text-[10px] text-emerald-400 font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 flex-shrink-0 border border-emerald-500/20">
+                  Detected
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleAddVideo}
+              className="border border-white bg-white text-black hover:bg-black hover:text-white px-3.5 py-1.5 text-xs font-bold tracking-wider uppercase transition-all cursor-pointer rounded-lg flex-shrink-0"
+            >
+              + Add
+            </button>
+          </div>
+          {videoInputError ? (
+            <p className="text-[11px] text-red-400 font-medium pl-1">
+              {videoInputError}
+            </p>
+          ) : null}
+        </div>
+      )}
+
+      {/* Bottom Action Bar */}
+      <div className="flex items-center justify-between px-5 pb-4 pt-1 flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 1 Video? Option Button */}
+          <button
+            type="button"
+            onClick={() => setShowOptions(!showOptions)}
+            className="px-3 py-1.5 text-xs font-bold tracking-[0.2em] text-[#666666] border border-[#222222] hover:border-[#444444] hover:text-white transition-all cursor-pointer rounded-lg"
+          >
             {videoCount} VIDEO{videoCount !== 1 ? 'S' : ''} ?
           </button>
           {showOptions && (
             <div className="flex items-center gap-1">
               {[1, 2, 3, 5, 7].map((n) => (
-                <button key={n} onClick={() => { setVideoCount(n); setShowOptions(false) }}
-                  className={'border px-3 py-1.5 text-xs font-bold tracking-[0.15em] transition-all ' + (videoCount === n ? 'border-white bg-white text-black' : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-white')}>
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => {
+                    setVideoCount(Math.max(n, attachedVideos.length))
+                    setShowOptions(false)
+                  }}
+                  className={
+                    'border px-3 py-1.5 text-xs font-bold tracking-[0.15em] transition-all rounded-lg cursor-pointer ' +
+                    (videoCount === n
+                      ? 'border-white bg-white text-black'
+                      : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-white')
+                  }
+                >
                   {n}
                 </button>
               ))}
             </div>
           )}
+
+          {/* Beside the Video? button: Link Custom Videos Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setVideoInputOpen(!videoInputOpen)
+              setVideoInputError('')
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold tracking-[0.15em] border transition-all cursor-pointer rounded-lg ${
+              videoInputOpen || attachedVideos.length > 0
+                ? 'border-white text-white bg-[#1a1a1a]'
+                : 'border-[#222222] text-[#666666] hover:border-[#444444] hover:text-white'
+            }`}
+            title="Paste specific YouTube video URLs to research"
+          >
+            <YoutubeIcon
+              size={13}
+              className={attachedVideos.length > 0 ? 'text-red-500 fill-red-500/20' : 'text-[#888888]'}
+            />
+            <span>
+              {attachedVideos.length > 0
+                ? `${attachedVideos.length} VIDEO${attachedVideos.length > 1 ? 'S' : ''} LINKED`
+                : '+ LINK VIDEOS'}
+            </span>
+          </button>
         </div>
-        <button onClick={onSubmit} disabled={loading || !query.trim()}
-          className="flex items-center gap-2 border border-white bg-white px-5 py-2 text-xs font-bold tracking-[0.25em] text-[#000000] transition-all hover:bg-black hover:text-white disabled:opacity-30 disabled:cursor-not-allowed">
+
+        {/* Submit Research Button */}
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={loading || (!query.trim() && attachedVideos.length === 0)}
+          className="flex items-center gap-2 border border-white bg-white px-5 py-2 text-xs font-bold tracking-[0.25em] text-[#000000] transition-all hover:bg-black hover:text-white disabled:opacity-30 disabled:cursor-not-allowed rounded-lg cursor-pointer shadow-sm"
+        >
           {loading ? <Loader2 size={13} className="animate-spin" /> : <ArrowUp size={13} />}
           {loading ? 'RESEARCHING...' : 'RESEARCH'}
         </button>
@@ -733,4 +1378,3 @@ function InputBox({ query, setQuery, videoCount, setVideoCount, loading, onSubmi
 }
 
 export default Research
-
