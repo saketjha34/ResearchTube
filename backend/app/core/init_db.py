@@ -69,24 +69,4 @@ async def init_db():
             Base.metadata.create_all
         )
 
-    # ========================================================
-    # IDEMPOTENT SCHEMA MIGRATIONS (PROD & LOCAL)
-    # ========================================================
-
-    print("Applying idempotent schema migrations...")
-
-    migration_statements = [
-        "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE",
-        "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE",
-        "CREATE INDEX IF NOT EXISTS ix_research_runs_is_pinned ON research_runs(is_pinned)",
-        "CREATE INDEX IF NOT EXISTS ix_research_runs_is_archived ON research_runs(is_archived)",
-    ]
-
-    async with engine.begin() as connection:
-        for stmt in migration_statements:
-            try:
-                await connection.execute(text(stmt))
-            except Exception as mig_err:
-                print(f"Migration note for '{stmt[:40]}...': {mig_err}")
-
     print("Database initialization complete.")

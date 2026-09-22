@@ -12,6 +12,8 @@ services:
 
     volumes:
       - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
 
     environment:
 
