@@ -13,7 +13,6 @@ from .youtube import (
     YouTubeVideo,
 )
 from .chat import ChatSession, ChatMessage, MessageRole
-from .test_model import TestModel
 
 __all__ = [
     "Base",
@@ -33,5 +32,4 @@ __all__ = [
     "ChatSession",
     "ChatMessage",
     "MessageRole",
-    "TestModel",
 ]
