@@ -92,6 +92,7 @@ async def stream_message(
             user_id=current_user.id,
             session_id=session_id,
             payload=payload,
+            request=request,
         ),
         media_type="text/event-stream",
         headers={

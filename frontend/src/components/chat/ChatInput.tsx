@@ -39,6 +39,11 @@ export const ChatInput = React.memo(function ChatInput({
   }, [input])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape' && isStreaming && onStop) {
+      e.preventDefault()
+      onStop()
+      return
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       if (!isStreaming && input.trim() && !disabled) {
@@ -84,7 +89,7 @@ export const ChatInput = React.memo(function ChatInput({
             <button
               type="button"
               onClick={onStop}
-              className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#262626] text-white hover:bg-[#333333] transition-all"
+              className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#262626] text-white hover:bg-[#333333] transition-all cursor-pointer"
               title="Stop generation"
             >
               <Square size={13} fill="currentColor" />

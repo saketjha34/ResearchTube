@@ -323,12 +323,113 @@ const SourcesList = React.memo(function SourcesList({ sources }: { sources: Sour
   )
 })
 
+/**
+ * Custom Rehype plugin that places an inline streaming cursor element
+ * inside the very last text container node of the AST (inline with the last token).
+ */
+function rehypeStreamingCursor() {
+  return (tree: any) => {
+    function findAndAppend(node: any): boolean {
+      if (!node.children || node.children.length === 0) return false
+
+      let lastIdx = node.children.length - 1
+      while (lastIdx >= 0) {
+        const child = node.children[lastIdx]
+        if (child.type === 'text' && child.value.trim() === '' && lastIdx > 0) {
+          lastIdx--
+        } else {
+          break
+        }
+      }
+
+      if (lastIdx < 0) return false
+      const targetChild = node.children[lastIdx]
+
+      // If fenced code block (pre), append cursor after the pre block
+      if (targetChild.type === 'element' && targetChild.tagName === 'pre') {
+        node.children.splice(lastIdx + 1, 0, {
+          type: 'element',
+          tagName: 'span',
+          properties: { className: 'streaming-cursor' },
+          children: [],
+        })
+        return true
+      }
+
+      // If KaTeX math element, append right after the math block
+      const isKatex =
+        targetChild.type === 'element' &&
+        targetChild.properties &&
+        ((Array.isArray(targetChild.properties.className) &&
+          targetChild.properties.className.some((c: any) => String(c).includes('katex'))) ||
+          (typeof targetChild.properties.className === 'string' &&
+            targetChild.properties.className.includes('katex')))
+
+      if (isKatex) {
+        node.children.splice(lastIdx + 1, 0, {
+          type: 'element',
+          tagName: 'span',
+          properties: { className: 'streaming-cursor' },
+          children: [],
+        })
+        return true
+      }
+
+      // If text node, append cursor directly after it inside this parent
+      if (targetChild.type === 'text') {
+        node.children.splice(lastIdx + 1, 0, {
+          type: 'element',
+          tagName: 'span',
+          properties: { className: 'streaming-cursor' },
+          children: [],
+        })
+        return true
+      }
+
+      // If element container, recurse to find deepest child
+      if (targetChild.type === 'element') {
+        const ok = findAndAppend(targetChild)
+        if (ok) return true
+
+        targetChild.children = targetChild.children || []
+        targetChild.children.push({
+          type: 'element',
+          tagName: 'span',
+          properties: { className: 'streaming-cursor' },
+          children: [],
+        })
+        return true
+      }
+
+      return false
+    }
+
+    const success = findAndAppend(tree)
+    if (!success) {
+      tree.children = tree.children || []
+      tree.children.push({
+        type: 'element',
+        tagName: 'span',
+        properties: { className: 'streaming-cursor' },
+        children: [],
+      })
+    }
+  }
+}
+
 export const ChatMessageItem = React.memo(
   function ChatMessageItem({ message, isStreaming = false, onShare }: ChatMessageItemProps) {
   const [copied, setCopied] = useState(false)
   const isUser = message.role === 'user'
 
   const formattedContent = useMemo(() => formatLaTeX(message.content), [message.content])
+  const rehypePlugins = useMemo(() => {
+    const plugins: any[] = [[rehypeKatex, { throwOnError: false, errorColor: '#f87171' }]]
+    if (isStreaming) {
+      plugins.push(rehypeStreamingCursor)
+    }
+    return plugins
+  }, [isStreaming])
 
   const handleCopyText = () => {
     void navigator.clipboard.writeText(message.content).then(() => {
@@ -400,8 +501,23 @@ export const ChatMessageItem = React.memo(
         <div className="prose prose-invert max-w-none text-[15px] leading-[1.8] text-[#e5e5e5]">
           <ReactMarkdown
             remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[[rehypeKatex, { throwOnError: false, errorColor: '#f87171' }]]}
+            rehypePlugins={rehypePlugins}
             components={{
+              span: ({ className, children, ...props }) => {
+                if (className === 'streaming-cursor') {
+                  return (
+                    <span
+                      aria-hidden="true"
+                      className="inline-block w-2 h-4.5 ml-1 bg-white/95 rounded-xs animate-pulse align-middle shadow-[0_0_8px_rgba(255,255,255,0.7)]"
+                    />
+                  )
+                }
+                return (
+                  <span className={className} {...props}>
+                    {children}
+                  </span>
+                )
+              },
               p: ({ children }) => (
                 <p className="mb-4 text-[15px] leading-[1.8] text-[#e2e2e2] last:mb-0">
                   {children}
@@ -492,13 +608,6 @@ export const ChatMessageItem = React.memo(
           >
             {formattedContent}
           </ReactMarkdown>
-
-          {isStreaming && (
-            <span
-              aria-hidden="true"
-              className={`inline-block w-2 h-4.5 ${formattedContent ? 'ml-1.5' : 'ml-0'} bg-white/95 rounded-xs animate-pulse align-middle shadow-[0_0_8px_rgba(255,255,255,0.7)]`}
-            />
-          )}
         </div>
 
         {message.sources && message.sources.length > 0 && (

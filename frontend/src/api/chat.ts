@@ -234,6 +234,7 @@ export async function streamMessage(
   message: string,
   callbacks: StreamCallbacks,
   videoId?: string | null,
+  signal?: AbortSignal,
 ): Promise<void> {
   const token = getAccessToken()
   const url = buildApiUrl(`/chat/sessions/${sessionId}/messages/stream`)
@@ -251,13 +252,18 @@ export async function streamMessage(
         video_id: videoId !== undefined ? (videoId || null) : undefined,
         clear_video_scope: videoId === null ? true : undefined,
       }),
+      signal,
     })
-  } catch (err) {
+  } catch (err: unknown) {
+    if ((err as Error)?.name === 'AbortError' || signal?.aborted) {
+      return
+    }
     callbacks.onError?.(`Network error: ${String(err)}`)
     return
   }
 
   if (!response.ok) {
+    if (signal?.aborted) return
     const errText = await response.text().catch(() => '')
     callbacks.onError?.(`HTTP ${response.status}: ${errText}`)
     return
@@ -273,39 +279,57 @@ export async function streamMessage(
   let buffer = ''
   let currentEvent = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() ?? ''
-
-    for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        currentEvent = line.slice(7).trim()
-      } else if (line.startsWith('data: ')) {
-        const raw = line.slice(6).trim()
+  try {
+    while (true) {
+      if (signal?.aborted) {
         try {
-          const parsed = JSON.parse(raw) as Record<string, unknown>
-          switch (currentEvent) {
-            case 'user':
-              callbacks.onUser?.(parsed as unknown as SSEUserEvent)
-              break
-            case 'delta':
-              callbacks.onDelta((parsed as { text: string }).text ?? '')
-              break
-            case 'done':
-              callbacks.onDone(parsed as unknown as SSEDoneEvent)
-              break
-            case 'error':
-              callbacks.onError?.((parsed as { detail: string }).detail ?? 'Unknown error')
-              break
-          }
-        } catch { /* skip malformed */ }
-        currentEvent = ''
+          await reader.cancel()
+        } catch { /* ignore */ }
+        break
+      }
+
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (signal?.aborted) break
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim()
+        } else if (line.startsWith('data: ')) {
+          const raw = line.slice(6).trim()
+          try {
+            const parsed = JSON.parse(raw) as Record<string, unknown>
+            switch (currentEvent) {
+              case 'user':
+                callbacks.onUser?.(parsed as unknown as SSEUserEvent)
+                break
+              case 'delta':
+                callbacks.onDelta((parsed as { text: string }).text ?? '')
+                break
+              case 'done':
+                callbacks.onDone(parsed as unknown as SSEDoneEvent)
+                break
+              case 'error':
+                callbacks.onError?.((parsed as { detail: string }).detail ?? 'Unknown error')
+                break
+            }
+          } catch { /* skip malformed */ }
+          currentEvent = ''
+        }
       }
     }
+  } catch (err: unknown) {
+    if ((err as Error)?.name === 'AbortError' || signal?.aborted) {
+      try {
+        await reader.cancel()
+      } catch { /* ignore */ }
+      return
+    }
+    callbacks.onError?.(`Stream error: ${String(err)}`)
   }
 }
 

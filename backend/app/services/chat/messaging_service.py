@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from uuid import UUID
+
+from starlette.requests import Request
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -176,6 +178,7 @@ class MessagingService:
         user_id: UUID,
         session_id: UUID,
         payload: SendMessageRequest,
+        request: Optional[Request] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Handle streaming user -> assistant conversation via Server-Sent Events (SSE).
@@ -235,6 +238,13 @@ class MessagingService:
             }
             yield f"event: user\ndata: {json.dumps(user_event)}\n\n"
 
+            # If client disconnected immediately after user message:
+            if request and await request.is_disconnected():
+                _logger.info("chat.stream_cancelled_before_llm", session_id=str(session_id))
+                await session.delete(user_msg)
+                await session.commit()
+                return
+
             # 3. Parallel: load history + RAG retrieval + scope description
             history, (context_chunks, retrieved_sources), scope_description = await asyncio.gather(
                 load_session_history(session, session_id, limit=_MAX_HISTORY_TURNS),
@@ -248,6 +258,13 @@ class MessagingService:
                 build_scope_description(session, chat_session),
             )
 
+            # If client disconnected during retrieval:
+            if request and await request.is_disconnected():
+                _logger.info("chat.stream_cancelled_after_retrieval", session_id=str(session_id))
+                await session.delete(user_msg)
+                await session.commit()
+                return
+
             # 4. Render prompt template
             prompt_text = self._prompt.render(
                 user_message=payload.message,
@@ -259,12 +276,32 @@ class MessagingService:
             # 5. Stream LLM tokens
             llm = self._llm.get_llm()
             token_list: list[str] = []
+            was_cancelled = False
 
-            async for token in llm.astream(prompt_text):
-                if token:
-                    token_list.append(token)
-                    delta_payload = {"text": token}
-                    yield f"event: delta\ndata: {json.dumps(delta_payload)}\n\n"
+            try:
+                async for token in llm.astream(prompt_text):
+                    if request and await request.is_disconnected():
+                        _logger.info("chat.stream_cancelled_by_client", session_id=str(session_id))
+                        was_cancelled = True
+                        break
+
+                    if token:
+                        token_list.append(token)
+                        delta_payload = {"text": token}
+                        yield f"event: delta\ndata: {json.dumps(delta_payload)}\n\n"
+            except (asyncio.CancelledError, GeneratorExit):
+                _logger.info("chat.stream_token_loop_cancelled", session_id=str(session_id))
+                was_cancelled = True
+
+            # If the stream was cancelled or client stopped: neglect the request completely
+            if was_cancelled or (request and await request.is_disconnected()):
+                _logger.info("chat.stream_neglected_by_stop", session_id=str(session_id))
+                try:
+                    await session.delete(user_msg)
+                    await session.commit()
+                except Exception as del_err:
+                    _logger.warning("chat.cleanup_user_msg_failed", error=str(del_err))
+                return
 
             full_text = "".join(token_list)
 
@@ -290,6 +327,15 @@ class MessagingService:
             }
             yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
 
+        except (asyncio.CancelledError, GeneratorExit):
+            _logger.info("chat.stream_top_level_cancelled", session_id=str(session_id))
+            try:
+                if "user_msg" in locals():
+                    await session.delete(user_msg)
+                    await session.commit()
+            except Exception:
+                pass
+            return
         except Exception as exc:
             _logger.error("chat.stream_error", session_id=str(session_id), error=str(exc))
             err_payload = {"detail": str(exc)}

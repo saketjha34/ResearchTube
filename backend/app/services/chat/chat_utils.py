@@ -9,6 +9,7 @@ Consolidates internal domain helpers for chat operations:
 
 from __future__ import annotations
 
+import re
 from typing import Any, List, Optional, Tuple, Union
 from uuid import UUID
 
@@ -24,11 +25,52 @@ from app.rag.youtube.retriever import YouTubeTranscriptRetriever
 _logger = structlog.get_logger()
 
 # Retrieval & history parameters
-_MAX_HISTORY_TURNS = 10
+_MAX_HISTORY_TURNS = 20
 _RAG_TOP_K = 5
-_RAG_MIN_SIMILARITY = 0.25
-_RAG_MAX_SOURCES = 5
+_RAG_MIN_SIMILARITY = 0.20
+_RAG_MAX_SOURCES = 2
 _SNIPPET_CHARS = 240
+
+# Conversational & greeting patterns
+_CONVERSATIONAL_PATTERNS = [
+    r"^(hi+|hey+|hello+|hola|howdy|yo|sup)\b",
+    r"^good\s+(morning|afternoon|evening|night|day)\b",
+    r"^(how\s+are\s+you|how\'?s\s+it\s+going|what\'?s\s+up|how\s+do\s+you\s+do)\b",
+    r"^(thank\s+you|thanks|thx|much\s+appreciated|appreciate\s+it)\b",
+    r"^(bye|goodbye|see\s+you|cya)\b",
+    r"^(ok|okay|cool|nice|great|awesome|got\s+it|understood|sure)\b",
+    r"^(who\s+are\s+you|what\s+can\s+you\s+do|what\s+is\s+your\s+name|who\s+made\s+you)\b",
+    r"^(can\s+you\s+help\s+me|help\s+me|i\s+need\s+help)\b",
+]
+_CONVERSATIONAL_REGEX = re.compile(
+    "|".join(f"({p})" for p in _CONVERSATIONAL_PATTERNS),
+    re.IGNORECASE,
+)
+
+_OVERVIEW_PATTERNS = [
+    r"\b(summar(y|ize)|overview|recap|outline)\b",
+    r"\bwhat\s+is\s+(this|the)\s+video(\s+about)?\b",
+    r"\bwhat\s+does\s+(this|the)\s+video\s+(cover|discuss|teach|show|explain)\b",
+]
+_OVERVIEW_REGEX = re.compile(
+    "|".join(f"({p})" for p in _OVERVIEW_PATTERNS),
+    re.IGNORECASE,
+)
+
+
+def is_conversational_query(query: str) -> bool:
+    """Return True if the query is a simple greeting, pleasantry, or meta-conversational phrase."""
+    cleaned = re.sub(r"[^\w\s]", "", query.strip().lower()).strip()
+    if not cleaned:
+        return True
+    words = cleaned.split()
+    return len(words) <= 8 and bool(_CONVERSATIONAL_REGEX.search(cleaned))
+
+
+def is_video_overview_query(query: str) -> bool:
+    """Return True if the query specifically asks for an overview or summary of the video."""
+    return bool(_OVERVIEW_REGEX.search(query.strip().lower()))
+
 
 
 # ============================================================
@@ -192,6 +234,10 @@ async def retrieve_chat_context(
         context_chunks: List of chunk dicts for the prompt template.
         retrieved_sources: Serialisable list for ChatMessage.sources JSON.
     """
+    if is_conversational_query(query):
+        _logger.info("chat.rag_skipped_conversational", query=query[:60])
+        return [], []
+
     if retriever is None:
         retriever = YouTubeTranscriptRetriever()
 
@@ -224,9 +270,9 @@ async def retrieve_chat_context(
         if (c.get("similarity") or 0.0) >= _RAG_MIN_SIMILARITY
     ][:_RAG_MAX_SOURCES]
 
-    # Video-scoped fallback: if vector search yielded no high-similarity chunks for a video chat,
-    # supply the opening transcript chunks so the user gets accurate overview answers & sources.
-    if not filtered_chunks and video_id:
+    # Video-scoped fallback: ONLY supply opening transcript chunks if the query explicitly asks
+    # for a high-level video overview / summary / recap. Never trigger on arbitrary or unrelated questions.
+    if not filtered_chunks and video_id and is_video_overview_query(query):
         stmt = (
             select(TranscriptChunk)
             .where(TranscriptChunk.video_id == video_id)

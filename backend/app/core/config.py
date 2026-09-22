@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # LLM & EMBEDDING MODELS
     # ========================================================
 
-    OPENAI_MODEL: str = "gpt-5-mini"
+    OPENAI_MODEL: str = "gpt-5.4-mini"
     GEMINI_MODEL: str = "gemini-3.5-flash"
     EMBEDDING_PROVIDER: str = "openai"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"

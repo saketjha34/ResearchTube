@@ -125,6 +125,7 @@ export default function Chat() {
   const streamRafIdRef = useRef<number | null>(null)
   const isStreamActiveRef = useRef(false)
   const streamingStartTimeRef = useRef<string | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Track window scroll position to determine if user is pinned near bottom
   useEffect(() => {
@@ -433,6 +434,9 @@ export default function Chat() {
     // Smooth scroll down to optimistic message
     setTimeout(() => scrollToBottom(true), 60)
 
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     await streamMessage(currentSessionId, textToSend, {
       onUser: (userEvent) => {
         // Replace temp ID with actual DB ID
@@ -531,6 +535,7 @@ export default function Chat() {
           animatedTextRef.current = ''
           streamingStartTimeRef.current = null
           justCreatedSessionRef.current = currentSessionId
+          abortControllerRef.current = null
           window.dispatchEvent(new Event('chat:updated'))
           navigate(`/chat/${currentSessionId}`, { replace: true })
         }
@@ -538,6 +543,7 @@ export default function Chat() {
         requestAnimationFrame(finalize)
       },
       onError: (errMsg) => {
+        abortControllerRef.current = null
         isStreamActiveRef.current = false
         if (streamRafIdRef.current) {
           cancelAnimationFrame(streamRafIdRef.current)
@@ -552,8 +558,52 @@ export default function Chat() {
         streamingStartTimeRef.current = null
         justCreatedSessionRef.current = null
       },
-    }, selectedVideo ? selectedVideo.db_id : null)
+    }, selectedVideo ? selectedVideo.db_id : null, controller.signal)
   }
+
+  const handleStop = useCallback(() => {
+    if (!isStreamingRef.current && !isStreaming) return
+
+    // 1. Abort network request immediately
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+
+    // 2. Stop RAF reveal loop
+    isStreamActiveRef.current = false
+    if (streamRafIdRef.current) {
+      cancelAnimationFrame(streamRafIdRef.current)
+      streamRafIdRef.current = null
+    }
+
+    // 3. Keep whatever partial text has been streamed so far
+    const stoppedText = rawStreamBufferRef.current || animatedTextRef.current
+    const activeSessionId = sessionId || session?.id || justCreatedSessionRef.current
+
+    if (stoppedText.trim() && activeSessionId) {
+      const stoppedMsg: ChatMessage = {
+        id: `stopped-${Date.now()}`,
+        session_id: activeSessionId,
+        role: 'assistant',
+        content: stoppedText,
+        sources: null,
+        created_at: streamingStartTimeRef.current || new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, stoppedMsg])
+    }
+
+    // 4. Reset streaming state cleanly
+    setIsStreaming(false)
+    setStreamingText('')
+    rawStreamBufferRef.current = ''
+    animatedTextRef.current = ''
+    streamingStartTimeRef.current = null
+
+    if (activeSessionId) {
+      window.dispatchEvent(new Event('chat:updated'))
+    }
+  }, [isStreaming, sessionId, session?.id])
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-8rem)] w-full">
@@ -660,6 +710,7 @@ export default function Chat() {
                 setInput={setInput}
                 onSubmit={() => void handleSubmit()}
                 isStreaming={isStreaming}
+                onStop={handleStop}
                 disabled={loadingSession}
                 videos={availableVideos}
                 selectedVideo={selectedVideo}
@@ -732,6 +783,7 @@ export default function Chat() {
                 setInput={setInput}
                 onSubmit={() => void handleSubmit()}
                 isStreaming={isStreaming}
+                onStop={handleStop}
                 disabled={loadingSession}
                 videos={availableVideos}
                 selectedVideo={selectedVideo}

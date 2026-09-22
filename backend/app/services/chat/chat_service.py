@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any, AsyncGenerator, List, Optional, Tuple, Union
 from uuid import UUID
 
+from starlette.requests import Request
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -213,8 +214,11 @@ class ChatService:
         user_id: UUID,
         session_id: UUID,
         payload: SendMessageRequest,
+        request: Optional[Request] = None,
     ) -> AsyncGenerator[str, None]:
-        async for chunk in self.messaging.stream_message(session, user_id, session_id, payload):
+        async for chunk in self.messaging.stream_message(
+            session, user_id, session_id, payload, request=request
+        ):
             yield chunk
 
     # ── Backward Compatibility Helpers ─────────────────────────
