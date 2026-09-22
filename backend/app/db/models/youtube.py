@@ -94,6 +94,20 @@ class ResearchRun(Base):
         index=True,
     )
 
+    is_pinned: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+    )
+
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+    )
+
     error_message: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True,

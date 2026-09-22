@@ -340,6 +340,7 @@ class YoutubeResearchService:
         user_id: UUID,
         page: int = 1,
         page_size: int = 20,
+        archived: bool = False,
     ) -> HistoryListResponse:
         """
         Return paginated history entries for user, newest first.
@@ -350,7 +351,94 @@ class YoutubeResearchService:
             user_id=user_id,
             page=page,
             page_size=page_size,
+            archived=archived,
         )
+
+    # ========================================================
+    # 8. TOGGLE PIN HISTORY ENTRY
+    # ========================================================
+
+    async def pin_history_entry(
+        self,
+        session: AsyncSession,
+        run_id: UUID,
+        current_user: User,
+    ) -> dict[str, Any]:
+        """
+        Toggle the is_pinned status of a user's research run.
+        """
+        result = await session.execute(
+            select(ResearchRun).where(
+                ResearchRun.id == run_id,
+                ResearchRun.user_id == current_user.id,
+            )
+        )
+        run = result.scalar_one_or_none()
+
+        if run is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Research run not found.",
+            )
+
+        run.is_pinned = not bool(getattr(run, "is_pinned", False))
+        try:
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to update pin status: {exc}",
+            )
+
+        return {
+            "run_id": str(run.id),
+            "is_pinned": run.is_pinned,
+            "message": "Research run pinned successfully." if run.is_pinned else "Research run unpinned successfully.",
+        }
+
+    # ========================================================
+    # 9. TOGGLE ARCHIVE HISTORY ENTRY
+    # ========================================================
+
+    async def archive_history_entry(
+        self,
+        session: AsyncSession,
+        run_id: UUID,
+        current_user: User,
+    ) -> dict[str, Any]:
+        """
+        Toggle the is_archived status of a user's research run.
+        """
+        result = await session.execute(
+            select(ResearchRun).where(
+                ResearchRun.id == run_id,
+                ResearchRun.user_id == current_user.id,
+            )
+        )
+        run = result.scalar_one_or_none()
+
+        if run is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Research run not found.",
+            )
+
+        run.is_archived = not bool(getattr(run, "is_archived", False))
+        try:
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to update archive status: {exc}",
+            )
+
+        return {
+            "run_id": str(run.id),
+            "is_archived": run.is_archived,
+            "message": "Research run archived successfully." if run.is_archived else "Research run unarchived successfully.",
+        }
 
 
 # Singleton instance

@@ -150,6 +150,10 @@ class HistoryEntry(BaseModel):
 
     is_public: bool = False
 
+    is_pinned: bool = False
+
+    is_archived: bool = False
+
     video_count: int
 
     created_at: datetime

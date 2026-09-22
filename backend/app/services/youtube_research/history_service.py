@@ -265,6 +265,8 @@ class HistoryService:
             query=run.user_query,
             status=run.status,
             is_public=run.is_public,
+            is_pinned=bool(getattr(run, "is_pinned", False)),
+            is_archived=bool(getattr(run, "is_archived", False)),
             video_count=run.video_count,
             created_at=run.created_at,
             completed_at=run.completed_at,
@@ -316,20 +318,24 @@ class HistoryService:
         user_id: UUID,
         page: int = 1,
         page_size: int = 20,
+        archived: bool = False,
     ) -> HistoryListResponse:
         """Return a paginated list of HistoryEntry objects for the given user, newest first."""
 
         offset = (page - 1) * page_size
 
         count_result = await session.execute(
-            select(func.count()).where(ResearchRun.user_id == user_id)
+            select(func.count())
+            .where(ResearchRun.user_id == user_id)
+            .where(ResearchRun.is_archived.is_(archived))
         )
         total = count_result.scalar_one()
 
         runs_result = await session.execute(
             select(ResearchRun)
             .where(ResearchRun.user_id == user_id)
-            .order_by(desc(ResearchRun.created_at))
+            .where(ResearchRun.is_archived.is_(archived))
+            .order_by(ResearchRun.is_pinned.desc(), desc(ResearchRun.created_at))
             .offset(offset)
             .limit(page_size)
         )
@@ -359,8 +365,9 @@ async def get_user_history(
     user_id: UUID,
     page: int = 1,
     page_size: int = 20,
+    archived: bool = False,
 ) -> HistoryListResponse:
-    return await history_service.get_user_history(session, user_id, page, page_size)
+    return await history_service.get_user_history(session, user_id, page, page_size, archived)
 
 
 async def _build_entry(

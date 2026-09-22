@@ -33,10 +33,11 @@ import {
   deleteHistoryEntry,
   renameHistoryEntry,
   shareHistoryEntry,
+  pinHistoryEntry,
+  archiveHistoryEntry,
   type HistoryItem,
 } from '../api/research'
 import {
-  createChatSession,
   listChatSessions,
   deleteChatSession,
   renameChatSession,
@@ -79,6 +80,8 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   // --- Research State --------------------------------------------------------
   const [history, setHistory] = useState<HistoryItem[]>([])
+  const [archivedHistory, setArchivedHistory] = useState<HistoryItem[]>([])
+  const [showArchivedResearchSection, setShowArchivedResearchSection] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [activeMenuRunId, setActiveMenuRunId] = useState<string | null>(null)
   const [deleteTargetRunId, setDeleteTargetRunId] = useState<string | null>(null)
@@ -137,20 +140,39 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     }
   }
 
-  // Pinned runs â€” persisted in localStorage
-  const [pinnedRunIds, setPinnedRunIds] = useState<string[]>(() => {
+    // Toggle Pin / Archive for Research Runs (Database-backed)
+  const handleTogglePinResearch = async (runId: string) => {
     try {
-      return JSON.parse(localStorage.getItem('rt_pinned_runs') ?? '[]')
+      const res = await pinHistoryEntry(runId)
+      setHistory((prev) =>
+        prev.map((item) =>
+          item.run_id === runId ? { ...item, is_pinned: res.is_pinned } : item
+        )
+      )
     } catch {
-      return []
+      alert('Failed to update pin status.')
     }
-  })
-  const togglePin = (runId: string) => {
-    setPinnedRunIds((prev) => {
-      const next = prev.includes(runId) ? prev.filter((id) => id !== runId) : [...prev, runId]
-      localStorage.setItem('rt_pinned_runs', JSON.stringify(next))
-      return next
-    })
+  }
+
+  const handleToggleArchiveResearch = async (runId: string) => {
+    try {
+      const res = await archiveHistoryEntry(runId)
+      if (res.is_archived) {
+        const target = history.find((i) => i.run_id === runId)
+        setHistory((prev) => prev.filter((i) => i.run_id !== runId))
+        if (target) {
+          setArchivedHistory((prev) => [{ ...target, is_archived: true }, ...prev])
+        }
+      } else {
+        const target = archivedHistory.find((i) => i.run_id === runId)
+        setArchivedHistory((prev) => prev.filter((i) => i.run_id !== runId))
+        if (target) {
+          setHistory((prev) => [{ ...target, is_archived: false }, ...prev])
+        }
+      }
+    } catch {
+      alert('Failed to update archive status.')
+    }
   }
 
   // Search palette
@@ -161,8 +183,11 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const loadHistory = async () => {
     setLoadingHistory(true)
     try {
-      const data = await getHistory(1, 60)
-      let items = data.items
+      const [activeData, archivedData] = await Promise.all([
+        getHistory(1, 60, false),
+        getHistory(1, 60, true),
+      ])
+      let items = activeData.items || []
 
       // Check if there is an active research run queued in localStorage
       const storedActive = localStorage.getItem('rt_active_research')
@@ -201,8 +226,10 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         } catch {}
       }
       setHistory(items)
+      setArchivedHistory(archivedData.items || [])
     } catch {
       setHistory([])
+      setArchivedHistory([])
     } finally {
       setLoadingHistory(false)
     }
@@ -435,21 +462,31 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }
 
   const completedHistory = history.filter((item) => item.status === 'completed')
-  const pinnedHistory = completedHistory.filter((item) => pinnedRunIds.includes(item.run_id))
-  const regularHistory = completedHistory.filter((item) => !pinnedRunIds.includes(item.run_id))
+  const pinnedHistory = completedHistory.filter((item) => !!item.is_pinned)
+  const regularHistory = completedHistory.filter((item) => !item.is_pinned)
 
   // --- Unified Search (Research Runs + Chat Sessions) ---
   const [searchFilter, setSearchFilter] = useState<'all' | 'research' | 'chat'>('all')
 
   const allSearchItems = useMemo(() => {
-    const researchItems = completedHistory.map((item) => ({
-      id: item.run_id,
-      type: 'research' as const,
-      title: item.query,
-      date: item.created_at,
-      isPinned: pinnedRunIds.includes(item.run_id),
-      isArchived: false,
-    }))
+    const researchItems = [
+      ...completedHistory.map((item) => ({
+        id: item.run_id,
+        type: 'research' as const,
+        title: item.query,
+        date: item.created_at,
+        isPinned: !!item.is_pinned,
+        isArchived: false,
+      })),
+      ...archivedHistory.map((item) => ({
+        id: item.run_id,
+        type: 'research' as const,
+        title: item.query,
+        date: item.created_at,
+        isPinned: !!item.is_pinned,
+        isArchived: true,
+      })),
+    ]
 
     const chatItems = [
       ...chatSessions.map((s) => ({
@@ -471,7 +508,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     ]
 
     return { researchItems, chatItems }
-  }, [completedHistory, pinnedRunIds, chatSessions, archivedChatSessions])
+  }, [completedHistory, archivedHistory, chatSessions, archivedChatSessions])
 
   const filteredSearchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -523,19 +560,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
     window.dispatchEvent(new Event('chat:updated'))
   }
 
-  const handleCreateChatFromHistory = async (item: HistoryItem) => {
-    setActiveMenuRunId(null)
-    try {
-      const session = await createChatSession({
-        title: item.query.length > 50 ? `${item.query.slice(0, 50)}...` : item.query,
-        research_run_id: item.run_id,
-      })
-      window.dispatchEvent(new Event('chat:updated'))
-      navigate(`/chat/${session.id}`)
-    } catch {
-      navigate('/chat')
-    }
-  }
+
 
   // Shared history item renderer
   const renderHistoryItem = (item: HistoryItem) => {
@@ -565,7 +590,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         >
           {isPending ? (
             <Loader2 size={11} className="mt-0.5 flex-shrink-0 animate-spin text-white" />
-          ) : pinnedRunIds.includes(item.run_id) ? (
+          ) : item.is_pinned ? (
             <Pin size={10} className="mt-0.5 flex-shrink-0 opacity-50 text-white" />
           ) : (
             <Clock size={11} className="mt-0.5 flex-shrink-0 opacity-50" />
@@ -582,21 +607,10 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                void handleCreateChatFromHistory(item)
-              }}
-              title="Chat about this research"
-              className="flex items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
-            >
-              <MessageSquare size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
                 setActiveMenuRunId(activeMenuRunId === item.run_id ? null : item.run_id)
               }}
               title="More options"
-              className="flex items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors"
+              className="flex items-center justify-center p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors cursor-pointer"
             >
               <MoreVertical size={13} />
             </button>
@@ -608,32 +622,25 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           className="absolute right-2 top-8 z-50 w-44 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
         >
           <button
-            onClick={() => void handleCreateChatFromHistory(item)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
-          >
-            <MessageSquare size={12} className="opacity-70" />
-            <span>Chat about this</span>
-          </button>
-          <button
             onClick={() => {
               setShareTargetRunId(item.run_id)
               setShareGeneratedUrl(null)
               setShareCopied(false)
               setActiveMenuRunId(null)
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white cursor-pointer"
           >
             <Share2 size={12} className="opacity-70" />
-            <span>Share conversation</span>
+            <span>Share research</span>
           </button>
           <button
             onClick={() => {
-              togglePin(item.run_id)
+              void handleTogglePinResearch(item.run_id)
               setActiveMenuRunId(null)
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white cursor-pointer"
           >
-            {pinnedRunIds.includes(item.run_id) ? (
+            {item.is_pinned ? (
               <>
                 <PinOff size={12} className="opacity-70" />
                 <span>Unpin</span>
@@ -651,10 +658,20 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
               setRenameValue(item.query)
               setActiveMenuRunId(null)
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white cursor-pointer"
           >
             <Pencil size={12} className="opacity-70" />
             <span>Rename</span>
+          </button>
+          <button
+            onClick={() => {
+              void handleToggleArchiveResearch(item.run_id)
+              setActiveMenuRunId(null)
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white cursor-pointer"
+          >
+            <Archive size={12} className="opacity-70" />
+            <span>Archive</span>
           </button>
           <hr className="border-[#222222] my-1" />
           <button
@@ -674,6 +691,89 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }
 
   // Chat item renderer
+
+  const renderArchivedHistoryItem = (item: HistoryItem) => {
+    return (
+      <li key={item.run_id} className="relative group">
+        <button
+          onClick={() => navigate(`/research?run=${item.run_id}`)}
+          className={`flex w-full items-start gap-2 rounded-md pl-2 pr-14 py-2 text-left text-xs transition-all duration-200 hover:bg-[#111111] opacity-75 hover:opacity-100 cursor-pointer ${
+            activeRunId === item.run_id
+              ? 'bg-[#111111] text-white font-bold border-l-2 border-zinc-500'
+              : 'text-[#888888] hover:text-white'
+          }`}
+        >
+          <Archive size={11} className="mt-0.5 flex-shrink-0 opacity-50" />
+          <span className="line-clamp-2 leading-relaxed">{item.query}</span>
+        </button>
+
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex show-on-touch items-center gap-0.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              void handleToggleArchiveResearch(item.run_id)
+            }}
+            title="Unarchive research"
+            className="p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors cursor-pointer"
+          >
+            <ArchiveRestore size={13} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setActiveMenuRunId(activeMenuRunId === item.run_id ? null : item.run_id)
+            }}
+            className="p-1 rounded hover:bg-[#222222] text-[#666666] hover:text-white transition-colors cursor-pointer"
+          >
+            <MoreVertical size={13} />
+          </button>
+        </div>
+
+        {activeMenuRunId === item.run_id && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-2 top-8 z-50 w-44 bg-[#111111] border border-[#222222] rounded-xl py-1 shadow-2xl animate-fade-in text-xs"
+          >
+            <button
+              onClick={() => {
+                setActiveMenuRunId(null)
+                void handleToggleArchiveResearch(item.run_id)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white cursor-pointer"
+            >
+              <ArchiveRestore size={12} className="opacity-70" />
+              <span>Unarchive</span>
+            </button>
+            <button
+              onClick={() => {
+                setRenameTargetRunId(item.run_id)
+                setRenameValue(item.query)
+                setActiveMenuRunId(null)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white cursor-pointer"
+            >
+              <Pencil size={12} className="opacity-70" />
+              <span>Rename</span>
+            </button>
+            <hr className="border-[#222222] my-1" />
+            <button
+              onClick={() => {
+                setDeleteTargetRunId(item.run_id)
+                setActiveMenuRunId(null)
+              }}
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#ef4444] hover:bg-[#181818] cursor-pointer"
+            >
+              <Trash2 size={12} className="opacity-70" />
+              <span>Delete</span>
+            </button>
+          </div>
+        )}
+      </li>
+    )
+  }
+
   const renderChatItem = (item: ChatSession) => {
     const isChatActive = location.pathname === `/chat/${item.id}`
     return (
@@ -814,7 +914,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 setActiveMenuChatId(null)
                 void handleToggleArchiveChat(item.id)
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-emerald-400"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-[#cccccc] hover:bg-[#181818] hover:text-white"
             >
               <ArchiveRestore size={12} className="opacity-70" />
               <span>Unarchive</span>
@@ -968,10 +1068,10 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
             {sidebarTab === 'research' ? (
               loadingHistory ? (
                 <div className="flex items-center gap-2 px-2 py-2 text-[#555555]">
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2 size={12} className="animate-spin text-white" />
                   <span className="text-xs">Loading history...</span>
                 </div>
-              ) : completedHistory.length === 0 ? (
+              ) : completedHistory.length === 0 && archivedHistory.length === 0 ? (
                 <p className="px-2 py-2 text-xs text-[#555555]">No research runs yet.</p>
               ) : (
                 <>
@@ -984,10 +1084,41 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     </>
                   )}
 
-                  <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555]">
-                    Recent
-                  </p>
-                  <ul className="space-y-0.5">{regularHistory.map(renderHistoryItem)}</ul>
+                  {regularHistory.length > 0 && (
+                    <>
+                      <p className="px-2 mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#555555]">
+                        Recent
+                      </p>
+                      <ul className="space-y-0.5">{regularHistory.map(renderHistoryItem)}</ul>
+                    </>
+                  )}
+
+                  {/* Archived Research Section */}
+                  {archivedHistory.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-[#1a1a1a]">
+                      <button
+                        onClick={() => setShowArchivedResearchSection(!showArchivedResearchSection)}
+                        className="flex w-full items-center justify-between px-2 py-1.5 text-[11px] font-semibold text-[#666666] hover:text-white transition-colors rounded-md hover:bg-[#141414] cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Archive size={11} />
+                          Archived ({archivedHistory.length})
+                        </span>
+                        <ChevronDown
+                          size={12}
+                          className={`transition-transform duration-200 ${
+                            showArchivedResearchSection ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {showArchivedResearchSection && (
+                        <ul className="mt-1 space-y-0.5 animate-fade-in">
+                          {archivedHistory.map(renderArchivedHistoryItem)}
+                        </ul>
+                      )}
+                    </div>
+                  )}
                 </>
               )
             ) : loadingChat ? (

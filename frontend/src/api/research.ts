@@ -22,6 +22,7 @@ export interface ResearchResponse {
 }
 export interface HistoryItem {
   run_id: string; query: string; status: string; video_count: number
+  is_pinned?: boolean; is_archived?: boolean
   created_at: string; completed_at: string | null
   research_question: string | null; executive_summary: string | null
   conclusion: string | null; methodology: string | null
@@ -36,8 +37,8 @@ export async function runResearch(q: string, videoCount: number): Promise<Resear
   const res = await client.post<ResearchResponse>('/youtube/research', { query: q, video_count: videoCount })
   return res.data
 }
-export async function getHistory(page = 1, pageSize = 20): Promise<HistoryListResponse> {
-  const res = await client.get<HistoryListResponse>('/youtube/history', { params: { page, page_size: pageSize } })
+export async function getHistory(page = 1, pageSize = 20, archived = false): Promise<HistoryListResponse> {
+  const res = await client.get<HistoryListResponse>('/youtube/history', { params: { page, page_size: pageSize, archived } })
   return res.data
 }
 export async function getHistoryEntry(runId: string): Promise<HistoryItem> {
@@ -59,5 +60,14 @@ export async function shareHistoryEntry(runId: string): Promise<{ success: boole
 
 export async function getSharedEntry(runId: string): Promise<HistoryItem> {
   const res = await client.get<HistoryItem>(`/youtube/shared/${runId}`)
+  return res.data
+}
+
+export async function pinHistoryEntry(runId: string): Promise<{ run_id: string; is_pinned: boolean; message: string }> {
+  const res = await client.patch<{ run_id: string; is_pinned: boolean; message: string }>("/youtube/history/" + runId + "/pin")
+  return res.data
+}
+export async function archiveHistoryEntry(runId: string): Promise<{ run_id: string; is_archived: boolean; message: string }> {
+  const res = await client.patch<{ run_id: string; is_archived: boolean; message: string }>("/youtube/history/" + runId + "/archive")
   return res.data
 }

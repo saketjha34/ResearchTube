@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon, Calendar, Clock } from 'lucide-react'
-import { runResearch, getHistory, getHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
+import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon, Calendar, Clock, Archive, ArchiveRestore } from 'lucide-react'
+import { runResearch, getHistory, getHistoryEntry, archiveHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
 import { useToast, ToastContainer } from '../components/Toast'
 import KnowledgeGraph from '../components/KnowledgeGraph'
 import { Onboarding } from '../components/Onboarding'
@@ -858,6 +858,32 @@ function Research() {
           <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-[#555555]">DEEP TECHNICAL RESEARCH ENGINE</p>
         </div>
       </header>
+
+      {/* Archived Notice Banner */}
+      {historyResult?.is_archived && (
+        <div className="mb-6 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-300 backdrop-blur-xs animate-fade-in">
+          <div className="flex items-center gap-2">
+            <Archive size={14} className="flex-shrink-0 text-amber-400" />
+            <span>This research run is archived.</span>
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!activeRunId) return
+              try {
+                const res = await archiveHistoryEntry(activeRunId)
+                setHistoryResult((prev) => (prev ? { ...prev, is_archived: res.is_archived } : null))
+              } catch {
+                alert('Failed to unarchive research run.')
+              }
+            }}
+            className="flex items-center gap-1 font-semibold text-amber-200 hover:text-white transition-colors underline underline-offset-2 ml-3 flex-shrink-0 cursor-pointer"
+          >
+            <ArchiveRestore size={13} />
+            <span>Unarchive</span>
+          </button>
+        </div>
+      )}
 
       {/* Background research in progress banner when viewing a past report */}
       {loading && activeRunId && (

@@ -46,6 +46,10 @@ async def get_history(
         le=100,
         description="Results per page",
     ),
+    archived: bool = Query(
+        default=False,
+        description="Filter active vs archived research runs",
+    ),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
@@ -62,6 +66,7 @@ async def get_history(
         user_id=current_user.id,
         page=page,
         page_size=page_size,
+        archived=archived,
     )
 
 
@@ -168,6 +173,56 @@ async def share_history_entry(
     Toggle the is_public status of a research run.
     """
     return await youtube_research_service.share_history_entry(
+        session=session,
+        run_id=run_id,
+        current_user=current_user,
+    )
+
+
+# ============================================================
+# PATCH /youtube/history/{run_id}/pin — PROTECTED
+# ============================================================
+
+@router.patch(
+    "/history/{run_id}/pin",
+    response_model=dict,
+)
+@limiter.limit("30/minute")          # pin toggle
+async def pin_history_entry(
+    request: Request,
+    run_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Toggle the is_pinned status of a user's research run.
+    """
+    return await youtube_research_service.pin_history_entry(
+        session=session,
+        run_id=run_id,
+        current_user=current_user,
+    )
+
+
+# ============================================================
+# PATCH /youtube/history/{run_id}/archive — PROTECTED
+# ============================================================
+
+@router.patch(
+    "/history/{run_id}/archive",
+    response_model=dict,
+)
+@limiter.limit("30/minute")          # archive toggle
+async def archive_history_entry(
+    request: Request,
+    run_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Toggle the is_archived status of a user's research run.
+    """
+    return await youtube_research_service.archive_history_entry(
         session=session,
         run_id=run_id,
         current_user=current_user,
