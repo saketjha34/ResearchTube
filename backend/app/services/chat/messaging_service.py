@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import AsyncGenerator, Optional
 from uuid import UUID
 
@@ -25,6 +26,13 @@ from app.schema.chat import (
     ChatMessageResponse,
     SendMessageRequest,
     SendMessageResponse,
+)
+from app.tools.web_search import (
+    execute_web_search,
+    firecrawl_web_search,
+    format_web_search_prompt,
+    scrape_top_sources,
+    search_web_sources,
 )
 from app.services.chat.chat_utils import (
     _MAX_HISTORY_TURNS,
@@ -128,12 +136,41 @@ class MessagingService:
             history_turns=len(history),
         )
 
+        # ── 3b. Dual-Mode Web Search ───────────────────────────
+        is_live_query = bool(
+            re.search(r'\b(weather|temperature|forecast|rain|climate|news|today|latest|stock|price|score)\b', payload.message, re.IGNORECASE)
+        )
+        should_search_web = bool(payload.web_search) or (not chat_session.video_id and is_live_query) or bool(
+            re.search(r'\b(search\s+(the\s+)?(web|internet|online)|look\s+up\s+online)\b', payload.message, re.IGNORECASE)
+        )
+        web_search_text: Optional[str] = None
+
+        if should_search_web:
+            _logger.info("chat.web_search_triggered", session_id=str(session_id), compulsory=bool(payload.web_search))
+            web_search_text, web_sources, engine = await execute_web_search(payload.message, limit=5)
+            for ws in web_sources:
+                retrieved_sources.append({
+                    "chunk_id": f"web_{ws['index']}",
+                    "index": len(retrieved_sources) + 1,
+                    "source_type": "web",
+                    "url": ws["url"],
+                    "engine": ws.get("engine", engine),
+                    "title": ws["title"],
+                    "video_title": ws["title"],
+                    "youtube_video_id": None,
+                    "start_time": None,
+                    "end_time": None,
+                    "similarity": None,
+                    "text_snippet": ws["snippet"],
+                })
+
         # ── 4. Build prompt ────────────────────────────────────
         prompt_text = self._prompt.render(
             user_message=payload.message,
             scope_description=scope_description,
             context_chunks=context_chunks,
             history=history,
+            web_search_results=web_search_text,
         )
 
         # ── 5. Invoke LLM ──────────────────────────────────────
@@ -265,12 +302,79 @@ class MessagingService:
                 await session.commit()
                 return
 
+            # 3b. Dual-Mode Web Search
+            is_live_query = bool(
+                re.search(r'\b(weather|temperature|forecast|rain|climate|news|today|latest|stock|price|score)\b', payload.message, re.IGNORECASE)
+            )
+            should_search_web = bool(payload.web_search) or (not chat_session.video_id and is_live_query) or bool(
+                re.search(r'\b(search\s+(the\s+)?(web|internet|online)|look\s+up\s+online)\b', payload.message, re.IGNORECASE)
+            )
+            web_search_text: Optional[str] = None
+
+            if should_search_web:
+                _logger.info("chat.stream_web_search_triggered", session_id=str(session_id), compulsory=bool(payload.web_search))
+
+                # Step 1: Emit searching status
+                status_payload = {
+                    "status": "searching",
+                    "message": "Searching the live web...",
+                }
+                yield f"event: status\ndata: {json.dumps(status_payload)}\n\n"
+
+                clean_sources, engine_used = await search_web_sources(payload.message, limit=5)
+
+                if request and await request.is_disconnected():
+                    _logger.info("chat.stream_cancelled_after_web_search", session_id=str(session_id))
+                    await session.delete(user_msg)
+                    await session.commit()
+                    return
+
+                if clean_sources:
+                    for ws in clean_sources:
+                        retrieved_sources.append({
+                            "chunk_id": f"web_{ws['index']}",
+                            "index": len(retrieved_sources) + 1,
+                            "source_type": "web",
+                            "url": ws["url"],
+                            "engine": ws.get("engine", engine_used),
+                            "title": ws["title"],
+                            "video_title": ws["title"],
+                            "youtube_video_id": None,
+                            "start_time": None,
+                            "end_time": None,
+                            "similarity": None,
+                            "text_snippet": ws["snippet"],
+                        })
+
+                    # Step 2: Emit scraping status
+                    status_payload = {
+                        "status": "scraping",
+                        "message": "Reading verified page content...",
+                    }
+                    yield f"event: status\ndata: {json.dumps(status_payload)}\n\n"
+
+                    scraped_pages = await scrape_top_sources(clean_sources, max_pages=3)
+
+                    if request and await request.is_disconnected():
+                        _logger.info("chat.stream_cancelled_after_scraping", session_id=str(session_id))
+                        await session.delete(user_msg)
+                        await session.commit()
+                        return
+
+                    web_search_text = format_web_search_prompt(payload.message, clean_sources, scraped_pages)
+                else:
+                    web_search_text = (
+                        f"Web search for '{payload.message}' could not retrieve live results due to a temporary issue. "
+                        "Please answer using your existing knowledge."
+                    )
+
             # 4. Render prompt template
             prompt_text = self._prompt.render(
                 user_message=payload.message,
                 scope_description=scope_description,
                 context_chunks=context_chunks,
                 history=history,
+                web_search_results=web_search_text,
             )
 
             # 5. Stream LLM tokens

@@ -11,6 +11,7 @@ import {
   Archive,
   ArchiveRestore,
   Calendar,
+  Globe,
 } from 'lucide-react'
 import {
   getAvailableVideos,
@@ -76,6 +77,8 @@ export default function Chat() {
   const [session, setSession] = useState<ChatSessionDetail | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
+  const [webSearchActive, setWebSearchActive] = useState(false)
+  const [searchStatus, setSearchStatus] = useState<string | null>(null)
   const [loadingSession, setLoadingSession] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
@@ -437,14 +440,19 @@ export default function Chat() {
     const controller = new AbortController()
     abortControllerRef.current = controller
 
-    await streamMessage(currentSessionId, textToSend, {
-      onUser: (userEvent) => {
+    await streamMessage(
+      currentSessionId,
+      textToSend,
+      {
+        onStatus: (status) => setSearchStatus(status.message),
+        onUser: (userEvent) => {
         // Replace temp ID with actual DB ID
         setMessages((prev) =>
           prev.map((m) => (m.id === tempUserMsg.id ? { ...m, id: userEvent.id } : m))
         )
       },
       onDelta: (token) => {
+        setSearchStatus((prev) => (prev ? null : null))
         rawStreamBufferRef.current += token
 
         // Start RAF smooth token reveal loop if not active
@@ -496,6 +504,7 @@ export default function Chat() {
         }
       },
       onDone: (doneEvent) => {
+        setSearchStatus(null)
         isStreamActiveRef.current = false
 
         // Drain any remaining buffered tokens smoothly, then commit the message
@@ -543,6 +552,7 @@ export default function Chat() {
         requestAnimationFrame(finalize)
       },
       onError: (errMsg) => {
+        setSearchStatus(null)
         abortControllerRef.current = null
         isStreamActiveRef.current = false
         if (streamRafIdRef.current) {
@@ -558,7 +568,7 @@ export default function Chat() {
         streamingStartTimeRef.current = null
         justCreatedSessionRef.current = null
       },
-    }, selectedVideo ? selectedVideo.db_id : null, controller.signal)
+    }, selectedVideo ? selectedVideo.db_id : null, controller.signal, webSearchActive)
   }
 
   const handleStop = useCallback(() => {
@@ -569,6 +579,7 @@ export default function Chat() {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
+    setSearchStatus(null)
 
     // 2. Stop RAF reveal loop
     isStreamActiveRef.current = false
@@ -715,6 +726,8 @@ export default function Chat() {
                 videos={availableVideos}
                 selectedVideo={selectedVideo}
                 onSelectVideo={handleSelectVideo}
+                webSearchActive={webSearchActive}
+                onToggleWebSearch={setWebSearchActive}
               />
             </div>
           </div>
@@ -741,6 +754,14 @@ export default function Chat() {
                   onShare={handleOpenShare}
                 />
               ))}
+
+              {/* Live Web Search Status Banner */}
+              {isStreaming && searchStatus && (
+                <div className="flex items-center gap-2.5 my-3 text-xs text-sky-200 bg-sky-950/50 border border-sky-500/30 rounded-xl px-3.5 py-2 w-fit shadow-md shadow-sky-500/10 animate-pulse">
+                  <Globe size={14} className="text-sky-400 animate-spin flex-shrink-0" />
+                  <span className="font-medium tracking-wide">{searchStatus}</span>
+                </div>
+              )}
 
               {/* In-flight streaming message */}
               {isStreaming && (
@@ -788,6 +809,8 @@ export default function Chat() {
                 videos={availableVideos}
                 selectedVideo={selectedVideo}
                 onSelectVideo={handleSelectVideo}
+                webSearchActive={webSearchActive}
+                onToggleWebSearch={setWebSearchActive}
               />
             </div>
           </>

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react'
 import { ArrowUp, Square } from 'lucide-react'
 import { VideoScopeSelector } from './VideoScopeSelector'
+import { ToolSelector } from './ToolSelector'
 import type { AvailableVideo } from '../../api/chat'
 
 interface ChatInputProps {
@@ -14,6 +15,8 @@ interface ChatInputProps {
   videos: AvailableVideo[]
   selectedVideo: AvailableVideo | null
   onSelectVideo: (video: AvailableVideo | null) => void
+  webSearchActive?: boolean
+  onToggleWebSearch?: (active: boolean) => void
 }
 
 export const ChatInput = React.memo(function ChatInput({
@@ -27,6 +30,8 @@ export const ChatInput = React.memo(function ChatInput({
   videos,
   selectedVideo,
   onSelectVideo,
+  webSearchActive = false,
+  onToggleWebSearch,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -66,7 +71,7 @@ export const ChatInput = React.memo(function ChatInput({
       />
 
       <div className="flex items-center justify-between pt-2.5 border-t border-[#1a1a1a] mt-1.5">
-        {/* Bottom Left: Video Transcript Scope Button */}
+        {/* Bottom Left: Video Transcript Scope Button & AI Tools */}
         <div className="flex items-center gap-2">
           <VideoScopeSelector
             videos={videos}
@@ -74,6 +79,13 @@ export const ChatInput = React.memo(function ChatInput({
             onSelect={onSelectVideo}
             disabled={isStreaming || disabled}
           />
+          {onToggleWebSearch && (
+            <ToolSelector
+              webSearchActive={webSearchActive}
+              onToggleWebSearch={onToggleWebSearch}
+              disabled={isStreaming || disabled}
+            />
+          )}
         </div>
 
         {/* Bottom Right: Shortcuts and Action */}

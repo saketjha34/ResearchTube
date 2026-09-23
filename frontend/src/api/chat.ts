@@ -29,12 +29,17 @@ export interface AvailableVideo {
 }
 
 export interface SourceCitation {
-  chunk_id: string
-  video_title: string | null
-  youtube_video_id: string | null
-  start_time: number | null
-  end_time: number | null
-  similarity: number | null
+  chunk_id?: string | null
+  index?: number | null
+  source_type?: 'transcript' | 'web' | null
+  url?: string | null
+  engine?: string | null
+  title?: string | null
+  video_title?: string | null
+  youtube_video_id?: string | null
+  start_time?: number | null
+  end_time?: number | null
+  similarity?: number | null
   text_snippet: string | null
 }
 
@@ -125,7 +130,13 @@ export interface SSEUserEvent {
   created_at: string
 }
 
+export interface SSEStatusEvent {
+  status: string
+  message: string
+}
+
 export interface StreamCallbacks {
+  onStatus?: (status: SSEStatusEvent) => void
   onUser?: (event: SSEUserEvent) => void
   onDelta: (text: string) => void
   onDone: (event: SSEDoneEvent) => void
@@ -219,10 +230,20 @@ export async function getChatGreeting(name?: string): Promise<ChatGreetingRespon
   return res.data
 }
 
-export async function sendMessageNonStream(sessionId: string, message: string, videoId?: string | null) {
+export async function sendMessageNonStream(
+  sessionId: string,
+  message: string,
+  videoId?: string | null,
+  webSearch?: boolean,
+) {
   const res = await client.post<{ user_message: ChatMessage; assistant_message: ChatMessage }>(
     `/chat/sessions/${sessionId}/messages`,
-    { message, video_id: videoId !== undefined ? (videoId || null) : undefined, clear_video_scope: videoId === null ? true : undefined },
+    {
+      message,
+      video_id: videoId !== undefined ? (videoId || null) : undefined,
+      clear_video_scope: videoId === null ? true : undefined,
+      web_search: webSearch ? true : undefined,
+    },
   )
   return res.data
 }
@@ -235,6 +256,7 @@ export async function streamMessage(
   callbacks: StreamCallbacks,
   videoId?: string | null,
   signal?: AbortSignal,
+  webSearch?: boolean,
 ): Promise<void> {
   const token = getAccessToken()
   const url = buildApiUrl(`/chat/sessions/${sessionId}/messages/stream`)
@@ -251,6 +273,7 @@ export async function streamMessage(
         message,
         video_id: videoId !== undefined ? (videoId || null) : undefined,
         clear_video_scope: videoId === null ? true : undefined,
+        web_search: webSearch ? true : undefined,
       }),
       signal,
     })
@@ -304,6 +327,9 @@ export async function streamMessage(
           try {
             const parsed = JSON.parse(raw) as Record<string, unknown>
             switch (currentEvent) {
+              case 'status':
+                callbacks.onStatus?.(parsed as unknown as SSEStatusEvent)
+                break
               case 'user':
                 callbacks.onUser?.(parsed as unknown as SSEUserEvent)
                 break

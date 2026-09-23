@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
     YOUTUBE_API_KEY: str
     OPENAI_API_KEY: str | None = None
+    FIRECRAWL_API_KEY: str | None = None
+    FIRECRAWL_BASE_URL: str = "https://api.firecrawl.dev/v1"
 
     # ========================================================
     # DATABASE

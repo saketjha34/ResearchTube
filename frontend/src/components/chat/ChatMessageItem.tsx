@@ -5,7 +5,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video, Share , Clock } from 'lucide-react'
+import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video, Share, Clock, Globe } from 'lucide-react'
 import type { ChatMessage, SourceCitation } from '../../api/chat'
 
 interface ChatMessageItemProps {
@@ -246,77 +246,181 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
   )
 })
 
-const SourcesList = React.memo(function SourcesList({ sources }: { sources: SourceCitation[] }) {
-  const [expanded, setExpanded] = useState(false)
-  const topSources = sources.slice(0, 3)
+function extractDomain(url?: string | null): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return null
+  }
+}
 
-  if (topSources.length === 0) return null
+function cleanDisplaySnippet(snippet?: string | null): string {
+  if (!snippet) return ''
+  return snippet
+    .replace(/!\[.*?\]\(.*?\)/g, '')
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+    .replace(/\\n/g, ' ')
+    .replace(/\\r/g, ' ')
+    .replace(/\\/g, '')
+    .replace(/#{1,6}\s*/g, '')
+    .replace(/[*_~`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const SourceCard = React.memo(function SourceCard({
+  src,
+  idx,
+  total,
+}: {
+  src: SourceCitation
+  idx: number
+  total: number
+}) {
+  const [isHovered, setIsHovered] = useState(false)
+
+  const ytUrl =
+    src.youtube_video_id && src.start_time != null
+      ? `https://www.youtube.com/watch?v=${src.youtube_video_id}&t=${Math.floor(src.start_time)}s`
+      : src.youtube_video_id
+      ? `https://www.youtube.com/watch?v=${src.youtube_video_id}`
+      : null
+
+  const targetUrl = src.url || ytUrl
+  const domain = extractDomain(src.url)
+  const snippetText = cleanDisplaySnippet(src.text_snippet)
+
+  const displayTitle =
+    src.title ||
+    src.video_title ||
+    (src.source_type === 'web'
+      ? (domain || 'Web Source')
+      : (src.youtube_video_id ? `Video ${src.youtube_video_id}` : 'YouTube Video'))
+
+  const isRightEdge = idx >= total - 2
+
+  return (
+    <div
+      className="relative flex-shrink-0"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <a
+        href={targetUrl || '#'}
+        target={targetUrl ? '_blank' : undefined}
+        rel="noopener noreferrer"
+        className="group flex flex-col justify-between w-[205px] h-[92px] p-2.5 rounded-xl border border-[#232328] bg-[#111114]/90 hover:bg-[#16161f] hover:border-sky-500/40 transition-all duration-200 shadow-sm hover:shadow-lg hover:shadow-black/60 hover:-translate-y-0.5 select-none cursor-pointer"
+        title={displayTitle}
+      >
+        {/* Top: Icon + Domain/Channel + External Arrow */}
+        <div className="flex items-center justify-between gap-1.5 text-[11px] text-zinc-400">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {src.source_type === 'web' || (src.url && !src.youtube_video_id) ? (
+              <Globe size={13} className="text-sky-400 flex-shrink-0" />
+            ) : (
+              <Video size={13} className="text-rose-400 flex-shrink-0" />
+            )}
+            <span className="font-mono text-[10.5px] text-zinc-400 truncate">
+              {domain || (src.source_type === 'web' ? 'Web' : 'YouTube')}
+            </span>
+          </div>
+          <ExternalLink size={11} className="text-zinc-500 group-hover:text-sky-400 transition-colors flex-shrink-0" />
+        </div>
+
+        {/* Middle: Shortened Title */}
+        <p className="line-clamp-2 text-[12px] font-medium leading-snug text-zinc-200 group-hover:text-white transition-colors">
+          {displayTitle}
+        </p>
+
+        {/* Bottom meta: Time / Source # */}
+        <div className="flex items-center justify-between text-[10px] text-zinc-500">
+          <span className="font-mono text-zinc-500">#{src.index || idx + 1}</span>
+          {src.start_time != null && (
+            <span className="font-mono text-zinc-400">@{formatTime(src.start_time)}</span>
+          )}
+        </div>
+      </a>
+
+      {/* Rich Hover Preview Tooltip / Popover */}
+      {isHovered && (
+        <div
+          className={`absolute bottom-[calc(100%+8px)] ${
+            isRightEdge ? 'right-0' : 'left-0'
+          } z-50 w-[290px] p-3 rounded-xl border border-[#2f2f38] bg-[#141418] shadow-2xl shadow-black/90 text-xs backdrop-blur-md animate-in fade-in zoom-in-95 duration-150 pointer-events-none`}
+        >
+          {/* Popover Header */}
+          <div className="flex items-center justify-between gap-2 border-b border-[#22222a] pb-2 mb-2 text-[11px]">
+            <div className="flex items-center gap-1.5 text-zinc-400">
+              {src.source_type === 'web' || (src.url && !src.youtube_video_id) ? (
+                <Globe size={12} className="text-sky-400" />
+              ) : (
+                <Video size={12} className="text-rose-400" />
+              )}
+              <span className="font-mono text-zinc-300 font-medium truncate max-w-[170px]">
+                {domain || 'Source'}
+              </span>
+            </div>
+            <span className="text-[10px] text-sky-400 flex items-center gap-1 font-medium">
+              Click to open <ExternalLink size={10} />
+            </span>
+          </div>
+
+          {/* Full Title */}
+          <p className="font-semibold text-zinc-100 text-[12px] leading-snug">
+            {displayTitle}
+          </p>
+
+          {/* Text Snippet if available */}
+          {snippetText && (
+            <p className="mt-2 text-[11px] leading-relaxed text-zinc-400 italic line-clamp-3 bg-[#0a0a0d]/70 rounded-md p-2 border border-[#1e1e24]">
+              "{snippetText}"
+            </p>
+          )}
+
+          {/* Timestamp / Relevance */}
+          <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-500">
+            {src.similarity != null ? (
+              <span>Relevance: {Math.round(src.similarity * 100)}%</span>
+            ) : <span />}
+            {src.start_time != null && (
+              <span className="font-mono text-zinc-400">Timestamp: @{formatTime(src.start_time)}</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+})
+
+const SourcesList = React.memo(function SourcesList({ sources }: { sources: SourceCitation[] }) {
+  const [expanded, setExpanded] = useState(true)
+
+  if (!sources || sources.length === 0) return null
 
   return (
     <div className="mt-6 border-t border-[#222222] pt-4">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-[#888888] hover:text-white transition-colors"
+        className="flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-[#888888] hover:text-white transition-colors cursor-pointer select-none"
       >
         <span className="flex items-center gap-1.5">
           <Sparkles size={13} className="text-white" />
-          <span>Verified Sources ({topSources.length})</span>
+          <span>Verified Sources ({sources.length})</span>
         </span>
         {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
       </button>
 
       {expanded && (
-        <div className="mt-3 space-y-2.5">
-          {topSources.map((src, idx) => {
-            const ytUrl =
-              src.youtube_video_id && src.start_time !== null
-                ? `https://www.youtube.com/watch?v=${src.youtube_video_id}&t=${Math.floor(src.start_time)}s`
-                : src.youtube_video_id
-                ? `https://www.youtube.com/watch?v=${src.youtube_video_id}`
-                : null
-
-            return (
-              <div
-                key={src.chunk_id || idx}
-                className="rounded-lg border border-[#222222] bg-[#121212] p-3.5 text-xs transition-all hover:border-[#333333]"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-1.5 font-medium text-white line-clamp-1">
-                    <Video size={14} className="text-white flex-shrink-0" />
-                    <span>{src.video_title || 'YouTube Video'}</span>
-                  </div>
-                  {src.start_time !== null && (
-                    <span className="flex-shrink-0 rounded bg-[#1e1e1e] border border-[#2a2a2a] px-1.5 py-0.5 font-mono text-[10px] text-zinc-300">
-                      @{formatTime(src.start_time)}
-                    </span>
-                  )}
-                </div>
-
-                {src.text_snippet && (
-                  <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-[#888888] italic">
-                    "{src.text_snippet}"
-                  </p>
-                )}
-
-                <div className="mt-2.5 flex items-center justify-between text-[10px] text-[#666666]">
-                  {src.similarity !== null && (
-                    <span>Relevance: {Math.round(src.similarity * 100)}%</span>
-                  )}
-                  {ytUrl && (
-                    <a
-                      href={ytUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-[#aaaaaa] hover:text-white transition-colors"
-                    >
-                      <span>Watch clip</span>
-                      <ExternalLink size={10} />
-                    </a>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+        <div className="mt-3 flex items-center gap-2.5 overflow-x-auto pb-2 pt-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+          {sources.map((src, idx) => (
+            <SourceCard
+              key={src.chunk_id || idx}
+              src={src}
+              idx={idx}
+              total={sources.length}
+            />
+          ))}
         </div>
       )}
     </div>

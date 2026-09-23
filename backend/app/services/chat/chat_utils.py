@@ -27,7 +27,7 @@ _logger = structlog.get_logger()
 # Retrieval & history parameters
 _MAX_HISTORY_TURNS = 20
 _RAG_TOP_K = 5
-_RAG_MIN_SIMILARITY = 0.20
+_RAG_MIN_SIMILARITY = 0.40
 _RAG_MAX_SOURCES = 2
 _SNIPPET_CHARS = 240
 
@@ -326,10 +326,30 @@ async def retrieve_chat_context(
             "similarity": chunk.get("similarity"),
         })
 
+        start_time_val = chunk.get("start_time")
+        if start_time_val is not None:
+            try:
+                start_sec_int = int(float(start_time_val))
+                time_param = f"&t={start_sec_int}s"
+            except (ValueError, TypeError):
+                time_param = ""
+        else:
+            time_param = ""
+
+        yt_url = (
+            f"https://www.youtube.com/watch?v={vid.video_id}{time_param}"
+            if vid and vid.video_id
+            else None
+        )
+        display_title = vid.title if (vid and vid.title) else (vid.video_id if vid else "YouTube Video")
+
         retrieved_sources.append({
             "chunk_id": str(chunk["chunk_id"]),
             "index": idx + 1,
-            "video_title": vid.title if vid else None,
+            "source_type": "transcript",
+            "url": yt_url,
+            "title": display_title,
+            "video_title": display_title,
             "youtube_video_id": vid.video_id if vid else None,
             "start_time": chunk.get("start_time"),
             "end_time": chunk.get("end_time"),

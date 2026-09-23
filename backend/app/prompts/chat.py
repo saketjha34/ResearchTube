@@ -28,6 +28,7 @@ class ChatRAGPromptTemplate(JinjaPromptTemplate):
         scope_description: Optional[str] = None,
         context_chunks: Optional[List[Any]] = None,
         history: Optional[List[Any]] = None,
+        web_search_results: Optional[str] = None,
         **kwargs: Any,
     ) -> str:
         return super().render(
@@ -35,6 +36,7 @@ class ChatRAGPromptTemplate(JinjaPromptTemplate):
             scope_description=scope_description,
             context_chunks=context_chunks,
             history=history,
+            web_search_results=web_search_results,
             **kwargs,
         )
 
@@ -44,6 +46,7 @@ class ChatRAGPromptTemplate(JinjaPromptTemplate):
         scope_description: Optional[str] = None,
         context_chunks: Optional[List[Any]] = None,
         history: Optional[List[Any]] = None,
+        web_search_results: Optional[str] = None,
         **kwargs: Any,
     ) -> str:
         return self.render(
@@ -51,6 +54,7 @@ class ChatRAGPromptTemplate(JinjaPromptTemplate):
             scope_description=scope_description,
             context_chunks=context_chunks,
             history=history,
+            web_search_results=web_search_results,
             **kwargs,
         )
 

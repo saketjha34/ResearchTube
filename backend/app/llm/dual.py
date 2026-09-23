@@ -140,14 +140,16 @@ class DualLLMRunnable:
         gemini_model: str,
         openai_llm: OpenAILLM | None,
         gemini_llm: GeminiLLM,
+        custom_openai_chat: Any = None,
+        custom_gemini_chat: Any = None,
     ) -> None:
         self.openai_model = openai_model
         self.gemini_model = gemini_model
         self.openai_llm = openai_llm
         self.gemini_llm = gemini_llm
 
-        self._openai_chat = openai_llm.get_llm() if openai_llm else None
-        self._gemini_chat = gemini_llm.get_llm()
+        self._openai_chat = custom_openai_chat if custom_openai_chat is not None else (openai_llm.get_llm() if openai_llm else None)
+        self._gemini_chat = custom_gemini_chat if custom_gemini_chat is not None else gemini_llm.get_llm()
 
     def invoke(self, input_prompt: Any, **kwargs: Any) -> Any:
         # 1. Attempt OpenAI primary
@@ -355,6 +357,33 @@ class DualLLM:
             gemini_model=self.gemini_model,
             openai_llm=self.openai_llm,
             gemini_llm=self.gemini_llm,
+        )
+
+    def bind_tools(self, tools: list[Any]) -> DualLLMRunnable:
+        """
+        Return a DualLLMRunnable configured with tools bound to both OpenAI and Gemini models.
+        """
+        openai_chat = None
+        if self.openai_llm:
+            try:
+                openai_chat = self.openai_llm.get_llm().bind_tools(tools)
+            except Exception as exc:
+                logger.warning("dual_llm.openai_bind_tools_failed", error=str(exc))
+
+        gemini_chat = None
+        try:
+            gemini_chat = self.gemini_llm.get_llm().bind_tools(tools)
+        except Exception as exc:
+            logger.warning("dual_llm.gemini_bind_tools_failed", error=str(exc))
+            gemini_chat = self.gemini_llm.get_llm()
+
+        return DualLLMRunnable(
+            openai_model=self.openai_model,
+            gemini_model=self.gemini_model,
+            openai_llm=self.openai_llm,
+            gemini_llm=self.gemini_llm,
+            custom_openai_chat=openai_chat,
+            custom_gemini_chat=gemini_chat,
         )
 
     def with_structured_output(

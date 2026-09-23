@@ -146,6 +146,11 @@ class SendMessageRequest(BaseModel):
         ),
     )
 
+    web_search: Optional[bool] = Field(
+        False,
+        description="If True, compulsorily enforces live web search for this prompt turn.",
+    )
+
     @field_validator("video_id", mode="before")
     @classmethod
     def _coerce_video_id(cls, v: Any) -> Any:
@@ -202,16 +207,20 @@ class UpdateSessionScopeRequest(BaseModel):
 # ============================================================
 
 class SourceCitation(BaseModel):
-    """A single RAG source chunk reference."""
+    """A single citation reference (video transcript chunk or web search source)."""
 
-    chunk_id: str
+    chunk_id: Optional[str] = None
     index: Optional[int] = None
+    source_type: Optional[str] = "transcript"  # "transcript" | "web"
+    url: Optional[str] = None
+    engine: Optional[str] = None  # "firecrawl" | "duckduckgo"
+    title: Optional[str] = None
     video_title: Optional[str] = None
     youtube_video_id: Optional[str] = None
     start_time: Optional[float] = None
     end_time: Optional[float] = None
     similarity: Optional[float] = None
-    text_snippet: Optional[str] = None  # first 200 chars of the chunk
+    text_snippet: Optional[str] = None  # clean snippet or first 240 chars of chunk
 
 
 class ChatMessageResponse(BaseModel):
@@ -233,7 +242,11 @@ class ChatMessageResponse(BaseModel):
         if msg.sources:
             try:
                 raw = json.loads(msg.sources)
-                sources = [SourceCitation(**s) for s in raw]
+                if isinstance(raw, list):
+                    for s in raw:
+                        if isinstance(s, dict) and not s.get("title") and s.get("video_title"):
+                            s["title"] = s["video_title"]
+                    sources = [SourceCitation(**s) for s in raw if isinstance(s, dict)]
             except Exception:
                 sources = None
 
@@ -345,5 +358,3 @@ class ChatGreetingResponse(BaseModel):
     greeting: str
     user_name: str
     sentences: List[str]
-
-
