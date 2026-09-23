@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react'
+﻿import React, { useRef, useEffect, useState } from 'react'
 import { ArrowUp, Square } from 'lucide-react'
 import { VideoScopeSelector } from './VideoScopeSelector'
 import { ToolSelector } from './ToolSelector'
@@ -38,6 +38,7 @@ export const ChatInput = React.memo(function ChatInput({
   onToggleWebSearch,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [activePopup, setActivePopup] = useState<'scope' | 'tools' | null>(null)
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -48,6 +49,9 @@ export const ChatInput = React.memo(function ChatInput({
   }, [input])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') {
+      setActivePopup(null)
+    }
     if (e.key === 'Escape' && isStreaming && onStop) {
       e.preventDefault()
       onStop()
@@ -56,6 +60,7 @@ export const ChatInput = React.memo(function ChatInput({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       if (!isStreaming && input.trim() && !disabled) {
+        setActivePopup(null)
         onSubmit()
       }
     }
@@ -71,12 +76,12 @@ export const ChatInput = React.memo(function ChatInput({
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        className="w-full resize-none bg-transparent pr-12 text-sm leading-relaxed text-white placeholder:text-[#555555] focus:outline-none max-h-44 disabled:opacity-50"
+        className="w-full resize-none bg-transparent pr-10 text-[13px] sm:text-sm leading-relaxed text-white placeholder:text-[#555555] focus:outline-none max-h-44 disabled:opacity-50"
       />
 
-      <div className="flex items-center justify-between pt-2.5 border-t border-[#1a1a1a] mt-1.5">
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#1a1a1a] mt-1.5">
         {/* Bottom Left: Video Transcript Scope Button & AI Tools */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
           <VideoScopeSelector
             videos={videos}
             scopeMode={scopeMode}
@@ -84,20 +89,26 @@ export const ChatInput = React.memo(function ChatInput({
             onSelectScope={onSelectScope}
             onSelect={onSelectVideo}
             disabled={isStreaming || disabled}
+            isOpen={activePopup === 'scope'}
+            onToggleOpen={(open) => setActivePopup(open ? 'scope' : null)}
+            onClose={() => setActivePopup(null)}
           />
           {onToggleWebSearch && (
             <ToolSelector
               webSearchActive={webSearchActive}
               onToggleWebSearch={onToggleWebSearch}
               disabled={isStreaming || disabled}
+              isOpen={activePopup === 'tools'}
+              onToggleOpen={(open) => setActivePopup(open ? 'tools' : null)}
+              onClose={() => setActivePopup(null)}
             />
           )}
         </div>
 
         {/* Bottom Right: Shortcuts and Action */}
-        <div className="flex items-center gap-3">
-          <span className="hidden sm:inline-block text-[11px] text-[#666666]">
-            <kbd className="rounded bg-[#1c1c1c] border border-[#2a2a2a] px-1 py-0.5 font-mono text-[10px] text-[#888888]">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 ml-auto">
+          <span className="hidden sm:inline-flex items-center text-[10px] text-[#666666] whitespace-nowrap">
+            <kbd className="rounded bg-[#1c1c1c] border border-[#2a2a2a] px-1 py-0.5 font-mono text-[9px] text-[#888888] mr-1">
               Enter
             </kbd>{' '}
             to send
@@ -107,20 +118,20 @@ export const ChatInput = React.memo(function ChatInput({
             <button
               type="button"
               onClick={onStop}
-              className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#262626] text-white hover:bg-[#333333] transition-all cursor-pointer"
+              className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-[#262626] text-white hover:bg-[#333333] transition-all cursor-pointer flex-shrink-0"
               title="Stop generation"
             >
-              <Square size={13} fill="currentColor" />
+              <Square size={12} fill="currentColor" />
             </button>
           ) : (
             <button
               type="button"
               disabled={!input.trim() || disabled}
               onClick={onSubmit}
-              className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-black transition-all hover:bg-[#d4d4d4] disabled:opacity-20 disabled:hover:bg-white"
+              className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-xl bg-white text-black transition-all hover:bg-[#d4d4d4] disabled:opacity-20 disabled:hover:bg-white flex-shrink-0"
               title="Send message"
             >
-              <ArrowUp size={16} strokeWidth={2.5} />
+              <ArrowUp size={15} strokeWidth={2.5} />
             </button>
           )}
         </div>

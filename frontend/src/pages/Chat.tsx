@@ -133,36 +133,38 @@ export default function Chat() {
   const streamingStartTimeRef = useRef<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Track window scroll position to determine if user is pinned near bottom
-  useEffect(() => {
-    const handleScroll = () => {
-      const scrollBottom = window.innerHeight + window.scrollY
-      const totalHeight = document.documentElement.scrollHeight
-      const isNearBottom = totalHeight - scrollBottom <= 160
-      isAtBottomRef.current = isNearBottom
-      setShowScrollBottomBtn(!isNearBottom && (messages.length > 0 || isStreamingRef.current))
-    }
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
 
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
+  // Track message container scroll position
+  const handleContainerScroll = useCallback(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 140
+    isAtBottomRef.current = isNearBottom
+    setShowScrollBottomBtn(!isNearBottom && (messages.length > 0 || isStreamingRef.current))
   }, [messages.length])
 
-  // Scroll to bottom smoothly or instantly
+  // Scroll to bottom of message container
   const scrollToBottom = useCallback((smooth = true) => {
+    const el = messagesContainerRef.current
+    if (!el) return
     isAtBottomRef.current = true
     setShowScrollBottomBtn(false)
-    window.scrollTo({
-      top: document.documentElement.scrollHeight,
+    el.scrollTo({
+      top: el.scrollHeight,
       behavior: smooth ? 'smooth' : 'instant',
     })
   }, [])
 
-  // Auto-scroll when messages change or session loads (not during token stream)
+  // Auto-scroll when messages change or session finishes loading
   useEffect(() => {
-    if (!isStreaming) {
-      scrollToBottom(false)
+    if (!isStreaming && !loadingSession) {
+      const timer = setTimeout(() => {
+        scrollToBottom(false)
+      }, 50)
+      return () => clearTimeout(timer)
     }
-  }, [sessionId, messages.length, isStreaming, scrollToBottom])
+  }, [sessionId, messages.length, loadingSession, isStreaming, scrollToBottom])
 
   // Cleanup animation frame on unmount
   useEffect(() => {
@@ -500,12 +502,9 @@ export default function Chat() {
               setStreamingText(nextText)
 
               // Pin to bottom with instant behavior — zero screen vibration or oscillation!
-              if (isAtBottomRef.current) {
-                window.scrollTo({
-                  top: document.documentElement.scrollHeight,
-                  behavior: 'instant',
-                })
-              }
+              if (isAtBottomRef.current && messagesContainerRef.current) {
+              messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+            }
             }
 
             if (isStreamActiveRef.current || animatedTextRef.current.length < rawStreamBufferRef.current.length) {
@@ -529,11 +528,8 @@ export default function Chat() {
             const nextText = rawStreamBufferRef.current.slice(0, animatedTextRef.current.length + step)
             animatedTextRef.current = nextText
             setStreamingText(nextText)
-            if (isAtBottomRef.current) {
-              window.scrollTo({
-                top: document.documentElement.scrollHeight,
-                behavior: 'instant',
-              })
+            if (isAtBottomRef.current && messagesContainerRef.current) {
+              messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
             }
             requestAnimationFrame(finalize)
             return
@@ -630,14 +626,13 @@ export default function Chat() {
       window.dispatchEvent(new Event('chat:updated'))
     }
   }, [isStreaming, sessionId, session?.id])
-
   return (
-    <div className="flex flex-col min-h-[calc(100vh-8rem)] w-full">
+    <div className="flex flex-col h-full min-h-0 w-full overflow-hidden max-w-full">
       {/* Header Bar */}
       {Boolean(session?.title && session?.title !== 'Interactive AI Research Chat') && (
-        <header className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-[#1c1c1c] pb-4">
-          <div className="flex items-center gap-3">
-            <div>
+        <header className="flex-shrink-0 w-full border-b border-[#1c1c1c] pt-14 sm:pt-4 pb-3">
+          <div className="w-full max-w-5xl mx-auto px-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
               {editingTitle ? (
                 <div className="flex items-center gap-2">
                   <input
@@ -685,36 +680,40 @@ export default function Chat() {
 
       {/* Error alert */}
       {error && (
-        <div className="mb-4 flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
-          <div className="flex items-center gap-2">
-            <AlertCircle size={15} className="flex-shrink-0 text-red-400" />
-            <span>{error}</span>
+        <div className="w-full max-w-5xl mx-auto px-4 flex-shrink-0 pt-2">
+          <div className="mb-3 flex items-center justify-between rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-xs text-red-300">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={15} className="flex-shrink-0 text-red-400" />
+              <span>{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="p-1 hover:text-white">
+              <X size={13} />
+            </button>
           </div>
-          <button onClick={() => setError(null)} className="p-1 hover:text-white">
-            <X size={13} />
-          </button>
         </div>
       )}
 
       {/* Archived Notice Banner */}
       {session?.is_archived && (
-        <div className="mb-3 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-300 backdrop-blur-xs">
-          <div className="flex items-center gap-2">
-            <Archive size={14} className="flex-shrink-0 text-amber-400" />
-            <span>This conversation is archived. Sending a new message will automatically unarchive it.</span>
+        <div className="w-full max-w-5xl mx-auto px-4 flex-shrink-0 pt-2">
+          <div className="mb-3 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-300 backdrop-blur-xs">
+            <div className="flex items-center gap-2">
+              <Archive size={14} className="flex-shrink-0 text-amber-400" />
+              <span>This conversation is archived. Sending a new message will automatically unarchive it.</span>
+            </div>
+            <button
+              onClick={handleToggleArchive}
+              className="flex items-center gap-1 font-semibold text-amber-200 hover:text-white transition-colors underline underline-offset-2 ml-3 flex-shrink-0 cursor-pointer"
+            >
+              <ArchiveRestore size={13} />
+              <span>Unarchive</span>
+            </button>
           </div>
-          <button
-            onClick={handleToggleArchive}
-            className="flex items-center gap-1 font-semibold text-amber-200 hover:text-white transition-colors underline underline-offset-2 ml-3 flex-shrink-0 cursor-pointer"
-          >
-            <ArchiveRestore size={13} />
-            <span>Unarchive</span>
-          </button>
         </div>
       )}
 
       {/* Main Conversation Container */}
-      <div className="flex-1 flex flex-col justify-between">
+      <div className="flex-1 min-h-0 w-full flex flex-col justify-between">
         {loadingSession ? (
           <div className="flex flex-1 items-center justify-center py-20 text-[#666666]">
             <Loader2 size={24} className="animate-spin text-white mr-2" />
@@ -722,8 +721,8 @@ export default function Chat() {
           </div>
         ) : messages.length === 0 && !isStreaming ? (
           /* Empty / New Chat State: Chat box centered in viewport */
-          <div className="flex flex-1 flex-col items-center justify-center min-h-[55vh] w-full max-w-3xl mx-auto px-2 animate-fade-in">
-            {/* Claude & ChatGPT-style greeting headline — single line, elegant typography */}
+          <div className="flex flex-1 flex-col items-center justify-center min-h-0 h-full w-full max-w-3xl mx-auto px-4 animate-fade-in overflow-y-auto">
+            {/* Claude & ChatGPT-style greeting headline */}
             <div className="mb-6 w-full max-w-2xl text-center px-4 select-none animate-fade-in flex justify-center">
               <h1 className="text-lg sm:text-xl md:text-2xl font-medium tracking-tight text-white/90 whitespace-nowrap overflow-hidden text-ellipsis leading-normal">
                 {greeting || `Hey ${user?.full_name?.split(' ')[0] || user?.username || 'there'}, what are we researching today?`}
@@ -751,61 +750,68 @@ export default function Chat() {
         ) : (
           /* Active Message Thread + Sticky Bottom Chat Box */
           <>
-            <div className="flex-1 overflow-y-auto space-y-6 pb-8">
-              {/* Chat Creation Date & Time Header (Marked in Green by user) */}
-              {(session?.created_at || (messages.length > 0 && messages[0]?.created_at)) && (
-                <div className="flex items-center justify-center pt-2 pb-1 select-none animate-fade-in">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-[#262626] bg-[#121212]/90 backdrop-blur-md px-4 py-1.5 text-xs text-[#8e8e8e] shadow-md hover:border-[#383838] transition-colors">
-                    <Calendar size={13} className="text-[#888888]" />
-                    <span className="font-medium tracking-wide">
-                      Created {formatChatCreationDate(session?.created_at || messages[0]?.created_at)}
-                    </span>
+            <div
+              ref={messagesContainerRef}
+              onScroll={handleContainerScroll}
+              className="flex-1 min-h-0 w-full overflow-y-auto custom-scrollbar"
+            >
+              <div className="w-full max-w-5xl mx-auto px-4 py-4 space-y-6">
+                {/* Chat Creation Date & Time Header */}
+                {(session?.created_at || (messages.length > 0 && messages[0]?.created_at)) && (
+                  <div className="flex items-center justify-center pt-2 pb-1 select-none animate-fade-in">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#262626] bg-[#121212]/90 backdrop-blur-md px-4 py-1.5 text-xs text-[#8e8e8e] shadow-md hover:border-[#383838] transition-colors">
+                      <Calendar size={13} className="text-[#888888]" />
+                      <span className="font-medium tracking-wide">
+                        Created {formatChatCreationDate(session?.created_at || messages[0]?.created_at)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {messages.map((msg) => (
-                <ChatMessageItem
-                  key={msg.id}
-                  message={msg}
-                  onShare={handleOpenShare}
-                />
-              ))}
+                {messages.map((msg) => (
+                  <ChatMessageItem
+                    key={msg.id}
+                    message={msg}
+                    onShare={handleOpenShare}
+                  />
+                ))}
 
-              {/* Live Web Search Status Banner */}
-              {isStreaming && searchStatus && (
-                <div className="flex items-center gap-2.5 my-3 text-xs text-sky-200 bg-sky-950/50 border border-sky-500/30 rounded-xl px-3.5 py-2 w-fit shadow-md shadow-sky-500/10 animate-pulse">
-                  <Globe size={14} className="text-sky-400 animate-spin flex-shrink-0" />
-                  <span className="font-medium tracking-wide">{searchStatus}</span>
-                </div>
-              )}
+                {/* Live Web Search Status Banner */}
+                {isStreaming && searchStatus && (
+                  <div className="flex items-center gap-2.5 my-3 text-xs text-sky-200 bg-sky-950/50 border border-sky-500/30 rounded-xl px-3.5 py-2 w-fit shadow-md shadow-sky-500/10 animate-pulse">
+                    <Globe size={14} className="text-sky-400 animate-spin flex-shrink-0" />
+                    <span className="font-medium tracking-wide">{searchStatus}</span>
+                  </div>
+                )}
 
-              {/* In-flight streaming message */}
-              {isStreaming && (
-                <ChatMessageItem
-                  key="streaming"
-                  message={{
-                    id: 'streaming',
-                    session_id: session?.id || '',
-                    role: 'assistant',
-                    content: streamingText,
-                    sources: null,
-                    created_at: streamingStartTimeRef.current || new Date().toISOString(),
-                  }}
-                  isStreaming={true}
-                  onShare={handleOpenShare}
-                />
-              )}
+                {/* In-flight streaming message */}
+                {isStreaming && (
+                  <ChatMessageItem
+                    key="streaming"
+                    message={{
+                      id: 'streaming',
+                      session_id: session?.id || '',
+                      role: 'assistant',
+                      content: streamingText,
+                      sources: null,
+                      created_at: streamingStartTimeRef.current || new Date().toISOString(),
+                    }}
+                    isStreaming={true}
+                    onShare={handleOpenShare}
+                  />
+                )}
 
-              <div ref={messagesEndRef} />
+                <div ref={messagesEndRef} />
+              </div>
             </div>
 
             {/* Jump to latest button when user scrolled up */}
             {showScrollBottomBtn && (
-              <div className="fixed bottom-28 right-8 z-40 animate-fade-in">
+              <div className="relative flex justify-center z-30 -mt-10 mb-2 pointer-events-none">
                 <button
+                  type="button"
                   onClick={() => scrollToBottom(true)}
-                  className="flex items-center gap-1.5 rounded-full border border-[#2a2a2a] bg-[#141414]/95 backdrop-blur-md px-3.5 py-1.5 text-xs font-medium text-white shadow-2xl hover:border-[#444444] hover:bg-[#202020] transition-all duration-200 group"
+                  className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-[#2a2a2a] bg-[#141414]/95 backdrop-blur-md px-3.5 py-1.5 text-xs font-medium text-white shadow-2xl hover:border-[#444444] hover:bg-[#202020] transition-all duration-200 group cursor-pointer"
                   title="Scroll to latest messages"
                 >
                   <span>Jump to latest</span>
@@ -814,27 +820,30 @@ export default function Chat() {
               </div>
             )}
 
-            {/* Input Bar with Bottom-Left Video Selector */}
-            <div className="sticky bottom-0 pt-3 bg-gradient-to-t from-black via-black to-transparent">
-              <ChatInput
-                input={input}
-                setInput={setInput}
-                onSubmit={() => void handleSubmit()}
-                isStreaming={isStreaming}
-                onStop={handleStop}
-                disabled={loadingSession}
-                videos={availableVideos}
-                scopeMode={scopeMode}
-                selectedVideo={selectedVideo}
-                onSelectScope={handleSelectScope}
-                onSelectVideo={handleSelectVideo}
-                webSearchActive={webSearchActive}
-                onToggleWebSearch={setWebSearchActive}
-              />
+            {/* Input Bar pinned at the bottom */}
+            <div className="flex-shrink-0 w-full pt-2 pb-3 sm:pb-4 bg-gradient-to-t from-black via-black/95 to-transparent z-40 relative">
+              <div className="w-full max-w-5xl mx-auto px-4">
+                <ChatInput
+                  input={input}
+                  setInput={setInput}
+                  onSubmit={() => void handleSubmit()}
+                  isStreaming={isStreaming}
+                  onStop={handleStop}
+                  disabled={loadingSession}
+                  videos={availableVideos}
+                  scopeMode={scopeMode}
+                  selectedVideo={selectedVideo}
+                  onSelectScope={handleSelectScope}
+                  onSelectVideo={handleSelectVideo}
+                  webSearchActive={webSearchActive}
+                  onToggleWebSearch={setWebSearchActive}
+                />
+              </div>
             </div>
           </>
         )}
       </div>
+
       {/* Share Conversation Modal */}
       <ShareConversationModal
         isOpen={shareModalOpen}
@@ -848,9 +857,3 @@ export default function Chat() {
     </div>
   )
 }
-
-
-
-
-
-

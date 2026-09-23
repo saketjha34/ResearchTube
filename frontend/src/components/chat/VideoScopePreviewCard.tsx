@@ -40,9 +40,18 @@ export function VideoScopePreviewCard({
   className = '',
   onClose,
 }: VideoScopePreviewCardProps) {
-  const watchUrl = video.url || `https://www.youtube.com/watch?v=${video.youtube_video_id}`
+  const rawId = video.youtube_video_id
+  const watchUrl = video.url
+    ? (video.url.startsWith('http') ? video.url : `https://${video.url}`)
+    : rawId
+      ? `https://www.youtube.com/watch?v=${rawId}`
+      : ''
   const thumbUrl =
-    video.thumbnail_url || `https://i.ytimg.com/vi/${video.youtube_video_id}/mqdefault.jpg`
+    video.thumbnail_url || (rawId ? `https://i.ytimg.com/vi/${rawId}/mqdefault.jpg` : '')
+
+  const handleOpenWatch = (e: React.MouseEvent) => {
+    e.stopPropagation()
+  }
 
   return (
     <div
@@ -81,13 +90,14 @@ export function VideoScopePreviewCard({
 
         {/* Play Overlay Button */}
         <a
-          href={watchUrl}
+          href={watchUrl || '#'}
           target="_blank"
           rel="noopener noreferrer"
-          className="absolute inset-0 flex items-center justify-center group-hover:bg-black/40 transition-colors"
+          onClick={handleOpenWatch}
+          className="absolute inset-0 flex items-center justify-center group-hover:bg-black/40 transition-colors cursor-pointer"
           title="Watch on YouTube"
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-600/90 text-white shadow-lg transition-transform group-hover:scale-110">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-600/90 text-white shadow-lg transition-transform group-hover:scale-110 active:scale-95">
             <Play size={16} fill="white" className="ml-0.5" />
           </div>
         </a>
@@ -207,10 +217,11 @@ export function VideoScopePreviewCard({
       {/* Action Footer */}
       <div className="mt-3.5 flex items-center gap-2">
         <a
-          href={watchUrl}
+          href={watchUrl || '#'}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-[#333333] bg-[#1a1a1a] hover:bg-[#252525] hover:border-[#555555] px-3 py-2 text-xs font-semibold text-white transition-all shadow-sm group"
+          onClick={handleOpenWatch}
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-[#333333] bg-[#1a1a1a] hover:bg-[#252525] hover:border-[#555555] active:bg-[#333333] px-3 py-2 text-xs font-semibold text-white transition-all shadow-sm group cursor-pointer"
         >
           <span>Watch on YouTube</span>
           <ExternalLink size={11} className="text-[#888888] group-hover:text-white transition-colors" />
