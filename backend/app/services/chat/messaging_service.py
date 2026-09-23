@@ -88,16 +88,38 @@ class MessagingService:
         chat_session = await get_session_or_404(session, session_id, user_id)
 
         # ── 1b. Atomic scope switch (if requested) ─────────────
-        if payload.clear_video_scope:
+        if payload.scope_mode:
+            if payload.scope_mode == "none":
+                chat_session.scope_mode = "none"
+                chat_session.video_id = None
+                _logger.info("chat.scope_switched_to_none", session_id=str(session_id))
+            elif payload.scope_mode == "all":
+                chat_session.scope_mode = "all"
+                chat_session.video_id = None
+                _logger.info("chat.scope_switched_to_all", session_id=str(session_id))
+            elif payload.scope_mode == "video" and payload.video_id is not None:
+                resolved_id = await resolve_and_assert_video(
+                    session, payload.video_id, user_id
+                )
+                chat_session.scope_mode = "video"
+                chat_session.video_id = resolved_id
+                _logger.info(
+                    "chat.scope_switched_to_video",
+                    session_id=str(session_id),
+                    new_video_id=str(resolved_id),
+                )
+        elif payload.clear_video_scope:
+            chat_session.scope_mode = "none"
             chat_session.video_id = None
-            _logger.info("chat.scope_cleared", session_id=str(session_id))
+            _logger.info("chat.scope_cleared_to_none", session_id=str(session_id))
         elif payload.video_id is not None:
             resolved_id = await resolve_and_assert_video(
                 session, payload.video_id, user_id
             )
+            chat_session.scope_mode = "video"
             chat_session.video_id = resolved_id
             _logger.info(
-                "chat.scope_switched",
+                "chat.scope_switched_to_video",
                 session_id=str(session_id),
                 new_video_id=str(resolved_id),
             )
@@ -117,21 +139,41 @@ class MessagingService:
         await session.flush()
 
         # ── 3. Parallel: history + RAG + scope description ─────
-        history, (context_chunks, retrieved_sources), scope_description = await asyncio.gather(
-            load_session_history(session, session_id, limit=_MAX_HISTORY_TURNS),
-            retrieve_chat_context(
+        scope_mode = getattr(chat_session, "scope_mode", None) or ("video" if chat_session.video_id else "none")
+
+        if scope_mode == "none":
+            # "No Video Scope" -> completely bypass RAG query embedding and vector DB search!
+            async def _empty_rag():
+                return [], []
+            rag_coro = _empty_rag()
+        elif scope_mode == "all":
+            # "All Library Videos" -> search across all transcripts
+            rag_coro = retrieve_chat_context(
+                session=session,
+                query=payload.message,
+                video_id=None,
+                research_run_id=chat_session.research_run_id,
+                retriever=self._retriever,
+            )
+        else:  # "video"
+            rag_coro = retrieve_chat_context(
                 session=session,
                 query=payload.message,
                 video_id=chat_session.video_id,
                 research_run_id=chat_session.research_run_id,
                 retriever=self._retriever,
-            ),
+            )
+
+        history, (context_chunks, retrieved_sources), scope_description = await asyncio.gather(
+            load_session_history(session, session_id, limit=_MAX_HISTORY_TURNS),
+            rag_coro,
             build_scope_description(session, chat_session),
         )
 
         _logger.info(
             "chat.rag_retrieved",
             session_id=str(session_id),
+            scope_mode=scope_mode,
             context_chunks_count=len(context_chunks),
             history_turns=len(history),
         )
@@ -140,7 +182,7 @@ class MessagingService:
         is_live_query = bool(
             re.search(r'\b(weather|temperature|forecast|rain|climate|news|today|latest|stock|price|score)\b', payload.message, re.IGNORECASE)
         )
-        should_search_web = bool(payload.web_search) or (not chat_session.video_id and is_live_query) or bool(
+        should_search_web = bool(payload.web_search) or (scope_mode != "video" and is_live_query) or bool(
             re.search(r'\b(search\s+(the\s+)?(web|internet|online)|look\s+up\s+online)\b', payload.message, re.IGNORECASE)
         )
         web_search_text: Optional[str] = None
@@ -237,16 +279,38 @@ class MessagingService:
             chat_session = await get_session_or_404(session, session_id, user_id)
 
             # 1b. Atomic scope switch (if requested)
-            if payload.clear_video_scope:
+            if payload.scope_mode:
+                if payload.scope_mode == "none":
+                    chat_session.scope_mode = "none"
+                    chat_session.video_id = None
+                    _logger.info("chat.stream_scope_switched_to_none", session_id=str(session_id))
+                elif payload.scope_mode == "all":
+                    chat_session.scope_mode = "all"
+                    chat_session.video_id = None
+                    _logger.info("chat.stream_scope_switched_to_all", session_id=str(session_id))
+                elif payload.scope_mode == "video" and payload.video_id is not None:
+                    resolved_id = await resolve_and_assert_video(
+                        session, payload.video_id, user_id
+                    )
+                    chat_session.scope_mode = "video"
+                    chat_session.video_id = resolved_id
+                    _logger.info(
+                        "chat.stream_scope_switched_to_video",
+                        session_id=str(session_id),
+                        new_video_id=str(resolved_id),
+                    )
+            elif payload.clear_video_scope:
+                chat_session.scope_mode = "none"
                 chat_session.video_id = None
-                _logger.info("chat.scope_cleared", session_id=str(session_id))
+                _logger.info("chat.stream_scope_cleared_to_none", session_id=str(session_id))
             elif payload.video_id is not None:
                 resolved_id = await resolve_and_assert_video(
                     session, payload.video_id, user_id
                 )
+                chat_session.scope_mode = "video"
                 chat_session.video_id = resolved_id
                 _logger.info(
-                    "chat.scope_switched",
+                    "chat.stream_scope_switched_to_video",
                     session_id=str(session_id),
                     new_video_id=str(resolved_id),
                 )
@@ -283,16 +347,43 @@ class MessagingService:
                 return
 
             # 3. Parallel: load history + RAG retrieval + scope description
-            history, (context_chunks, retrieved_sources), scope_description = await asyncio.gather(
-                load_session_history(session, session_id, limit=_MAX_HISTORY_TURNS),
-                retrieve_chat_context(
+            scope_mode = getattr(chat_session, "scope_mode", None) or ("video" if chat_session.video_id else "none")
+
+            if scope_mode == "none":
+                # "No Video Scope" -> completely bypass RAG query embedding and vector DB search!
+                async def _empty_rag():
+                    return [], []
+                rag_coro = _empty_rag()
+            elif scope_mode == "all":
+                # "All Library Videos" -> search across all transcripts
+                rag_coro = retrieve_chat_context(
+                    session=session,
+                    query=payload.message,
+                    video_id=None,
+                    research_run_id=chat_session.research_run_id,
+                    retriever=self._retriever,
+                )
+            else:  # "video"
+                rag_coro = retrieve_chat_context(
                     session=session,
                     query=payload.message,
                     video_id=chat_session.video_id,
                     research_run_id=chat_session.research_run_id,
                     retriever=self._retriever,
-                ),
+                )
+
+            history, (context_chunks, retrieved_sources), scope_description = await asyncio.gather(
+                load_session_history(session, session_id, limit=_MAX_HISTORY_TURNS),
+                rag_coro,
                 build_scope_description(session, chat_session),
+            )
+
+            _logger.info(
+                "chat.stream_rag_retrieved",
+                session_id=str(session_id),
+                scope_mode=scope_mode,
+                context_chunks_count=len(context_chunks),
+                history_turns=len(history),
             )
 
             # If client disconnected during retrieval:
@@ -306,7 +397,7 @@ class MessagingService:
             is_live_query = bool(
                 re.search(r'\b(weather|temperature|forecast|rain|climate|news|today|latest|stock|price|score)\b', payload.message, re.IGNORECASE)
             )
-            should_search_web = bool(payload.web_search) or (not chat_session.video_id and is_live_query) or bool(
+            should_search_web = bool(payload.web_search) or (scope_mode != "video" and is_live_query) or bool(
                 re.search(r'\b(search\s+(the\s+)?(web|internet|online)|look\s+up\s+online)\b', payload.message, re.IGNORECASE)
             )
             web_search_text: Optional[str] = None

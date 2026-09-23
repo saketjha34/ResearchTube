@@ -98,8 +98,16 @@ class ChatSession(Base):
     )
 
     # --------------------------------------------------------
-    # Optional scope: video or research run
+    # Optional scope: video, all library, or no scope (none)
     # --------------------------------------------------------
+
+    scope_mode: Mapped[str] = mapped_column(
+        String(32),
+        default="none",
+        server_default="none",
+        nullable=False,
+        index=True,
+    )
 
     video_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),

@@ -51,11 +51,15 @@ class SessionService:
             research_run_id=str(payload.research_run_id) if payload.research_run_id else None,
         )
 
+        scope_mode = payload.scope_mode or ("video" if payload.video_id else "none")
+
         resolved_video_id: Optional[UUID] = None
-        if payload.video_id:
+        if scope_mode == "video" and payload.video_id:
             resolved_video_id = await resolve_and_assert_video(
                 session, payload.video_id, user_id
             )
+        elif scope_mode in ("none", "all"):
+            resolved_video_id = None
 
         if payload.research_run_id:
             await assert_run_accessible(session, payload.research_run_id, user_id)
@@ -67,12 +71,15 @@ class SessionService:
                 title = f"Chat: {video.title[:60] if video and video.title else 'Video'}"
             elif payload.research_run_id:
                 title = "Research Run Chat"
+            elif scope_mode == "all":
+                title = "All Library Videos Chat"
             else:
                 title = "New Chat"
 
         chat_session = ChatSession(
             user_id=user_id,
             title=title,
+            scope_mode=scope_mode,
             video_id=resolved_video_id,
             research_run_id=payload.research_run_id,
         )
@@ -81,7 +88,11 @@ class SessionService:
         await session.commit()
         await session.refresh(chat_session)
 
-        _logger.info("chat.session_created", session_id=str(chat_session.id))
+        _logger.info(
+            "chat.session_created",
+            session_id=str(chat_session.id),
+            scope_mode=chat_session.scope_mode,
+        )
         return ChatSessionResponse.model_validate(chat_session)
 
     async def list_sessions(
@@ -209,25 +220,39 @@ class SessionService:
             "chat.update_session_scope",
             session_id=str(session_id),
             user_id=str(user_id),
+            scope_mode=payload.scope_mode,
             video_id=str(payload.video_id) if payload.video_id else None,
             clear_video_scope=payload.clear_video_scope,
         )
 
         chat_session = await get_session_or_404(session, session_id, user_id)
 
-        if payload.clear_video_scope or payload.video_id is None:
+        if payload.scope_mode == "none" or payload.clear_video_scope:
+            chat_session.scope_mode = "none"
             chat_session.video_id = None
-        else:
-            resolved_id = await resolve_and_assert_video(
-                session, payload.video_id, user_id
-            )
-            chat_session.video_id = resolved_id
+        elif payload.scope_mode == "all":
+            chat_session.scope_mode = "all"
+            chat_session.video_id = None
+        elif payload.scope_mode == "video" or payload.video_id is not None:
+            if payload.video_id is not None:
+                resolved_id = await resolve_and_assert_video(
+                    session, payload.video_id, user_id
+                )
+                chat_session.scope_mode = "video"
+                chat_session.video_id = resolved_id
+            else:
+                chat_session.scope_mode = "none"
+                chat_session.video_id = None
+        elif payload.video_id is None:
+            chat_session.scope_mode = "none"
+            chat_session.video_id = None
 
         await session.commit()
         await session.refresh(chat_session)
         _logger.info(
             "chat.session_scope_updated",
             session_id=str(session_id),
+            scope_mode=chat_session.scope_mode,
             new_video_id=str(chat_session.video_id) if chat_session.video_id else None,
         )
         return ChatSessionResponse.model_validate(chat_session)

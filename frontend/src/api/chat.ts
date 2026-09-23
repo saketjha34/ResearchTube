@@ -52,9 +52,12 @@ export interface ChatMessage {
   created_at: string
 }
 
+export type VideoScopeMode = 'none' | 'all' | 'video'
+
 export interface ChatSession {
   id: string
   title: string | null
+  scope_mode?: VideoScopeMode
   video_id: string | null
   research_run_id: string | null
   is_archived: boolean
@@ -78,6 +81,7 @@ export interface ChatSessionList {
 
 export interface CreateSessionPayload {
   title?: string
+  scope_mode?: VideoScopeMode
   video_id?: string | null
   research_run_id?: string | null
 }
@@ -205,11 +209,13 @@ export async function revokeShareLink(sessionId: string): Promise<ChatSession> {
 
 export async function updateSessionScope(
   sessionId: string,
-  videoId: string | null,
+  scopeMode: VideoScopeMode,
+  videoId?: string | null,
 ): Promise<ChatSession> {
   const res = await client.patch<ChatSession>(`/chat/sessions/${sessionId}/scope`, {
-    video_id: videoId || null,
-    clear_video_scope: videoId === null,
+    scope_mode: scopeMode,
+    video_id: scopeMode === 'video' ? (videoId || null) : null,
+    clear_video_scope: scopeMode === 'none',
   })
   return res.data
 }
@@ -235,13 +241,15 @@ export async function sendMessageNonStream(
   message: string,
   videoId?: string | null,
   webSearch?: boolean,
+  scopeMode?: VideoScopeMode,
 ) {
   const res = await client.post<{ user_message: ChatMessage; assistant_message: ChatMessage }>(
     `/chat/sessions/${sessionId}/messages`,
     {
       message,
+      scope_mode: scopeMode,
       video_id: videoId !== undefined ? (videoId || null) : undefined,
-      clear_video_scope: videoId === null ? true : undefined,
+      clear_video_scope: scopeMode === 'none' ? true : (videoId === null ? true : undefined),
       web_search: webSearch ? true : undefined,
     },
   )
@@ -257,6 +265,7 @@ export async function streamMessage(
   videoId?: string | null,
   signal?: AbortSignal,
   webSearch?: boolean,
+  scopeMode?: VideoScopeMode,
 ): Promise<void> {
   const token = getAccessToken()
   const url = buildApiUrl(`/chat/sessions/${sessionId}/messages/stream`)
@@ -271,8 +280,9 @@ export async function streamMessage(
       },
       body: JSON.stringify({
         message,
+        scope_mode: scopeMode,
         video_id: videoId !== undefined ? (videoId || null) : undefined,
-        clear_video_scope: videoId === null ? true : undefined,
+        clear_video_scope: scopeMode === 'none' ? true : (videoId === null ? true : undefined),
         web_search: webSearch ? true : undefined,
       }),
       signal,

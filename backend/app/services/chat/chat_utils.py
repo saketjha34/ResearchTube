@@ -199,12 +199,18 @@ async def build_scope_description(
     chat_session: ChatSession,
 ) -> Optional[str]:
     """Generate a human-readable scope description for the prompt."""
-    if chat_session.video_id:
-        vid = await session.get(YouTubeVideo, chat_session.video_id)
-        if vid:
-            desc_snippet = f" | Summary/Description: {vid.description[:250].strip()}..." if vid.description else ""
-            return f"Scoped to video: '{vid.title}' by {vid.channel or 'Unknown Channel'}{desc_snippet}"
+    scope_mode = getattr(chat_session, "scope_mode", None) or ("video" if chat_session.video_id else "none")
+
+    if scope_mode == "video" or chat_session.video_id:
+        if chat_session.video_id:
+            vid = await session.get(YouTubeVideo, chat_session.video_id)
+            if vid:
+                desc_snippet = f" | Summary/Description: {vid.description[:250].strip()}..." if vid.description else ""
+                return f"Scoped to video: '{vid.title}' by {vid.channel or 'Unknown Channel'}{desc_snippet}"
         return "Scoped to a specific video."
+
+    if scope_mode == "all":
+        return "Scoped to all researched videos in your library."
 
     if chat_session.research_run_id:
         return f"Scoped to research run {str(chat_session.research_run_id)[:8]}…"

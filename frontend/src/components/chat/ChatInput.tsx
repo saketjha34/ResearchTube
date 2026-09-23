@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react'
 import { ArrowUp, Square } from 'lucide-react'
 import { VideoScopeSelector } from './VideoScopeSelector'
 import { ToolSelector } from './ToolSelector'
-import type { AvailableVideo } from '../../api/chat'
+import type { AvailableVideo, VideoScopeMode } from '../../api/chat'
 
 interface ChatInputProps {
   input: string
@@ -13,8 +13,10 @@ interface ChatInputProps {
   placeholder?: string
   disabled?: boolean
   videos: AvailableVideo[]
+  scopeMode?: VideoScopeMode
   selectedVideo: AvailableVideo | null
-  onSelectVideo: (video: AvailableVideo | null) => void
+  onSelectScope?: (mode: VideoScopeMode, video: AvailableVideo | null) => void
+  onSelectVideo?: (video: AvailableVideo | null) => void
   webSearchActive?: boolean
   onToggleWebSearch?: (active: boolean) => void
 }
@@ -28,7 +30,9 @@ export const ChatInput = React.memo(function ChatInput({
   placeholder = 'Ask anything about your researched videos, concepts, or code...',
   disabled = false,
   videos,
+  scopeMode = 'none',
   selectedVideo,
+  onSelectScope,
   onSelectVideo,
   webSearchActive = false,
   onToggleWebSearch,
@@ -75,7 +79,9 @@ export const ChatInput = React.memo(function ChatInput({
         <div className="flex items-center gap-2">
           <VideoScopeSelector
             videos={videos}
+            scopeMode={scopeMode}
             selectedVideo={selectedVideo}
+            onSelectScope={onSelectScope}
             onSelect={onSelectVideo}
             disabled={isStreaming || disabled}
           />

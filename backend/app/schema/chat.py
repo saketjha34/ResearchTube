@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, List, Optional, Union
+from typing import Any, List, Literal, Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -62,16 +62,21 @@ class CreateChatSessionRequest(BaseModel):
     """
     Create a new persistent chat session.
 
-    Both `video_id` and `research_run_id` are optional:
-    - If neither is provided  → general ResearchTube AI assistant
-    - If `video_id` is set    → chat is scoped to that video's transcript
-    - If `research_run_id` is set → chat is scoped to all videos in that run
+    scope_mode:
+    - "none" (default)  → general ResearchTube AI assistant (RAG vector search skipped)
+    - "all"             → scoped to all researched videos in user's library
+    - "video"           → scoped to specific video's transcript (requires video_id)
     """
 
     title: Optional[str] = Field(
         None,
         max_length=255,
         description="Optional display title for the session. Auto-generated if omitted.",
+    )
+
+    scope_mode: Optional[Literal["none", "all", "video"]] = Field(
+        "none",
+        description="Scope mode: 'none' (default, general chat without RAG), 'all' (all videos), or 'video' (specific video).",
     )
 
     video_id: Optional[Union[UUID, str]] = Field(
@@ -119,7 +124,7 @@ class SendMessageRequest(BaseModel):
     Send a user message in an existing chat session.
     The backend will respond with the assistant reply and optional source citations.
 
-    Optionally include `video_id` or `clear_video_scope` to switch the session's
+    Optionally include `scope_mode`, `video_id`, or `clear_video_scope` to switch the session's
     video scope atomically on this turn (scope persists for all future turns).
     """
 
@@ -128,6 +133,11 @@ class SendMessageRequest(BaseModel):
         min_length=1,
         max_length=8000,
         description="The user's message text.",
+    )
+
+    scope_mode: Optional[Literal["none", "all", "video"]] = Field(
+        None,
+        description="Optional scope mode override ('none', 'all', 'video') for this turn and future turns.",
     )
 
     video_id: Optional[Union[UUID, str]] = Field(
@@ -141,8 +151,8 @@ class SendMessageRequest(BaseModel):
     clear_video_scope: Optional[bool] = Field(
         False,
         description=(
-            "If True, clears the session's video scope so future RAG retrieval "
-            "queries across the user's entire video library."
+            "If True, resets the session's video scope to 'none' so future RAG retrieval "
+            "is skipped."
         ),
     )
 
@@ -171,19 +181,25 @@ class UpdateSessionScopeRequest(BaseModel):
     """
     Body for PATCH /chat/sessions/{session_id}/scope.
 
-    Either provide a `video_id` to switch the session to a specific video,
-    or set `clear_video_scope=True` to remove any video restriction so the
-    session queries across the user's entire video library.
+    Choose `scope_mode`:
+    - 'none': general AI chat, skips video retrieval
+    - 'all': queries across all videos in the user library
+    - 'video': requires `video_id` to scope to a specific video
     """
+
+    scope_mode: Optional[Literal["none", "all", "video"]] = Field(
+        None,
+        description="Target scope mode ('none', 'all', 'video').",
+    )
 
     video_id: Optional[Union[UUID, str]] = Field(
         None,
-        description="DB UUID or YouTube video ID to switch the chat scope to.",
+        description="DB UUID or YouTube video ID to switch the chat scope to (when scope_mode is 'video').",
     )
 
     clear_video_scope: bool = Field(
         False,
-        description="If True, clears the session's video scope (queries across all library videos).",
+        description="If True, clears the session's video scope back to 'none'.",
     )
 
     @field_validator("video_id", mode="before")
@@ -265,6 +281,7 @@ class ChatSessionResponse(BaseModel):
 
     id: UUID
     title: Optional[str]
+    scope_mode: str = "none"
     video_id: Optional[UUID]
     research_run_id: Optional[UUID]
     is_archived: bool

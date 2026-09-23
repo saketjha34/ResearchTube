@@ -25,6 +25,7 @@ import {
   getChatGreeting,
   updateSessionScope,
   type AvailableVideo,
+  type VideoScopeMode,
   type ChatMessage,
   type ChatSessionDetail,
 } from '../api/chat'
@@ -61,6 +62,7 @@ export default function Chat() {
       setMessages([])
       setInput('')
       setError(null)
+      setScopeMode('none')
       setSelectedVideo(null)
     }
     window.addEventListener('chat:new', handleNew)
@@ -73,6 +75,7 @@ export default function Chat() {
   const [greeting, setGreeting] = useState<string>('')
 
   const [availableVideos, setAvailableVideos] = useState<AvailableVideo[]>([])
+  const [scopeMode, setScopeMode] = useState<VideoScopeMode>('none')
   const [selectedVideo, setSelectedVideo] = useState<AvailableVideo | null>(null)
   const [session, setSession] = useState<ChatSessionDetail | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -208,10 +211,19 @@ export default function Chat() {
         setMessages(data.messages || [])
         setTitleInput(data.title || 'Chat Session')
 
-        // Resolve selected video if scoped
-        if (data.video_id && availableVideos.length > 0) {
-          const match = availableVideos.find((v) => v.db_id === data.video_id)
-          if (match) setSelectedVideo(match)
+        // Resolve scope mode & video
+        if (data.scope_mode === 'all') {
+          setScopeMode('all')
+          setSelectedVideo(null)
+        } else if (data.scope_mode === 'video' || data.video_id) {
+          setScopeMode('video')
+          if (data.video_id && availableVideos.length > 0) {
+            const match = availableVideos.find((v) => v.db_id === data.video_id)
+            if (match) setSelectedVideo(match)
+          }
+        } else {
+          setScopeMode('none')
+          setSelectedVideo(null)
         }
       } catch (err) {
         console.error('Failed to fetch session:', err)
@@ -301,18 +313,23 @@ export default function Chat() {
   }
 
   // Update video scope: immediately persist to backend if session is active
-  const handleSelectVideo = async (video: AvailableVideo | null) => {
+  const handleSelectScope = async (mode: VideoScopeMode, video: AvailableVideo | null) => {
+    setScopeMode(mode)
     setSelectedVideo(video)
     const activeSessionId = sessionId || session?.id
     if (activeSessionId) {
       try {
-        const updated = await updateSessionScope(activeSessionId, video ? video.db_id : null)
-        setSession((prev) => prev ? { ...prev, video_id: updated.video_id } : null)
+        const updated = await updateSessionScope(activeSessionId, mode, video ? video.db_id : null)
+        setSession((prev) => prev ? { ...prev, scope_mode: updated.scope_mode, video_id: updated.video_id } : null)
         window.dispatchEvent(new Event('chat:updated'))
       } catch (err) {
         console.error('Failed to update session scope:', err)
       }
     }
+  }
+
+  const handleSelectVideo = (video: AvailableVideo | null) => {
+    handleSelectScope(video ? 'video' : 'none', video)
   }
   // Submit message and stream response
   const handleSubmit = async (customPrompt?: string) => {
@@ -362,11 +379,9 @@ export default function Chat() {
         const titleGen = textToSend.length > 45 ? `${textToSend.slice(0, 45)}...` : textToSend
 
         const newSession = await createChatSession({
-
           title: titleGen,
-
-          video_id: selectedVideo?.db_id || null,
-
+          scope_mode: scopeMode,
+          video_id: scopeMode === 'video' ? (selectedVideo?.db_id || null) : null,
         })
 
         currentSessionId = newSession.id
@@ -568,7 +583,7 @@ export default function Chat() {
         streamingStartTimeRef.current = null
         justCreatedSessionRef.current = null
       },
-    }, selectedVideo ? selectedVideo.db_id : null, controller.signal, webSearchActive)
+    }, scopeMode === 'video' ? (selectedVideo ? selectedVideo.db_id : null) : null, controller.signal, webSearchActive, scopeMode)
   }
 
   const handleStop = useCallback(() => {
@@ -724,7 +739,9 @@ export default function Chat() {
                 onStop={handleStop}
                 disabled={loadingSession}
                 videos={availableVideos}
+                scopeMode={scopeMode}
                 selectedVideo={selectedVideo}
+                onSelectScope={handleSelectScope}
                 onSelectVideo={handleSelectVideo}
                 webSearchActive={webSearchActive}
                 onToggleWebSearch={setWebSearchActive}
@@ -807,7 +824,9 @@ export default function Chat() {
                 onStop={handleStop}
                 disabled={loadingSession}
                 videos={availableVideos}
+                scopeMode={scopeMode}
                 selectedVideo={selectedVideo}
+                onSelectScope={handleSelectScope}
                 onSelectVideo={handleSelectVideo}
                 webSearchActive={webSearchActive}
                 onToggleWebSearch={setWebSearchActive}

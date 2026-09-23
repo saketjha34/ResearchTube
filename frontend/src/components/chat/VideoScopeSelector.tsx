@@ -1,19 +1,23 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Video, Search, Check, Layers, ChevronUp, X, MoreVertical } from 'lucide-react'
-import type { AvailableVideo } from '../../api/chat'
+import { Video, VideoOff, Search, Check, Layers, ChevronUp, X, MoreVertical } from 'lucide-react'
+import type { AvailableVideo, VideoScopeMode } from '../../api/chat'
 import { VideoScopePreviewCard } from './VideoScopePreviewCard'
 
 interface VideoScopeSelectorProps {
   videos: AvailableVideo[]
+  scopeMode?: VideoScopeMode
   selectedVideo: AvailableVideo | null
-  onSelect: (video: AvailableVideo | null) => void
+  onSelectScope?: (mode: VideoScopeMode, video: AvailableVideo | null) => void
+  onSelect?: (video: AvailableVideo | null) => void
   disabled?: boolean
 }
 
 export function VideoScopeSelector({
   videos,
+  scopeMode = 'none',
   selectedVideo,
+  onSelectScope,
   onSelect,
   disabled = false,
 }: VideoScopeSelectorProps) {
@@ -30,6 +34,20 @@ export function VideoScopeSelector({
   const dropdownRef = useRef<HTMLDivElement>(null)
   const hoverTimeoutRef = useRef<any>(null)
   const triggerHoverTimeoutRef = useRef<any>(null)
+
+  const effectiveScopeMode: VideoScopeMode = scopeMode || (selectedVideo ? 'video' : 'none')
+
+  const handleChooseScope = (mode: VideoScopeMode, video: AvailableVideo | null) => {
+    if (onSelectScope) {
+      onSelectScope(mode, video)
+    } else if (onSelect) {
+      onSelect(video)
+    }
+    setOpen(false)
+    setHoveredVideo(null)
+    setInspectedVideo(null)
+    setShowSelectedPreview(false)
+  }
 
   // Determine if preview should dock to left or right based on screen edge
   const updatePreviewPosition = useCallback(() => {
@@ -83,7 +101,7 @@ export function VideoScopeSelector({
   }
 
   const handleTriggerMouseEnter = () => {
-    if (open || !selectedVideo || !isDesktop) return
+    if (open || effectiveScopeMode !== 'video' || !selectedVideo || !isDesktop) return
     clearTimeout(triggerHoverTimeoutRef.current)
     triggerHoverTimeoutRef.current = setTimeout(() => {
       setShowSelectedPreview(true)
@@ -100,11 +118,9 @@ export function VideoScopeSelector({
   const handleThreeDotsClick = (e: React.MouseEvent, v: AvailableVideo) => {
     e.stopPropagation()
     if (isDesktop) {
-      // On desktop: dock right beside the menu as the floating preview card!
       setHoveredVideo(v)
       setInspectedVideo(v)
     } else {
-      // On mobile / tablet: open full-viewport modal via Portal
       setInspectedVideo(v)
     }
   }
@@ -117,7 +133,6 @@ export function VideoScopeSelector({
     )
   })
 
-  // The active floating video displayed beside the dropdown menu on desktop
   const activeFloatingVideo = isDesktop ? (inspectedVideo || hoveredVideo) : null
 
   return (
@@ -139,29 +154,36 @@ export function VideoScopeSelector({
               setHoveredVideo(null)
             }}
             className="flex items-center gap-2 text-left disabled:opacity-50 select-none cursor-pointer py-0.5"
-            title="Select transcript video scope or tap 3-dots to view YouTube stats"
+            title="Select video scope: No Video Scope, All Library, or specific video"
           >
-            {selectedVideo ? (
+            {effectiveScopeMode === 'video' && selectedVideo ? (
               <>
                 <Video size={14} className="text-white flex-shrink-0" />
                 <span className="max-w-[130px] sm:max-w-[220px] truncate font-medium text-white">
                   {selectedVideo.title || 'Selected Video'}
                 </span>
               </>
+            ) : effectiveScopeMode === 'all' ? (
+              <>
+                <Layers size={14} className="text-white flex-shrink-0" />
+                <span className="font-medium text-white">
+                  All Library Videos {videos.length > 0 ? `(${videos.length})` : ''}
+                </span>
+                <ChevronUp size={12} className="text-[#666666]" />
+              </>
             ) : (
               <>
-                <Video size={14} className="text-[#999999] flex-shrink-0" />
-                <span className="text-[#aaaaaa] hover:text-white">
-                  Video Scope {videos.length > 0 ? `(${videos.length})` : ''}
+                <VideoOff size={14} className="text-[#888888] flex-shrink-0" />
+                <span className="text-[#aaaaaa] hover:text-white font-medium">
+                  No Video Scope
                 </span>
                 <ChevronUp size={12} className="text-[#666666]" />
               </>
             )}
           </button>
 
-          {selectedVideo && (
+          {effectiveScopeMode === 'video' && selectedVideo && (
             <div className="flex items-center gap-0.5 border-l border-[#2e2e2e] pl-1.5 ml-1">
-              {/* 3-dot button to inspect selected video */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -173,22 +195,38 @@ export function VideoScopeSelector({
                   }
                 }}
                 className="rounded p-1 hover:bg-[#282828] text-[#888888] hover:text-white transition-colors cursor-pointer"
-                title="View video details & YouTube stats"
+                title="View video details and stats"
                 aria-label="View video stats"
               >
                 <MoreVertical size={13} />
               </button>
-              {/* Clear selection button */}
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  onSelect(null)
+                  handleChooseScope('none', null)
                   setShowSelectedPreview(false)
                 }}
                 className="rounded p-1 hover:bg-[#282828] text-[#888888] hover:text-white transition-colors cursor-pointer"
-                title="Clear selection"
-                aria-label="Clear selection"
+                title="Reset to No Video Scope"
+                aria-label="Reset to No Video Scope"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
+          {effectiveScopeMode === 'all' && (
+            <div className="flex items-center gap-0.5 border-l border-[#2e2e2e] pl-1.5 ml-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleChooseScope('none', null)
+                }}
+                className="rounded p-1 hover:bg-[#282828] text-[#888888] hover:text-white transition-colors cursor-pointer"
+                title="Reset to No Video Scope"
+                aria-label="Reset to No Video Scope"
               >
                 <X size={12} />
               </button>
@@ -197,7 +235,7 @@ export function VideoScopeSelector({
         </div>
 
         {/* Floating Card for the currently selected video when dropdown is closed (desktop) */}
-        {showSelectedPreview && !open && selectedVideo && isDesktop && (
+        {showSelectedPreview && !open && effectiveScopeMode === 'video' && selectedVideo && isDesktop && (
           <div
             className="absolute left-0 bottom-full mb-3 z-[110] animate-fade-in"
             onMouseEnter={() => clearTimeout(triggerHoverTimeoutRef.current)}
@@ -233,35 +271,65 @@ export function VideoScopeSelector({
           </div>
 
           <div className="max-h-64 overflow-y-auto space-y-1 custom-scrollbar">
-            {/* All Library Option */}
+            {/* Option 1: No Video Scope (Default) */}
             <button
               type="button"
-              onClick={() => {
-                onSelect(null)
-                setOpen(false)
-                setHoveredVideo(null)
-                setInspectedVideo(null)
-              }}
+              onClick={() => handleChooseScope('none', null)}
               onMouseEnter={() => {
                 if (isDesktop && !inspectedVideo) setHoveredVideo(null)
               }}
               className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-colors cursor-pointer ${
-                !selectedVideo ? 'bg-[#222222] text-white font-medium' : 'text-[#aaaaaa] hover:bg-[#181818] hover:text-white'
+                effectiveScopeMode === 'none'
+                  ? 'bg-[#222222] text-white font-medium'
+                  : 'text-[#aaaaaa] hover:bg-[#181818] hover:text-white'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <Layers size={14} className="text-white flex-shrink-0" />
+              <div className="flex items-center gap-2.5">
+                <VideoOff size={15} className={effectiveScopeMode === 'none' ? 'text-white flex-shrink-0' : 'text-[#888888] flex-shrink-0'} />
+                <div>
+                  <div className="font-medium text-white flex items-center gap-1.5">
+                    No Video Scope
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#2a2a2a] text-[#aaaaaa] font-normal">Default</span>
+                  </div>
+                  <div className="text-[10px] text-[#666666]">General AI assistant, skips video retrieval (fastest)</div>
+                </div>
+              </div>
+              {effectiveScopeMode === 'none' && <Check size={14} className="text-white" />}
+            </button>
+
+            {/* Option 2: All Library Videos */}
+            <button
+              type="button"
+              onClick={() => handleChooseScope('all', null)}
+              onMouseEnter={() => {
+                if (isDesktop && !inspectedVideo) setHoveredVideo(null)
+              }}
+              className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left transition-colors cursor-pointer ${
+                effectiveScopeMode === 'all'
+                  ? 'bg-[#222222] text-white font-medium'
+                  : 'text-[#aaaaaa] hover:bg-[#181818] hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Layers size={15} className={effectiveScopeMode === 'all' ? 'text-white flex-shrink-0' : 'text-[#888888] flex-shrink-0'} />
                 <div>
                   <div className="font-medium text-white">All Library Videos</div>
                   <div className="text-[10px] text-[#666666]">Query across all ingested transcripts</div>
                 </div>
               </div>
-              {!selectedVideo && <Check size={14} className="text-white" />}
+              {effectiveScopeMode === 'all' && <Check size={14} className="text-white" />}
             </button>
+
+            {/* Divider */}
+            <div className="border-t border-[#1e1e1e] my-1 pt-1">
+              <div className="px-2.5 py-1 text-[10px] font-semibold text-[#555555] uppercase tracking-wider">
+                Individual Videos
+              </div>
+            </div>
 
             {/* Individual Researched Videos */}
             {filteredVideos.map((v) => {
-              const isSelected = selectedVideo?.db_id === v.db_id
+              const isSelected = effectiveScopeMode === 'video' && selectedVideo?.db_id === v.db_id
               const isCurrentlyInspected = activeFloatingVideo?.db_id === v.db_id
 
               return (
@@ -275,12 +343,7 @@ export function VideoScopeSelector({
                 >
                   <button
                     type="button"
-                    onClick={() => {
-                      onSelect(v)
-                      setOpen(false)
-                      setHoveredVideo(null)
-                      setInspectedVideo(null)
-                    }}
+                    onClick={() => handleChooseScope('video', v)}
                     className="flex flex-1 items-start gap-2.5 px-2.5 py-2 text-left transition-all cursor-pointer min-w-0"
                   >
                     {v.thumbnail_url ? (
@@ -348,24 +411,19 @@ export function VideoScopeSelector({
             >
               <VideoScopePreviewCard
                 video={activeFloatingVideo}
-                isSelected={selectedVideo?.db_id === activeFloatingVideo.db_id}
+                isSelected={effectiveScopeMode === 'video' && selectedVideo?.db_id === activeFloatingVideo.db_id}
                 onClose={() => {
                   setHoveredVideo(null)
                   setInspectedVideo(null)
                 }}
-                onSelect={() => {
-                  onSelect(activeFloatingVideo)
-                  setOpen(false)
-                  setHoveredVideo(null)
-                  setInspectedVideo(null)
-                }}
+                onSelect={() => handleChooseScope('video', activeFloatingVideo)}
               />
             </div>
           )}
         </div>
       )}
 
-      {/* Full-viewport Modal Preview Card (Only on Mobile / Tablets < 768px, portaled directly to document.body to avoid stacking context & scrolling bugs) */}
+      {/* Full-viewport Modal Preview Card (Mobile / Tablets < 768px) */}
       {!isDesktop && inspectedVideo && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
@@ -374,10 +432,10 @@ export function VideoScopeSelector({
           <div onClick={(e) => e.stopPropagation()} className="max-w-full">
             <VideoScopePreviewCard
               video={inspectedVideo}
-              isSelected={selectedVideo?.db_id === inspectedVideo.db_id}
+              isSelected={effectiveScopeMode === 'video' && selectedVideo?.db_id === inspectedVideo.db_id}
               onClose={() => setInspectedVideo(null)}
               onSelect={() => {
-                onSelect(inspectedVideo)
+                handleChooseScope('video', inspectedVideo)
                 setInspectedVideo(null)
                 setOpen(false)
               }}
