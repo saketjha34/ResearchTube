@@ -1,5 +1,5 @@
-﻿import { useState, useRef, useEffect, useCallback } from 'react'
-import { Globe, Sparkles, ChevronUp, Layers } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Globe, Sparkles, ChevronUp } from 'lucide-react'
 
 interface ToolSelectorProps {
   webSearchActive: boolean
@@ -142,20 +142,6 @@ export function ToolSelector({
                 />
               </div>
             </button>
-
-            {/* Tool 2: Deep Research */}
-            <div className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[#777777] select-none opacity-50">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#282828] bg-[#1a1a1a] text-[#555555]">
-                  <Layers size={14} />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-xs font-medium">Deep Research</span>
-                  <span className="text-[10px] text-[#555555]">Multi-source deep reasoning</span>
-                </div>
-              </div>
-              <span className="text-[10px] text-[#666666] bg-[#1c1c1c] px-1.5 py-0.5 rounded border border-[#2a2a2a]">Soon</span>
-            </div>
           </div>
         </div>
       )}
