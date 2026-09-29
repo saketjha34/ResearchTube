@@ -13,13 +13,13 @@
 
 ## 📌 Project Overview & Mission
 
-Technical YouTube content—including architecture lectures, conference talks, and deep-dive coding tutorials—contains invaluable engineering knowledge. However, accessing this knowledge manually presents major challenges:
+Technical YouTube content including architecture lectures, conference talks, and deep-dive coding tutorials contains invaluable engineering knowledge. However, accessing this knowledge manually presents major challenges:
 - **Time Inefficiency:** Watching multiple 45-minute technical lectures to find specific code implementations is slow and tedious.
 - **Low Signal-to-Noise Ratio:** Traditional keyword search cannot evaluate code quality, tutorial rigor, or technical accuracy.
 - **Lack of Persistent Vector Indexing:** Notes taken manually lack semantic search indexes for instant evidence retrieval across hundreds of hours of video.
 
 **ResearchTube** solves these problems by deploying an autonomous **Multi-Agent RAG Pipeline**:
-1. **Agent 1 (YouTube Researcher):** Decomposes research topics into targeted sub-queries, crawls YouTube metadata, and extracts video transcripts via a 3-layer proxy mesh.
+1. **Agent 1 (YouTube Researcher):** Decomposes research topics into targeted sub queries, crawls YouTube metadata, and extracts video transcripts via a 3 layer proxy mesh.
 2. **Agent 2 (RAG Evaluator):** Slices transcripts into sliding-window chunks, generates 768-dimensional vector embeddings, performs Cosine Distance search (`<->`) against PostgreSQL `pgvector`, and grades content relevance and educational quality.
 3. **Agent 3 (Synthesizer):** Synthesizes evidence chunks into publication-grade Markdown research reports complete with score meters, step-by-step learning paths, and interactive 2D knowledge graphs.
 

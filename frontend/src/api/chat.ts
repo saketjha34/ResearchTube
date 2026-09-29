@@ -50,6 +50,10 @@ export interface ChatMessage {
   content: string
   sources: SourceCitation[] | null
   created_at: string
+  sandbox_executed?: boolean
+  artifacts_count?: number
+  images_count?: number
+  webhook_delivered?: boolean
 }
 
 export type VideoScopeMode = 'none' | 'all' | 'video'
@@ -125,6 +129,10 @@ export interface SSEDoneEvent {
   role: 'assistant'
   sources: SourceCitation[] | null
   created_at: string
+  sandbox_executed?: boolean
+  artifacts_count?: number
+  images_count?: number
+  webhook_delivered?: boolean
 }
 
 export interface SSEUserEvent {
@@ -137,6 +145,17 @@ export interface SSEUserEvent {
 export interface SSEStatusEvent {
   status: string
   message: string
+  code?: string
+  duration_ms?: number
+  images_count?: number
+  artifacts_count?: number
+  artifacts?: string[]
+  error?: string | null
+  webhook?: {
+    event: string
+    url?: string | null
+    status: string
+  } | null
 }
 
 export interface StreamCallbacks {
@@ -369,3 +388,148 @@ export async function streamMessage(
   }
 }
 
+
+
+// --- Python Sandbox (Code Interpreter) --------------------------------------
+
+export interface ExecutePythonRequest {
+  code: string
+  timeout?: number
+}
+
+export interface SandboxArtifact {
+  filename: string
+  mime_type: string
+  size_bytes: number
+  data_url: string
+}
+
+export interface ExecutePythonResponse {
+  success: boolean
+  stdout: string
+  stderr: string
+  error?: string | null
+  results: string[]
+  images: string[]
+  artifacts?: SandboxArtifact[]
+  duration_ms: number
+  packages_installed: string[]
+  webhook_delivered?: boolean | null
+  webhook_status?: 'delivered' | 'rate_limited' | 'failed' | 'not_configured' | null
+  webhook_url?: string | null
+  webhook_error?: string | null
+}
+
+export async function executePythonCode(code: string, timeout?: number): Promise<ExecutePythonResponse> {
+  const res = await client.post<ExecutePythonResponse>('/sandbox/execute', {
+    code,
+    timeout,
+  })
+  return res.data
+}
+
+export interface SandboxStreamCallbacks {
+  onStatus?: (status: { step: string; message: string }) => void
+  onStdout?: (text: string) => void
+  onStderr?: (text: string) => void
+  onFigure?: (image: string) => void
+  onDone?: (result: ExecutePythonResponse) => void
+  onError?: (error: string) => void
+}
+
+export async function executePythonCodeStream(
+  code: string,
+  callbacks: SandboxStreamCallbacks,
+  signal?: AbortSignal,
+  timeout?: number
+): Promise<void> {
+  const url = buildApiUrl('/sandbox/stream')
+  const token = getAccessToken()
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ code, timeout }),
+      signal,
+    })
+  } catch (err: unknown) {
+    if ((err as Error)?.name === 'AbortError' || signal?.aborted) return
+    callbacks.onError?.(`Network error: ${String(err)}`)
+    return
+  }
+
+  if (!response.ok) {
+    if (signal?.aborted) return
+    const errText = await response.text().catch(() => '')
+    callbacks.onError?.(`HTTP ${response.status}: ${errText}`)
+    return
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) {
+    callbacks.onError?.('No response body')
+    return
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let currentEvent = ''
+
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        try { await reader.cancel() } catch {}
+        break
+      }
+
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (signal?.aborted) break
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim()
+        } else if (line.startsWith('data: ')) {
+          const raw = line.slice(6).trim()
+          try {
+            const parsed = JSON.parse(raw)
+            switch (currentEvent) {
+              case 'status':
+                callbacks.onStatus?.(parsed as { step: string; message: string })
+                break
+              case 'stdout':
+                callbacks.onStdout?.((parsed as { text: string }).text ?? '')
+                break
+              case 'stderr':
+                callbacks.onStderr?.((parsed as { text: string }).text ?? '')
+                break
+              case 'figure':
+                callbacks.onFigure?.((parsed as { image: string }).image ?? '')
+                break
+              case 'done':
+                callbacks.onDone?.(parsed as ExecutePythonResponse)
+                break
+              case 'error':
+                callbacks.onError?.((parsed as { error: string }).error ?? 'Execution error')
+                break
+            }
+          } catch {}
+          currentEvent = ''
+        }
+      }
+    }
+  } catch (err: unknown) {
+    if ((err as Error)?.name !== 'AbortError' && !signal?.aborted) {
+      callbacks.onError?.(`Stream error: ${String(err)}`)
+    }
+  }
+}

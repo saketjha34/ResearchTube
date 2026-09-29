@@ -5,8 +5,8 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video, Share, Clock, Globe } from 'lucide-react'
-import type { ChatMessage, SourceCitation } from '../../api/chat'
+import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video, Share, Clock, Globe, Play, Terminal, Loader2, Download, Maximize2, X, FileText } from 'lucide-react'
+import { executePythonCodeStream, type ChatMessage, type SourceCitation, type ExecutePythonResponse } from '../../api/chat'
 
 interface ChatMessageItemProps {
   message: ChatMessage
@@ -181,6 +181,15 @@ const languageMetadata: Record<string, { label: string; dotColor: string; canoni
 
 const CodeBlock = React.memo(function CodeBlock({ children, className }: { children: React.ReactNode; className?: string }) {
   const [copied, setCopied] = useState(false)
+  const [isRunning, setIsRunning] = useState(false)
+  const [runningStatus, setRunningStatus] = useState<string>('')
+  const [liveStdout, setLiveStdout] = useState<string>('')
+  const [liveFigures, setLiveFigures] = useState<string[]>([])
+  const [liveDurationMs, setLiveDurationMs] = useState<number>(0)
+  const [executionResult, setExecutionResult] = useState<ExecutePythonResponse | null>(null)
+  const [showConsole, setShowConsole] = useState(false)
+  const [fullScreenImage, setFullScreenImage] = useState<string | null>(null)
+
   const match = /language-(\w+)/.exec(className || '')
   const rawLang = (match ? match[1] : '').toLowerCase()
   const codeText = String(children).replace(/\n$/, '')
@@ -191,11 +200,81 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
     canonical: rawLang || 'text',
   }
 
+  const isPython = meta.canonical === 'python' || rawLang === 'py' || rawLang === 'python'
+
   const handleCopy = () => {
     void navigator.clipboard.writeText(codeText).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
+  }
+
+  const handleRunCode = async () => {
+    if (isRunning) return
+    setIsRunning(true)
+    setShowConsole(true)
+    setExecutionResult(null)
+    setLiveStdout('')
+    setLiveFigures([])
+    setRunningStatus('The sandbox is running: Booting micro-VM...')
+
+    const startTime = Date.now()
+    const timerInterval = setInterval(() => {
+      setLiveDurationMs(Date.now() - startTime)
+    }, 100)
+
+    try {
+      await executePythonCodeStream(
+        codeText,
+        {
+          onStatus: (status) => {
+            setRunningStatus(status.message)
+          },
+          onStdout: (text) => {
+            setLiveStdout((prev) => prev + text)
+          },
+          onFigure: (img) => {
+            setLiveFigures((prev) => (prev.includes(img) ? prev : [...prev, img]))
+          },
+          onDone: (res) => {
+            clearInterval(timerInterval)
+            setLiveDurationMs(res.duration_ms)
+            setExecutionResult(res)
+            setIsRunning(false)
+            setRunningStatus('')
+          },
+          onError: (err) => {
+            clearInterval(timerInterval)
+            setExecutionResult({
+              success: false,
+              stdout: liveStdout,
+              stderr: '',
+              error: err,
+              results: [],
+              images: liveFigures,
+              duration_ms: Date.now() - startTime,
+              packages_installed: [],
+            })
+            setIsRunning(false)
+            setRunningStatus('')
+          },
+        }
+      )
+    } catch (err: any) {
+      clearInterval(timerInterval)
+      setExecutionResult({
+        success: false,
+        stdout: liveStdout,
+        stderr: '',
+        error: err?.message || 'Execution failed',
+        results: [],
+        images: liveFigures,
+        duration_ms: Date.now() - startTime,
+        packages_installed: [],
+      })
+      setIsRunning(false)
+      setRunningStatus('')
+    }
   }
 
   return (
@@ -212,23 +291,50 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
           </span>
         </div>
 
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium text-[#aaaaaa] hover:bg-[#26262b] hover:text-white transition-all"
-          title="Copy code"
-        >
-          {copied ? (
-            <>
-              <Check size={13} className="text-emerald-400" />
-              <span className="text-emerald-400 font-semibold">Copied!</span>
-            </>
-          ) : (
-            <>
-              <Copy size={13} />
-              <span>Copy code</span>
-            </>
+        <div className="flex items-center gap-2">
+          {isPython && (
+            <button
+              onClick={handleRunCode}
+              disabled={isRunning}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                isRunning
+                  ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/60 cursor-not-allowed'
+                  : 'bg-[#27272a] hover:bg-[#38383e] text-zinc-100 hover:text-white border border-zinc-600/80 shadow-sm active:scale-95'
+              }`}
+              title="Run Python in cloud sandbox"
+            >
+              {isRunning ? (
+                <>
+                  <Loader2 size={11} className="animate-spin text-zinc-300" />
+                  <span>Run</span>
+                </>
+              ) : (
+                <>
+                  <Play size={11} className="fill-zinc-300 text-zinc-300" />
+                  <span>Run</span>
+                </>
+              )}
+            </button>
           )}
-        </button>
+
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-medium text-[#aaaaaa] hover:bg-[#26262b] hover:text-white transition-all"
+            title="Copy code"
+          >
+            {copied ? (
+              <>
+                <Check size={13} className="text-emerald-400" />
+                <span className="text-emerald-400 font-semibold">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy size={13} />
+                <span>Copy code</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Colorful Syntax-Highlighted Code Body */}
@@ -242,6 +348,174 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
           {codeText}
         </SyntaxHighlighter>
       </div>
+
+      {/* Interactive Sandbox Console Drawer */}
+      {showConsole && (() => {
+        const displayedImages = executionResult?.images && executionResult.images.length > 0 ? executionResult.images : liveFigures
+        const currentDurationMs = isRunning ? liveDurationMs : (executionResult?.duration_ms || liveDurationMs)
+        return (
+          <div className="border-t border-[#1f1f22] bg-[#070709] p-4 text-xs font-mono">
+            {/* Console Header */}
+            <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[#1b1b1e] text-[#8e8e93]">
+              <div className="flex items-center gap-2">
+                <Terminal size={13} className="text-zinc-400" />
+                <span className="font-semibold text-zinc-300 tracking-wide text-[11px]">Console</span>
+                {!isRunning && executionResult?.error && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono text-rose-300 bg-rose-950/40 border border-rose-900/50">
+                    Error
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                {currentDurationMs > 0 ? (
+                  <span className="text-[11px] text-zinc-400 flex items-center gap-1 font-mono">
+                    <Clock size={11} />
+                    {(currentDurationMs / 1000).toFixed(2)}s
+                  </span>
+                ) : null}
+                <button
+                  onClick={() => setShowConsole(false)}
+                  className="text-zinc-400 hover:text-zinc-200 p-0.5 transition-colors"
+                  title="Collapse console"
+                >
+                  <ChevronUp size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Live Running State */}
+            {isRunning && (
+              <div className="flex items-center gap-2 py-2 text-zinc-300 font-mono text-xs">
+                <Loader2 size={13} className="text-zinc-400 animate-spin" />
+                <span>{runningStatus || 'The sandbox is running...'}</span>
+              </div>
+            )}
+
+            {/* Stdout Output (live or complete) */}
+            {(executionResult?.stdout || liveStdout) && (
+              <div className="whitespace-pre-wrap text-zinc-200 font-mono text-[12px] leading-relaxed mb-3 bg-[#0d0d12] p-3 rounded-lg border border-[#1a1a22] shadow-inner">
+                {executionResult ? executionResult.stdout : liveStdout}
+              </div>
+            )}
+
+            {/* Stderr / Error Output */}
+            {executionResult?.error && (
+              <div className="whitespace-pre-wrap text-rose-400 font-mono text-[12px] leading-relaxed mb-3 bg-rose-950/20 p-3 rounded-lg border border-rose-900/35">
+                {executionResult.error}
+              </div>
+            )}
+
+            {/* Empty Output notice */}
+            {executionResult && !executionResult.stdout && !executionResult.error && displayedImages.length === 0 && (
+              <div className="text-zinc-400 italic py-1">
+                Program executed with return code 0 (no output printed).
+              </div>
+            )}
+
+            {/* Generated File Artifacts (PDFs, CSVs, Excel, etc.) */}
+            {executionResult?.artifacts && executionResult.artifacts.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <div className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText size={12} className="text-zinc-400" />
+                  Generated Files & Downloads ({executionResult.artifacts.length})
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {executionResult.artifacts.map((art, idx) => (
+                    <a
+                      key={idx}
+                      href={art.data_url}
+                      download={art.filename}
+                      className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-100 border border-zinc-700 hover:border-zinc-500 text-xs font-medium transition-all shadow-sm group hover:scale-[1.02] cursor-pointer"
+                    >
+                      <FileText size={14} className="text-zinc-300 group-hover:text-white group-hover:scale-110 transition-transform" />
+                      <span className="font-mono">{art.filename}</span>
+                      <span className="text-[10px] text-zinc-300 bg-zinc-900/90 px-1.5 py-0.5 rounded border border-zinc-700/80">
+                        {art.size_bytes >= 1024 ? `${(art.size_bytes / 1024).toFixed(1)} KB` : `${art.size_bytes} B`}
+                      </span>
+                      <Download size={13} className="ml-0.5 text-zinc-400 group-hover:text-zinc-200" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Generated Charts & Figures */}
+            {displayedImages.length > 0 && (
+              <div className="mt-3 space-y-3">
+                <div className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-zinc-400" />
+                  Generated Figures ({displayedImages.length})
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  {displayedImages.map((imgUrl, idx) => (
+                    <div key={idx} className="relative group/img rounded-xl overflow-hidden border border-[#232328] bg-black/70 p-2">
+                      <img
+                        src={imgUrl}
+                        alt={`Figure ${idx + 1}`}
+                        className="w-full max-h-[420px] object-contain rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
+                        onClick={() => setFullScreenImage(imgUrl)}
+                      />
+                      <div className="absolute top-4 right-4 flex items-center gap-1.5 opacity-0 group-hover/img:opacity-100 transition-opacity bg-black/80 backdrop-blur-md rounded-lg p-1 border border-white/15 shadow-xl">
+                        <button
+                          onClick={() => setFullScreenImage(imgUrl)}
+                          className="p-1.5 hover:bg-white/10 rounded text-zinc-300 hover:text-white transition-colors"
+                          title="Expand full size"
+                        >
+                          <Maximize2 size={13} />
+                        </button>
+                        <a
+                          href={imgUrl}
+                          download={`figure-${idx + 1}.png`}
+                          className="p-1.5 hover:bg-white/10 rounded text-zinc-300 hover:text-white transition-colors"
+                          title="Download chart"
+                        >
+                          <Download size={13} />
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Fullscreen Image Modal Lightbox */}
+      {fullScreenImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in"
+          onClick={() => setFullScreenImage(null)}
+        >
+          <div
+            className="relative max-w-5xl max-h-[92vh] bg-[#121215] border border-[#282830] rounded-2xl p-4 shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 mb-2 border-b border-[#202028]">
+              <span className="text-xs font-semibold text-zinc-300 font-mono">Figure Preview</span>
+              <div className="flex items-center gap-2">
+                <a
+                  href={fullScreenImage}
+                  download="figure.png"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
+                >
+                  <Download size={13} />
+                  Download
+                </a>
+                <button
+                  onClick={() => setFullScreenImage(null)}
+                  className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="overflow-auto flex items-center justify-center p-2">
+              <img src={fullScreenImage} alt="Full plot" className="max-h-[78vh] w-auto object-contain rounded-lg" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 })
@@ -524,6 +798,7 @@ function rehypeStreamingCursor() {
 export const ChatMessageItem = React.memo(
   function ChatMessageItem({ message, isStreaming = false, onShare }: ChatMessageItemProps) {
   const [copied, setCopied] = useState(false)
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null)
   const isUser = message.role === 'user'
 
   const formattedContent = useMemo(() => formatLaTeX(message.content), [message.content])
@@ -685,15 +960,83 @@ export const ChatMessageItem = React.memo(
                   {children}
                 </td>
               ),
-              a: ({ href, children }) => (
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-white underline underline-offset-4 decoration-[#666666] hover:decoration-white transition-colors"
-                >
-                  {children}
-                </a>
+              a: ({ href, children }) => {
+                const isDataUrl = Boolean(href?.startsWith('data:'))
+                const isExternal = Boolean(href?.startsWith('http://') || href?.startsWith('https://') || href?.startsWith('mailto:'))
+                const isRelativeFile = Boolean(
+                  href && !isDataUrl && !isExternal && (
+                    href.endsWith('.pdf') ||
+                    href.endsWith('.csv') ||
+                    href.endsWith('.xlsx') ||
+                    href.endsWith('.txt') ||
+                    href.endsWith('.png') ||
+                    href.endsWith('.jpg')
+                  )
+                )
+
+                // If real data URL from sandbox execution, download directly
+                if (isDataUrl) {
+                  return (
+                    <a
+                      href={href}
+                      download={true}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 my-1 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/80 text-zinc-100 border border-zinc-700 hover:border-zinc-500 text-xs font-medium transition-all shadow-sm no-underline cursor-pointer hover:scale-[1.02]"
+                    >
+                      <Download size={13} className="text-zinc-300" />
+                      {children}
+                    </a>
+                  )
+                }
+
+                // If relative filename (e.g. random_text_report.pdf) or empty/dummy link, prevent page reload!
+                if (!isExternal || isRelativeFile || !href || href === '#' || href === '') {
+                  return (
+                    <span
+                      onClick={(e) => {
+                        e.preventDefault()
+                        // Scroll to the code block Run button above
+                        const buttons = document.querySelectorAll('button')
+                        for (const btn of buttons) {
+                          if (btn.textContent?.includes('Run') || btn.querySelector('svg.lucide-play')) {
+                            btn.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                            btn.classList.add('ring-2', 'ring-zinc-400', 'ring-offset-2', 'ring-offset-black')
+                            setTimeout(() => btn.classList.remove('ring-2', 'ring-zinc-400', 'ring-offset-2', 'ring-offset-black'), 2000)
+                            break
+                          }
+                        }
+                      }}
+                      title="Click 'Run' on the Python code block above to execute and generate this file"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 my-1 rounded-xl bg-[#1c1c22] hover:bg-[#25252c] text-zinc-300 border border-[#2e2e38] text-xs font-medium transition-all shadow-sm cursor-pointer select-none group"
+                    >
+                      <Terminal size={13} className="text-zinc-400 group-hover:scale-110 transition-transform" />
+                      <span>{children}</span>
+                      <span className="text-[10px] text-zinc-300 font-mono bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-700/80">
+                        Click 'Run' above
+                      </span>
+                    </span>
+                  )
+                }
+
+                return (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-white underline underline-offset-4 decoration-[#666666] hover:decoration-white transition-colors"
+                  >
+                    {children}
+                  </a>
+                )
+              },
+              img: ({ src, alt }) => (
+                <div className="my-3 rounded-xl overflow-hidden border border-[#232328] bg-black/60 p-2 inline-block max-w-full">
+                  <img
+                    src={src}
+                    alt={alt || 'Generated Chart'}
+                    className="max-h-[460px] w-auto max-w-full object-contain rounded-lg cursor-pointer hover:opacity-95 transition-opacity"
+                    onClick={() => src && setLightboxImage(src)}
+                  />
+                </div>
               ),
               pre: ({ children }) => <>{children}</>,
               code: ({ className, children }) => {
@@ -758,6 +1101,8 @@ export const ChatMessageItem = React.memo(
               )}
             </div>
 
+
+
             {/* AI Response Timestamp */}
             {message.created_at && (
               <div className="flex items-center gap-1.5 text-[11px] text-[#71717a] font-mono select-none">
@@ -765,6 +1110,41 @@ export const ChatMessageItem = React.memo(
                 <span>{formatMessageTime(message.created_at)}</span>
               </div>
             )}
+          </div>
+        )}
+
+        {lightboxImage && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in"
+            onClick={() => setLightboxImage(null)}
+          >
+            <div
+              className="relative max-w-5xl max-h-[92vh] bg-[#121215] border border-[#282830] rounded-2xl p-4 shadow-2xl flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 mb-2 border-b border-[#202028]">
+                <span className="text-xs font-semibold text-zinc-300 font-mono">Chart Preview</span>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={lightboxImage}
+                    download="chart.png"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
+                  >
+                    <Download size={13} />
+                    Download
+                  </a>
+                  <button
+                    onClick={() => setLightboxImage(null)}
+                    className="p-1.5 rounded-lg hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+              <div className="overflow-auto flex items-center justify-center p-2">
+                <img src={lightboxImage} alt="Chart full view" className="max-h-[78vh] w-auto object-contain rounded-lg" />
+              </div>
+            </div>
           </div>
         )}
       </div>

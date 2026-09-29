@@ -302,6 +302,64 @@ class DualLLMRunnable:
             logger.error("llm.stream.failed", error=str(exc))
             raise
 
+    async def astream_raw(self, input_prompt: Any, **kwargs: Any) -> AsyncGenerator[Any, None]:
+        """
+        Stream raw AIMessageChunk objects preserving tool_call_chunks, content, and metadata.
+        Attempts OpenAI primary, falling back to Gemini if an error occurs before streaming begins.
+        """
+        # 1. Attempt OpenAI primary
+        if self._openai_chat:
+            started = False
+            start_time = time.perf_counter()
+            try:
+                async for chunk in self._openai_chat.astream(input_prompt, **kwargs):
+                    started = True
+                    yield chunk
+                elapsed = time.perf_counter() - start_time
+                logger.info(
+                    "llm.stream_raw.success",
+                    provider="openai",
+                    model=self.openai_model,
+                    latency=round(elapsed, 3),
+                )
+                return
+            except Exception as exc:
+                elapsed = time.perf_counter() - start_time
+                if started:
+                    logger.error(
+                        "llm.stream_raw.interrupted",
+                        provider="openai",
+                        error=str(exc),
+                        latency=round(elapsed, 3),
+                    )
+                    raise
+                logger.warning(
+                    "llm.stream_raw.fallback",
+                    failed_provider="openai",
+                    model=self.openai_model,
+                    error=str(exc),
+                    fallback_provider="gemini",
+                    fallback_model=self.gemini_model,
+                    latency=round(elapsed, 3),
+                )
+
+        # 2. Fallback to Gemini
+        start_time = time.perf_counter()
+        try:
+            async for chunk in self._gemini_chat.astream(input_prompt, **kwargs):
+                yield chunk
+            elapsed = time.perf_counter() - start_time
+            logger.info(
+                "llm.stream_raw.success",
+                provider="gemini",
+                model=self.gemini_model,
+                latency=round(elapsed, 3),
+                is_fallback=True,
+            )
+        except Exception as exc:
+            logger.error("llm.stream_raw.failed", error=str(exc))
+            raise
+
 
 
 class DualLLM:

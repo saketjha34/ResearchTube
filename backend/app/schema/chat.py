@@ -375,3 +375,27 @@ class ChatGreetingResponse(BaseModel):
     greeting: str
     user_name: str
     sentences: List[str]
+
+
+# ============================================================
+# PYTHON SANDBOX SCHEMAS
+# ============================================================
+
+class ExecutePythonRequest(BaseModel):
+    """Request payload for executing code in the Python Sandbox."""
+
+    code: str = Field(..., description="Python source code to execute")
+    timeout: Optional[int] = Field(None, description="Optional execution timeout in seconds")
+
+
+class ExecutePythonResponse(BaseModel):
+    """Result returned from Python Sandbox execution."""
+
+    success: bool
+    stdout: str = ""
+    stderr: str = ""
+    error: Optional[str] = None
+    results: List[str] = Field(default_factory=list)
+    images: List[str] = Field(default_factory=list)
+    duration_ms: float = 0.0
+    packages_installed: List[str] = Field(default_factory=list)

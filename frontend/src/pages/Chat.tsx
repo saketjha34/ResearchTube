@@ -11,7 +11,6 @@ import {
   Archive,
   ArchiveRestore,
   Calendar,
-  Globe,
 } from 'lucide-react'
 import {
   getAvailableVideos,
@@ -28,6 +27,7 @@ import {
   type VideoScopeMode,
   type ChatMessage,
   type ChatSessionDetail,
+  type SSEStatusEvent,
 } from '../api/chat'
 import { ChatMessageItem } from '../components/chat/ChatMessageItem'
 import { ChatInput } from '../components/chat/ChatInput'
@@ -64,6 +64,7 @@ export default function Chat() {
       setError(null)
       setScopeMode('none')
       setSelectedVideo(null)
+      setExecutionStatus(null)
     }
     window.addEventListener('chat:new', handleNew)
     return () => window.removeEventListener('chat:new', handleNew)
@@ -82,6 +83,7 @@ export default function Chat() {
   const [input, setInput] = useState('')
   const [webSearchActive, setWebSearchActive] = useState(false)
   const [searchStatus, setSearchStatus] = useState<string | null>(null)
+  const [executionStatus, setExecutionStatus] = useState<SSEStatusEvent | null>(null)
   const [loadingSession, setLoadingSession] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingText, setStreamingText] = useState('')
@@ -461,7 +463,10 @@ export default function Chat() {
       currentSessionId,
       textToSend,
       {
-        onStatus: (status) => setSearchStatus(status.message),
+        onStatus: (status) => {
+          setExecutionStatus(status)
+          setSearchStatus(status.message)
+        },
         onUser: (userEvent) => {
         // Replace temp ID with actual DB ID
         setMessages((prev) =>
@@ -469,7 +474,13 @@ export default function Chat() {
         )
       },
       onDelta: (token) => {
-        setSearchStatus((prev) => (prev ? null : null))
+        setSearchStatus(null)
+        setExecutionStatus((prev) => {
+          if (prev?.status === 'searching' || prev?.status === 'scraping') {
+            return null
+          }
+          return prev
+        })
         rawStreamBufferRef.current += token
 
         // Start RAF smooth token reveal loop if not active
@@ -540,6 +551,7 @@ export default function Chat() {
             streamRafIdRef.current = null
           }
 
+          setExecutionStatus(null)
           const assistantMsg: ChatMessage = {
             id: doneEvent.id,
             session_id: currentSessionId!,
@@ -547,6 +559,10 @@ export default function Chat() {
             content: rawStreamBufferRef.current,
             sources: doneEvent.sources,
             created_at: doneEvent.created_at,
+            sandbox_executed: doneEvent.sandbox_executed,
+            artifacts_count: doneEvent.artifacts_count,
+            images_count: doneEvent.images_count,
+            webhook_delivered: doneEvent.webhook_delivered,
           }
           setMessages((prev) => [...prev, assistantMsg])
           setIsStreaming(false)
@@ -564,6 +580,7 @@ export default function Chat() {
       },
       onError: (errMsg) => {
         setSearchStatus(null)
+        setExecutionStatus(null)
         abortControllerRef.current = null
         isStreamActiveRef.current = false
         if (streamRafIdRef.current) {
@@ -591,6 +608,7 @@ export default function Chat() {
       abortControllerRef.current = null
     }
     setSearchStatus(null)
+    setExecutionStatus(null)
 
     // 2. Stop RAF reveal loop
     isStreamActiveRef.current = false
@@ -776,11 +794,21 @@ export default function Chat() {
                   />
                 ))}
 
-                {/* Live Web Search Status Banner */}
-                {isStreaming && searchStatus && (
-                  <div className="flex items-center gap-2.5 my-3 text-xs text-sky-200 bg-sky-950/50 border border-sky-500/30 rounded-xl px-3.5 py-2 w-fit shadow-md shadow-sky-500/10 animate-pulse">
-                    <Globe size={14} className="text-sky-400 animate-spin flex-shrink-0" />
-                    <span className="font-medium tracking-wide">{searchStatus}</span>
+                {/* Streaming Status (Clean Minimal Monochrome) */}
+                {isStreaming && (searchStatus || executionStatus) && (
+                  <div className="my-2.5">
+                    <div className="inline-flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#121214] px-3 py-1.5 text-xs text-zinc-300 shadow-sm font-mono">
+                      <Loader2 size={12} className="text-zinc-400 animate-spin flex-shrink-0" />
+                      <span>
+                        {executionStatus?.status === 'executing_code'
+                          ? 'Running Python code...'
+                          : executionStatus?.status === 'code_executed'
+                          ? `Execution completed (${executionStatus.duration_ms ? Math.round(executionStatus.duration_ms) : 0}ms)`
+                          : executionStatus?.status === 'generating'
+                          ? 'Generating response...'
+                          : searchStatus || 'Processing...'}
+                      </span>
+                    </div>
                   </div>
                 )}
 
