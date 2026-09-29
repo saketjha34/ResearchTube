@@ -71,6 +71,8 @@ class YoutubeResearchService:
         - Agent 3: Final report generation
         """
 
+        user_id_str = str(current_user.id) if current_user and getattr(current_user, "id", None) else None
+
         # ----------------------------------------------------
         # CREATE RESEARCH RUN
         # ----------------------------------------------------
@@ -106,12 +108,13 @@ class YoutubeResearchService:
             _logger.error(
                 "pipeline.failed",
                 run_id=run_id_str,
-                user_id=str(current_user.id),
+                user_id=user_id_str,
                 exc_type=type(exc).__name__,
                 exc_msg=str(exc),
             )
 
             try:
+                await session.rollback()
                 await update_research_run_status(
                     session=session,
                     run_id=run.id,

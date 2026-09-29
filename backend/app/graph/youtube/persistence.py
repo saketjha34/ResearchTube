@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 # pyrefly: ignore [missing-import]
@@ -57,6 +58,33 @@ from app.schema.youtube import (
 )
 
 _logger = structlog.get_logger("graph_persistence")
+
+
+def _parse_published_at(val: Any) -> datetime | None:
+    """
+    Safely parse an ISO-8601 string or date into a timezone-aware datetime object.
+    """
+    if val is None or isinstance(val, datetime):
+        return val
+    if isinstance(val, str):
+        s = val.strip()
+        if not s:
+            return None
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            pass
+        for fmt in (
+            "%Y-%m-%dT%H:%M:%S%z",
+            "%Y-%m-%dT%H:%M:%SZ",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+        ):
+            try:
+                return datetime.strptime(s, fmt)
+            except ValueError:
+                continue
+    return None
 
 
 class YouTubeGraphPersistence:
@@ -175,6 +203,8 @@ class YouTubeGraphPersistence:
         video_id_map: dict[str, UUID] = {}
 
         for position, video in enumerate(videos, start=1):
+            published_dt = _parse_published_at(video.published_at)
+
             # Upsert youtube_videos row
             result = await session.execute(
                 select(YouTubeVideoModel).where(
@@ -193,7 +223,7 @@ class YouTubeGraphPersistence:
                     views=video.views,
                     likes=video.likes,
                     comments=video.comments,
-                    published_at=video.published_at,
+                    published_at=published_dt,
                 )
                 session.add(db_video)
                 await session.flush()
@@ -210,8 +240,8 @@ class YouTubeGraphPersistence:
                     db_video.likes = video.likes
                 if video.comments is not None:
                     db_video.comments = video.comments
-                if video.published_at is not None:
-                    db_video.published_at = video.published_at
+                if published_dt is not None:
+                    db_video.published_at = published_dt
 
                 await session.flush()
 

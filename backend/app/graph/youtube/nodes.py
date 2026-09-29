@@ -77,6 +77,25 @@ class YouTubeGraphNodes:
         self.session = session
         self.persistence = persistence or youtube_graph_persistence
 
+    async def _handle_node_failure(
+        self,
+        run_id: UUID,
+        exc: Exception,
+        log: Any,
+    ) -> None:
+        log.error("node.failed", exc_type=type(exc).__name__, exc_msg=str(exc))
+        try:
+            await self.session.rollback()
+            await self.persistence.update_research_run_status(
+                session=self.session,
+                run_id=run_id,
+                status="failed",
+                error=str(exc),
+            )
+            await self.session.commit()
+        except Exception as rollback_err:
+            log.warning("node.status_update_failed", error=str(rollback_err))
+
     # ========================================================
     # NODE 1 — AGENT 1: YOUTUBE RESEARCH
     # ========================================================
@@ -105,14 +124,7 @@ class YouTubeGraphNodes:
                 num_videos=video_count,
             )
         except Exception as exc:
-            log.error("node.failed", exc_type=type(exc).__name__, exc_msg=str(exc))
-            await self.persistence.update_research_run_status(
-                session=self.session,
-                run_id=run_id,
-                status="failed",
-                error=str(exc),
-            )
-            await self.session.commit()
+            await self._handle_node_failure(run_id, exc, log)
             raise
 
         log.info("node.completed", name="youtube_research")
@@ -140,14 +152,7 @@ class YouTubeGraphNodes:
             )
             await self.session.commit()
         except Exception as exc:
-            log.error("node.failed", exc_type=type(exc).__name__, exc_msg=str(exc))
-            await self.persistence.update_research_run_status(
-                session=self.session,
-                run_id=run_id,
-                status="failed",
-                error=str(exc),
-            )
-            await self.session.commit()
+            await self._handle_node_failure(run_id, exc, log)
             raise
 
         # Convert UUID objects to strings for TypedDict state channel
@@ -188,14 +193,7 @@ class YouTubeGraphNodes:
             )
             await self.session.commit()
         except Exception as exc:
-            log.error("node.failed", exc_type=type(exc).__name__, exc_msg=str(exc))
-            await self.persistence.update_research_run_status(
-                session=self.session,
-                run_id=run_id,
-                status="failed",
-                error=str(exc),
-            )
-            await self.session.commit()
+            await self._handle_node_failure(run_id, exc, log)
             raise
 
         log.info("node.completed", name="ingest_transcripts")
@@ -234,14 +232,7 @@ class YouTubeGraphNodes:
                 research_run_id=run_id,
             )
         except Exception as exc:
-            log.error("node.failed", exc_type=type(exc).__name__, exc_msg=str(exc))
-            await self.persistence.update_research_run_status(
-                session=self.session,
-                run_id=run_id,
-                status="failed",
-                error=str(exc),
-            )
-            await self.session.commit()
+            await self._handle_node_failure(run_id, exc, log)
             raise
 
         log.info("node.completed", name="context_analysis")
@@ -272,14 +263,7 @@ class YouTubeGraphNodes:
             )
             await self.session.commit()
         except Exception as exc:
-            log.error("node.failed", exc_type=type(exc).__name__, exc_msg=str(exc))
-            await self.persistence.update_research_run_status(
-                session=self.session,
-                run_id=run_id,
-                status="failed",
-                error=str(exc),
-            )
-            await self.session.commit()
+            await self._handle_node_failure(run_id, exc, log)
             raise
 
         log.info("node.completed", name="persist_analysis")
@@ -315,14 +299,7 @@ class YouTubeGraphNodes:
                 analysis=analysis,
             )
         except Exception as exc:
-            log.error("node.failed", exc_type=type(exc).__name__, exc_msg=str(exc))
-            await self.persistence.update_research_run_status(
-                session=self.session,
-                run_id=run_id,
-                status="failed",
-                error=str(exc),
-            )
-            await self.session.commit()
+            await self._handle_node_failure(run_id, exc, log)
             raise
 
         log.info("node.completed", name="final_report")
@@ -356,14 +333,7 @@ class YouTubeGraphNodes:
             )
             await self.session.commit()
         except Exception as exc:
-            log.error("node.failed", exc_type=type(exc).__name__, exc_msg=str(exc))
-            await self.persistence.update_research_run_status(
-                session=self.session,
-                run_id=run_id,
-                status="failed",
-                error=str(exc),
-            )
-            await self.session.commit()
+            await self._handle_node_failure(run_id, exc, log)
             raise
 
         log.info("node.completed", name="persist_final_report")

@@ -23,6 +23,7 @@ PROXY SUPPORT (for cloud deployments where YouTube blocks GCP IPs):
 """
 
 import os
+from typing import Optional
 
 # pyrefly: ignore [missing-import]
 import structlog
@@ -307,7 +308,7 @@ def _fetch_transcript_with_fallback(
 @tool
 def get_video_transcript(
     video_id: str,
-    max_chars: int = 15000,
+    max_chars: Optional[int] = None,
 ) -> str:
     """
     Fetch a YouTube transcript using a 3-layer fallback strategy:
@@ -318,25 +319,25 @@ def get_video_transcript(
     Proxy support: Set WEBSHARE_PROXY_USERNAME + WEBSHARE_PROXY_PASSWORD
     or YOUTUBE_PROXY_URL in the environment to bypass cloud IP blocks.
 
-    The transcript is truncated to max_chars to prevent
-    sending extremely large context to an LLM.
+    Retrieves 100% of the complete transcript without character restrictions
+    or truncation by default.
 
     Args:
         video_id:
             YouTube video ID.
 
         max_chars:
-            Maximum number of characters returned.
+            Optional character limit. If None or <= 0, 100% of the transcript
+            is returned without any truncation.
 
     Returns:
-        Transcript text, or an unavailability message.
+        Full transcript text, or an unavailability message.
     """
 
     if not video_id or not video_id.strip():
         return "Transcript unavailable: video_id cannot be empty."
 
     video_id = video_id.strip()
-    max_chars = max(100, max_chars)
 
     text, language_used = _fetch_transcript_with_fallback(video_id)
 
@@ -347,7 +348,7 @@ def get_video_transcript(
             "(manual, auto-generated, or translated)."
         )
 
-    if len(text) > max_chars:
-        text = text[:max_chars] + "\n\n[TRANSCRIPT TRUNCATED]"
+    if max_chars is not None and max_chars > 0 and len(text) > max_chars:
+        text = text[:max_chars]
 
     return f"[Language: {language_used}]\n\n{text}"

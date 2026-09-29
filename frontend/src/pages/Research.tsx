@@ -401,16 +401,31 @@ export function ReportView({
   searchQuery = '',
   createdAt,
   completedAt,
+  videos,
 }: {
   report: ResearchResponse['report'] | HistoryItem
   query: string
   searchQuery?: string
   createdAt?: string | null
   completedAt?: string | null
+  videos?: { video_id: string; transcript_available?: boolean | null }[]
 }) {
   const r = 'executive_summary' in report ? report : (report as HistoryItem)
   const exec = 'executive_summary' in r ? (r as ResearchResponse['report']).executive_summary : (r as HistoryItem).executive_summary ?? ''
-  const resources: RecommendedResource[] = ('recommended_resources' in r ? ((r as any).recommended_resources ?? []) : [])
+  const rawResources: RecommendedResource[] = ('recommended_resources' in r ? ((r as any).recommended_resources ?? []) : [])
+
+  // Resolve transcript_available using videos array if available
+  const videoList = videos ?? ('videos' in r ? ((r as any).videos ?? []) : [])
+  const videoMap = new Map(videoList.map((v: any) => [v.video_id, v]))
+  const resources: RecommendedResource[] = rawResources.map((res) => {
+    const vMatch = videoMap.get(res.video_id)
+    return {
+      ...res,
+      transcript_available: vMatch?.transcript_available !== undefined && vMatch?.transcript_available !== null
+        ? Boolean(vMatch.transcript_available)
+        : res.transcript_available,
+    }
+  })
   const topics: string[] = ('key_topics' in r ? ((r as any).key_topics ?? []) : [])
   const path: string[] = ('learning_path' in r ? ((r as any).learning_path ?? []) : [])
   const conc = 'conclusion' in r ? (r as ResearchResponse['report']).conclusion : (r as HistoryItem).conclusion ?? ''
@@ -962,6 +977,7 @@ function Research() {
                 searchQuery={reportSearch}
                 createdAt={historyResult?.created_at ?? freshRunTimestampRef.current ?? null}
                 completedAt={historyResult?.completed_at ?? freshRunTimestampRef.current ?? null}
+                videos={historyResult?.videos ?? result?.research_result?.videos}
               />
 
               <div ref={bottomRef} />

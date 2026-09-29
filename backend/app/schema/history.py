@@ -60,6 +60,7 @@ class HistoryRecommendedResource(BaseModel):
     likes: Optional[int] = None
     comments: Optional[int] = None
 
+    transcript: Optional[str] = None
     transcript_available: Optional[bool] = None
     transcript_language: Optional[str] = None
 
@@ -103,6 +104,7 @@ class HistoryVideoItem(BaseModel):
     likes: Optional[int] = None
     comments: Optional[int] = None
 
+    transcript: Optional[str] = None
     transcript_available: Optional[bool] = None
     transcript_language: Optional[str] = None
 

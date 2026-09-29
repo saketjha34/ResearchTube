@@ -131,11 +131,11 @@ Mention limitations supported by the provided data.
 For example:
 
 - transcript unavailable
-- incomplete transcript evidence
 - limited number of resources
 - limited metadata
 - reduced confidence when transcript evidence is unavailable
 
+Do NOT claim the transcript is truncated or incomplete when a transcript is available.
 Do NOT invent limitations that are not supported.
 
 

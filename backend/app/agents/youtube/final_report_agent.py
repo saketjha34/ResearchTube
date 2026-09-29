@@ -108,6 +108,8 @@ def build_final_report_context(
             "likes": video.likes if video else None,
             "comments": video.comments if video else None,
             "description": video.description if video else None,
+            "transcript_available": video.transcript_available if video else False,
+            "transcript_language": video.transcript_language if video else None,
             "relevance_score": eval_item.relevance_score,
             "educational_quality_score": eval_item.educational_quality_score,
             "coverage_score": eval_item.coverage_score,
@@ -169,6 +171,12 @@ Likes:
 
 Comments:
 {resource["comments"]}
+
+Transcript Available:
+{resource["transcript_available"]}
+
+Transcript Language:
+{resource["transcript_language"]}
 
 Relevance Score:
 {resource["relevance_score"]}/10
@@ -257,6 +265,32 @@ async def final_report_agent(
     )
 
     final_report = FinalReport.model_validate(raw_report)
+
+    # Reconcile factual video metadata from Agent 1 (ground truth)
+    video_map = {video.video_id: video for video in research_result.videos}
+    for idx, resource in enumerate(final_report.recommended_resources):
+        video = video_map.get(resource.video_id)
+        if not video and idx < len(research_result.videos):
+            video = research_result.videos[idx]
+            resource.video_id = video.video_id
+        if video:
+            resource.transcript_available = video.transcript_available
+            resource.transcript_language = video.transcript_language or resource.transcript_language
+            if video.transcript:
+                resource.transcript = video.transcript
+            if not resource.url and video.url:
+                resource.url = video.url
+            if not resource.channel and video.channel:
+                resource.channel = video.channel
+            if not resource.published_at and video.published_at:
+                resource.published_at = video.published_at
+            if resource.views is None and video.views is not None:
+                resource.views = video.views
+            if resource.likes is None and video.likes is not None:
+                resource.likes = video.likes
+            if resource.comments is None and video.comments is not None:
+                resource.comments = video.comments
+
     print("[Agent 3] Final report successfully generated.")
 
     return final_report

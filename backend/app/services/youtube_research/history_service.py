@@ -125,6 +125,12 @@ class HistoryService:
         # 6. Build HistoryVideoItem list
         # --------------------------------------------------------
 
+        transcript_by_yt_id: dict[str, str] = {}
+        if report and report.recommended_resources:
+            for r in parse_json_list(report.recommended_resources):
+                if isinstance(r, dict) and r.get("video_id") and r.get("transcript"):
+                    transcript_by_yt_id[r["video_id"]] = r["transcript"]
+
         video_items: list[HistoryVideoItem] = []
 
         for rv in research_videos:
@@ -150,6 +156,7 @@ class HistoryService:
                 views=yt.views,
                 likes=yt.likes,
                 comments=yt.comments,
+                transcript=transcript_by_yt_id.get(yt.video_id),
                 transcript_available=rv.transcript_available,
                 transcript_language=rv.transcript_language,
 
@@ -214,6 +221,13 @@ class HistoryService:
         # 8. Parse recommended_resources from FinalReport JSON
         # --------------------------------------------------------
 
+        # Map YouTube string ID -> ResearchVideo for factual transcript availability
+        rv_by_yt_id: dict[str, ResearchVideo] = {}
+        for rv in research_videos:
+            yt = yt_by_uuid.get(rv.video_id)
+            if yt and yt.video_id:
+                rv_by_yt_id[yt.video_id] = rv
+
         recommended_resources: list[HistoryRecommendedResource] = []
 
         if report and report.recommended_resources:
@@ -226,6 +240,19 @@ class HistoryService:
                     continue
 
                 video_id = raw.get("video_id")
+                rv_match = rv_by_yt_id.get(video_id) if video_id else None
+
+                # Ground truth for transcript availability from DB association
+                transcript_available = (
+                    rv_match.transcript_available
+                    if rv_match is not None
+                    else raw.get("transcript_available", False)
+                )
+                transcript_language = (
+                    rv_match.transcript_language
+                    if (rv_match is not None and rv_match.transcript_language)
+                    else raw.get("transcript_language")
+                )
 
                 rec = HistoryRecommendedResource(
                     rank=raw.get("rank"),
@@ -238,8 +265,9 @@ class HistoryService:
                     views=raw.get("views"),
                     likes=raw.get("likes"),
                     comments=raw.get("comments"),
-                    transcript_available=raw.get("transcript_available"),
-                    transcript_language=raw.get("transcript_language"),
+                    transcript=raw.get("transcript"),
+                    transcript_available=transcript_available,
+                    transcript_language=transcript_language,
                     relevance_score=raw.get("relevance_score"),
                     educational_quality_score=raw.get("educational_quality_score"),
                     coverage_score=raw.get("coverage_score"),

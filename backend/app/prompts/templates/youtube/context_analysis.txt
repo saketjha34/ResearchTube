@@ -87,6 +87,12 @@ Do NOT invent:
 - technical details
 - transcript content
 
+When transcript chunks are present:
+
+- The complete video transcript has been indexed into RAG.
+- Do NOT state or assume that the transcript is truncated or incomplete.
+- Base your concepts, technical depth, and educational quality directly on the transcript evidence.
+
 If a video has no transcript chunks:
 
 - acknowledge that transcript evidence is unavailable

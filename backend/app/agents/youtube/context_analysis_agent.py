@@ -279,7 +279,7 @@ async def context_analysis_agent(
         videos=videos,
         video_id_map=video_id_map,
         research_run_id=research_run_id,
-        top_k=5,
+        top_k=10 if len(videos) <= 3 else 6,
     )
     print(f"[Agent 2] RAG context retrieved for {len(rag_context)} videos.")
 

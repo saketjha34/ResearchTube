@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -24,6 +24,7 @@ from sqlalchemy.orm import (
     Mapped,
     mapped_column,
     relationship,
+    validates,
 )
 
 # pyrefly: ignore [missing-import]
@@ -218,6 +219,34 @@ class YouTubeVideo(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+
+    @validates("published_at")
+    def validate_published_at(self, key: str, value: Any) -> Optional[datetime]:
+        """
+        Ensure published_at is coerced from ISO string / formatted date to datetime object
+        before asyncpg attempts to insert/update PostgreSQL TIMESTAMP WITH TIME ZONE.
+        """
+        if value is None or isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            s = value.strip()
+            if not s:
+                return None
+            try:
+                return datetime.fromisoformat(s.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                pass
+            for fmt in (
+                "%Y-%m-%dT%H:%M:%S%z",
+                "%Y-%m-%dT%H:%M:%SZ",
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%d",
+            ):
+                try:
+                    return datetime.strptime(s, fmt)
+                except ValueError:
+                    continue
+        return None
 
     url: Mapped[Optional[str]] = mapped_column(
         Text,

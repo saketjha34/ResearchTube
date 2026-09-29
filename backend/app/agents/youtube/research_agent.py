@@ -246,7 +246,6 @@ async def fetch_single_video(
                 get_video_transcript.invoke,
                 {
                     "video_id": video_id,
-                    "max_chars": 15000,
                 },
             )
 
