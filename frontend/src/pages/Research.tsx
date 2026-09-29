@@ -415,15 +415,19 @@ export function ReportView({
   const rawResources: RecommendedResource[] = ('recommended_resources' in r ? ((r as any).recommended_resources ?? []) : [])
 
   // Resolve transcript_available using videos array if available
-  const videoList = videos ?? ('videos' in r ? ((r as any).videos ?? []) : [])
-  const videoMap = new Map(videoList.map((v: any) => [v.video_id, v]))
+  const videoList: { video_id: string; transcript_available?: boolean | null }[] =
+    videos ?? ('videos' in r ? ((r as any).videos ?? []) : [])
+  const videoMap = new Map<string, { video_id: string; transcript_available?: boolean | null }>(
+    videoList.map((v: any) => [v.video_id, v])
+  )
   const resources: RecommendedResource[] = rawResources.map((res) => {
     const vMatch = videoMap.get(res.video_id)
     return {
       ...res,
-      transcript_available: vMatch?.transcript_available !== undefined && vMatch?.transcript_available !== null
-        ? Boolean(vMatch.transcript_available)
-        : res.transcript_available,
+      transcript_available:
+        vMatch?.transcript_available !== undefined && vMatch?.transcript_available !== null
+          ? Boolean(vMatch.transcript_available)
+          : res.transcript_available,
     }
   })
   const topics: string[] = ('key_topics' in r ? ((r as any).key_topics ?? []) : [])
