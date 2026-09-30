@@ -390,18 +390,19 @@ export async function streamMessage(
 
 
 
-// --- Python Sandbox (Code Interpreter) --------------------------------------
-
-export interface ExecutePythonRequest {
-  code: string
-  timeout?: number
-}
+// --- Cloud Sandbox (Code Interpreter & C++ Execution) ------------------------
 
 export interface SandboxArtifact {
   filename: string
   mime_type: string
   size_bytes: number
   data_url: string
+}
+
+// Python Sandbox Models
+export interface ExecutePythonRequest {
+  code: string
+  timeout?: number
 }
 
 export interface ExecutePythonResponse {
@@ -414,14 +415,18 @@ export interface ExecutePythonResponse {
   artifacts?: SandboxArtifact[]
   duration_ms: number
   packages_installed: string[]
+  exit_code?: number | null
   webhook_delivered?: boolean | null
   webhook_status?: 'delivered' | 'rate_limited' | 'failed' | 'not_configured' | null
   webhook_url?: string | null
   webhook_error?: string | null
 }
 
-export async function executePythonCode(code: string, timeout?: number): Promise<ExecutePythonResponse> {
-  const res = await client.post<ExecutePythonResponse>('/sandbox/execute', {
+export async function executePythonCode(
+  code: string,
+  timeout?: number
+): Promise<ExecutePythonResponse> {
+  const res = await client.post<ExecutePythonResponse>('/sandbox/python/execute', {
     code,
     timeout,
   })
@@ -441,9 +446,11 @@ export async function executePythonCodeStream(
   code: string,
   callbacks: SandboxStreamCallbacks,
   signal?: AbortSignal,
-  timeout?: number
+  timeout?: number,
+  webhook_url?: string,
+  webhook_secret?: string
 ): Promise<void> {
-  const url = buildApiUrl('/sandbox/stream')
+  const url = buildApiUrl('/sandbox/python/stream')
   const token = getAccessToken()
 
   let response: Response
@@ -454,7 +461,7 @@ export async function executePythonCodeStream(
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ code, timeout }),
+      body: JSON.stringify({ code, timeout, webhook_url, webhook_secret }),
       signal,
     })
   } catch (err: unknown) {
@@ -533,3 +540,135 @@ export async function executePythonCodeStream(
     }
   }
 }
+
+// C++ Sandbox Models
+export interface ExecuteCPPRequest {
+  code: string
+  timeout?: number
+  compiler_flags?: string
+  stdin?: string
+}
+
+export interface ExecuteCPPResponse {
+  success: boolean
+  stdout: string
+  stderr: string
+  error?: string | null
+  compile_output?: string | null
+  compile_time_ms: number
+  execution_time_ms: number
+  duration_ms: number
+  exit_code?: number | null
+  artifacts?: SandboxArtifact[]
+  webhook_delivered?: boolean | null
+  webhook_status?: 'delivered' | 'rate_limited' | 'failed' | 'not_configured' | null
+  webhook_url?: string | null
+  webhook_error?: string | null
+}
+
+export async function executeCppCode(req: ExecuteCPPRequest): Promise<ExecuteCPPResponse> {
+  const res = await client.post<ExecuteCPPResponse>('/sandbox/cpp/execute', req)
+  return res.data
+}
+
+export interface CPPSandboxStreamCallbacks {
+  onStatus?: (status: { step: string; message: string }) => void
+  onStdout?: (text: string) => void
+  onStderr?: (text: string) => void
+  onDone?: (result: ExecuteCPPResponse) => void
+  onError?: (error: string) => void
+}
+
+export async function executeCppCodeStream(
+  req: ExecuteCPPRequest,
+  callbacks: CPPSandboxStreamCallbacks,
+  signal?: AbortSignal
+): Promise<void> {
+  const url = buildApiUrl('/sandbox/cpp/stream')
+  const token = getAccessToken()
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(req),
+      signal,
+    })
+  } catch (err: unknown) {
+    if ((err as Error)?.name === 'AbortError' || signal?.aborted) return
+    callbacks.onError?.(`Network error: ${String(err)}`)
+    return
+  }
+
+  if (!response.ok) {
+    if (signal?.aborted) return
+    const errText = await response.text().catch(() => '')
+    callbacks.onError?.(`HTTP ${response.status}: ${errText}`)
+    return
+  }
+
+  const reader = response.body?.getReader()
+  if (!reader) {
+    callbacks.onError?.('No response body')
+    return
+  }
+
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let currentEvent = ''
+
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        try { await reader.cancel() } catch {}
+        break
+      }
+
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (signal?.aborted) break
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim()
+        } else if (line.startsWith('data: ')) {
+          const raw = line.slice(6).trim()
+          try {
+            const parsed = JSON.parse(raw)
+            switch (currentEvent) {
+              case 'status':
+                callbacks.onStatus?.(parsed as { step: string; message: string })
+                break
+              case 'stdout':
+                callbacks.onStdout?.((parsed as { text: string }).text ?? '')
+                break
+              case 'stderr':
+                callbacks.onStderr?.((parsed as { text: string }).text ?? '')
+                break
+              case 'done':
+                callbacks.onDone?.(parsed as ExecuteCPPResponse)
+                break
+              case 'error':
+                callbacks.onError?.((parsed as { error: string }).error ?? 'Execution error')
+                break
+            }
+          } catch {}
+          currentEvent = ''
+        }
+      }
+    }
+  } catch (err: unknown) {
+    if ((err as Error)?.name !== 'AbortError' && !signal?.aborted) {
+      callbacks.onError?.(`Stream error: ${String(err)}`)
+    }
+  }
+}
+

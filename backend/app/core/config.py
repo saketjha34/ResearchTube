@@ -14,10 +14,8 @@ class Settings(BaseSettings):
     FIRECRAWL_BASE_URL: str = "https://api.firecrawl.dev/v1"
     E2B_API_KEY: str | None = None
     PYTHON_SANDBOX_TIMEOUT_SEC: int = 60
-    SANDBOX_WEBHOOK_URL: str | None = None
-    SANDBOX_WEBHOOK_SECRET: str | None = None
-    SANDBOX_WEBHOOK_RETRIES: int = 3
-    SANDBOX_WEBHOOK_TIMEOUT_SEC: float = 10.0
+    CPP_SANDBOX_TIMEOUT_SEC: int = 60
+    CPP_DEFAULT_COMPILER_FLAGS: str = "-std=c++20 -O2 -Wall -Wextra"
 
     # ========================================================
     # DATABASE

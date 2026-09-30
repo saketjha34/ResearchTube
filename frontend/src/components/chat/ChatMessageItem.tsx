@@ -5,8 +5,15 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video, Share, Clock, Globe, Play, Terminal, Loader2, Download, Maximize2, X, FileText } from 'lucide-react'
-import { executePythonCodeStream, type ChatMessage, type SourceCitation, type ExecutePythonResponse } from '../../api/chat'
+import { User, Copy, Check, ExternalLink, ChevronDown, ChevronUp, Sparkles, Video, Share, Clock, Globe, Play, Terminal, Loader2, Download, Maximize2, X, FileText, AlertCircle } from 'lucide-react'
+import {
+  executePythonCodeStream,
+  executeCppCodeStream,
+  type ChatMessage,
+  type SourceCitation,
+  type ExecutePythonResponse,
+  type ExecuteCPPResponse,
+} from '../../api/chat'
 
 interface ChatMessageItemProps {
   message: ChatMessage
@@ -151,6 +158,8 @@ const languageMetadata: Record<string, { label: string; dotColor: string; canoni
   cpp: { label: 'C++', dotColor: '#f34b7d', canonical: 'cpp' },
   'c++': { label: 'C++', dotColor: '#f34b7d', canonical: 'cpp' },
   c: { label: 'C', dotColor: '#555555', canonical: 'c' },
+  cc: { label: 'C++', dotColor: '#f34b7d', canonical: 'cpp' },
+  cxx: { label: 'C++', dotColor: '#f34b7d', canonical: 'cpp' },
   java: { label: 'Java', dotColor: '#b07219', canonical: 'java' },
   go: { label: 'Go', dotColor: '#00ADD8', canonical: 'go' },
   golang: { label: 'Go', dotColor: '#00ADD8', canonical: 'go' },
@@ -184,15 +193,37 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
   const [isRunning, setIsRunning] = useState(false)
   const [runningStatus, setRunningStatus] = useState<string>('')
   const [liveStdout, setLiveStdout] = useState<string>('')
+  const [liveStderr, setLiveStderr] = useState<string>('')
   const [liveFigures, setLiveFigures] = useState<string[]>([])
   const [liveDurationMs, setLiveDurationMs] = useState<number>(0)
-  const [executionResult, setExecutionResult] = useState<ExecutePythonResponse | null>(null)
+  const [executionResult, setExecutionResult] = useState<ExecutePythonResponse | ExecuteCPPResponse | null>(null)
   const [showConsole, setShowConsole] = useState(false)
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null)
 
-  const match = /language-(\w+)/.exec(className || '')
-  const rawLang = (match ? match[1] : '').toLowerCase()
+
+  const match = /language-([a-zA-Z0-9_+#-]+)/i.exec(className || '')
+  let rawLang = (match ? match[1] : '').toLowerCase()
   const codeText = String(children).replace(/\n$/, '')
+
+  // Auto-detect Python or C++ if code fence was untagged
+  if (!rawLang) {
+    if (
+      codeText.includes('#include') ||
+      codeText.includes('std::') ||
+      codeText.includes('cout <<') ||
+      codeText.includes('int main(') ||
+      codeText.includes('cin >>')
+    ) {
+      rawLang = 'cpp'
+    } else if (
+      codeText.includes('def ') ||
+      codeText.includes('import ') ||
+      codeText.includes('print(') ||
+      codeText.includes('class ')
+    ) {
+      rawLang = 'python'
+    }
+  }
 
   const meta = languageMetadata[rawLang] || {
     label: rawLang ? rawLang.toUpperCase() : 'CODE',
@@ -201,6 +232,8 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
   }
 
   const isPython = meta.canonical === 'python' || rawLang === 'py' || rawLang === 'python'
+  const isCpp = meta.canonical === 'cpp' || rawLang === 'cpp' || rawLang === 'c++' || rawLang === 'c' || rawLang === 'cc' || rawLang === 'cxx'
+  const isRunnable = isPython || isCpp
 
   const handleCopy = () => {
     void navigator.clipboard.writeText(codeText).then(() => {
@@ -215,8 +248,13 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
     setShowConsole(true)
     setExecutionResult(null)
     setLiveStdout('')
+    setLiveStderr('')
     setLiveFigures([])
-    setRunningStatus('The sandbox is running: Booting micro-VM...')
+    setRunningStatus(
+      isCpp
+        ? 'The sandbox is running: Booting isolated micro-VM...'
+        : 'The sandbox is running: Booting micro-VM...'
+    )
 
     const startTime = Date.now()
     const timerInterval = setInterval(() => {
@@ -224,42 +262,86 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
     }, 100)
 
     try {
-      await executePythonCodeStream(
-        codeText,
-        {
-          onStatus: (status) => {
-            setRunningStatus(status.message)
+      if (isCpp) {
+        await executeCppCodeStream(
+          {
+            code: codeText,
           },
-          onStdout: (text) => {
-            setLiveStdout((prev) => prev + text)
+          {
+            onStatus: (status) => {
+              setRunningStatus(status.message)
+            },
+            onStdout: (text) => {
+              setLiveStdout((prev) => prev + text)
+            },
+            onStderr: (text) => {
+              setLiveStderr((prev) => prev + text)
+            },
+            onDone: (res) => {
+              clearInterval(timerInterval)
+              setLiveDurationMs(res.duration_ms)
+              setExecutionResult(res)
+              setIsRunning(false)
+              setRunningStatus('')
+            },
+            onError: (err) => {
+              clearInterval(timerInterval)
+              setExecutionResult({
+                success: false,
+                stdout: liveStdout,
+                stderr: liveStderr,
+                error: err,
+                compile_output: null,
+                compile_time_ms: 0,
+                execution_time_ms: 0,
+                duration_ms: Date.now() - startTime,
+                exit_code: 1,
+                artifacts: [],
+              })
+              setIsRunning(false)
+              setRunningStatus('')
+            },
+          }
+        )
+      } else {
+        await executePythonCodeStream(
+          codeText,
+          {
+            onStatus: (status) => {
+              setRunningStatus(status.message)
+            },
+            onStdout: (text) => {
+              setLiveStdout((prev) => prev + text)
+            },
+            onFigure: (img) => {
+              setLiveFigures((prev) => (prev.includes(img) ? prev : [...prev, img]))
+            },
+            onDone: (res) => {
+              clearInterval(timerInterval)
+              setLiveDurationMs(res.duration_ms)
+              setExecutionResult(res)
+              setIsRunning(false)
+              setRunningStatus('')
+            },
+            onError: (err) => {
+              clearInterval(timerInterval)
+              setExecutionResult({
+                success: false,
+                stdout: liveStdout,
+                stderr: '',
+                error: err,
+                results: [],
+                images: liveFigures,
+                duration_ms: Date.now() - startTime,
+                packages_installed: [],
+              })
+              setIsRunning(false)
+              setRunningStatus('')
+            },
           },
-          onFigure: (img) => {
-            setLiveFigures((prev) => (prev.includes(img) ? prev : [...prev, img]))
-          },
-          onDone: (res) => {
-            clearInterval(timerInterval)
-            setLiveDurationMs(res.duration_ms)
-            setExecutionResult(res)
-            setIsRunning(false)
-            setRunningStatus('')
-          },
-          onError: (err) => {
-            clearInterval(timerInterval)
-            setExecutionResult({
-              success: false,
-              stdout: liveStdout,
-              stderr: '',
-              error: err,
-              results: [],
-              images: liveFigures,
-              duration_ms: Date.now() - startTime,
-              packages_installed: [],
-            })
-            setIsRunning(false)
-            setRunningStatus('')
-          },
-        }
-      )
+
+        )
+      }
     } catch (err: any) {
       clearInterval(timerInterval)
       setExecutionResult({
@@ -267,11 +349,8 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
         stdout: liveStdout,
         stderr: '',
         error: err?.message || 'Execution failed',
-        results: [],
-        images: liveFigures,
         duration_ms: Date.now() - startTime,
-        packages_installed: [],
-      })
+      } as any)
       setIsRunning(false)
       setRunningStatus('')
     }
@@ -292,7 +371,7 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
         </div>
 
         <div className="flex items-center gap-2">
-          {isPython && (
+          {isRunnable && (
             <button
               onClick={handleRunCode}
               disabled={isRunning}
@@ -301,7 +380,7 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
                   ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/60 cursor-not-allowed'
                   : 'bg-[#27272a] hover:bg-[#38383e] text-zinc-100 hover:text-white border border-zinc-600/80 shadow-sm active:scale-95'
               }`}
-              title="Run Python in cloud sandbox"
+              title={`Run ${isCpp ? 'C++20' : 'Python'} in cloud sandbox`}
             >
               {isRunning ? (
                 <>
@@ -351,28 +430,47 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
 
       {/* Interactive Sandbox Console Drawer */}
       {showConsole && (() => {
-        const displayedImages = executionResult?.images && executionResult.images.length > 0 ? executionResult.images : liveFigures
+        const displayedImages = executionResult && 'images' in executionResult && executionResult.images.length > 0 ? executionResult.images : liveFigures
         const currentDurationMs = isRunning ? liveDurationMs : (executionResult?.duration_ms || liveDurationMs)
+        const isCppResult = executionResult && 'compile_time_ms' in executionResult
+
         return (
           <div className="border-t border-[#1f1f22] bg-[#070709] p-4 text-xs font-mono">
             {/* Console Header */}
             <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[#1b1b1e] text-[#8e8e93]">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Terminal size={13} className="text-zinc-400" />
-                <span className="font-semibold text-zinc-300 tracking-wide text-[11px]">Console</span>
-                {!isRunning && executionResult?.error && (
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono text-rose-300 bg-rose-950/40 border border-rose-900/50">
-                    Error
-                  </span>
+                <span className="font-semibold text-zinc-300 tracking-wide text-[11px]">
+                  Console ({isCpp ? 'C++20' : 'Python 3'})
+                </span>
+
+                {!isRunning && executionResult && (
+                  <>
+                    {executionResult.exit_code !== undefined && executionResult.exit_code !== null && executionResult.exit_code !== 0 && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono text-rose-300 bg-rose-950/40 border border-rose-900/50">
+                        Exit Code: {executionResult.exit_code}
+                      </span>
+                    )}
+
+                    {executionResult.error && (!executionResult.exit_code || executionResult.exit_code === 0) && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono text-rose-300 bg-rose-950/40 border border-rose-900/50">
+                        Error
+                      </span>
+                    )}
+
+                  </>
                 )}
               </div>
+
               <div className="flex items-center gap-3">
-                {currentDurationMs > 0 ? (
+                {currentDurationMs > 0 && (
                   <span className="text-[11px] text-zinc-400 flex items-center gap-1 font-mono">
                     <Clock size={11} />
-                    {(currentDurationMs / 1000).toFixed(2)}s
+                    {isCppResult && (executionResult as ExecuteCPPResponse).compile_time_ms > 0
+                      ? `Compile s | Exec ${((executionResult as ExecuteCPPResponse).execution_time_ms / 1000).toFixed(2)}s`
+                      : `${(currentDurationMs / 1000).toFixed(2)}s`}
                   </span>
-                ) : null}
+                )}
                 <button
                   onClick={() => setShowConsole(false)}
                   className="text-zinc-400 hover:text-zinc-200 p-0.5 transition-colors"
@@ -391,6 +489,17 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
               </div>
             )}
 
+            {/* Compiler Diagnostic Output (C++ errors) */}
+            {executionResult && 'compile_output' in executionResult && (executionResult as ExecuteCPPResponse).compile_output && !executionResult.success && (
+              <div className="whitespace-pre-wrap text-amber-300 font-mono text-[12px] leading-relaxed mb-3 bg-amber-950/25 p-3 rounded-lg border border-amber-800/40">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-amber-400 mb-1.5">
+                  <AlertCircle size={12} />
+                  <span>g++ Compiler Diagnostic</span>
+                </div>
+                {(executionResult as ExecuteCPPResponse).compile_output}
+              </div>
+            )}
+
             {/* Stdout Output (live or complete) */}
             {(executionResult?.stdout || liveStdout) && (
               <div className="whitespace-pre-wrap text-zinc-200 font-mono text-[12px] leading-relaxed mb-3 bg-[#0d0d12] p-3 rounded-lg border border-[#1a1a22] shadow-inner">
@@ -399,14 +508,21 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
             )}
 
             {/* Stderr / Error Output */}
-            {executionResult?.error && (
+            {executionResult?.error && (!('compile_output' in executionResult) || (executionResult as ExecuteCPPResponse).error !== 'Compilation Error') && (
               <div className="whitespace-pre-wrap text-rose-400 font-mono text-[12px] leading-relaxed mb-3 bg-rose-950/20 p-3 rounded-lg border border-rose-900/35">
                 {executionResult.error}
               </div>
             )}
 
+            {/* Stderr stream output if any */}
+            {!executionResult && liveStderr && (
+              <div className="whitespace-pre-wrap text-amber-400 font-mono text-[12px] leading-relaxed mb-3 bg-amber-950/20 p-3 rounded-lg border border-amber-900/35">
+                {liveStderr}
+              </div>
+            )}
+
             {/* Empty Output notice */}
-            {executionResult && !executionResult.stdout && !executionResult.error && displayedImages.length === 0 && (
+            {executionResult && !executionResult.stdout && !executionResult.error && (!('compile_output' in executionResult) || !(executionResult as ExecuteCPPResponse).compile_output) && displayedImages.length === 0 && (
               <div className="text-zinc-400 italic py-1">
                 Program executed with return code 0 (no output printed).
               </div>
@@ -458,16 +574,16 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
                       <div className="absolute top-4 right-4 flex items-center gap-1.5 opacity-0 group-hover/img:opacity-100 transition-opacity bg-black/80 backdrop-blur-md rounded-lg p-1 border border-white/15 shadow-xl">
                         <button
                           onClick={() => setFullScreenImage(imgUrl)}
-                          className="p-1.5 hover:bg-white/10 rounded text-zinc-300 hover:text-white transition-colors"
-                          title="Expand full size"
+                          className="p-1.5 rounded-md hover:bg-white/10 text-zinc-300 hover:text-white transition-colors"
+                          title="View fullscreen"
                         >
                           <Maximize2 size={13} />
                         </button>
                         <a
                           href={imgUrl}
                           download={`figure-${idx + 1}.png`}
-                          className="p-1.5 hover:bg-white/10 rounded text-zinc-300 hover:text-white transition-colors"
-                          title="Download chart"
+                          className="p-1.5 rounded-md hover:bg-white/10 text-zinc-300 hover:text-white transition-colors"
+                          title="Download figure"
                         >
                           <Download size={13} />
                         </a>
@@ -481,23 +597,20 @@ const CodeBlock = React.memo(function CodeBlock({ children, className }: { child
         )
       })()}
 
-      {/* Fullscreen Image Modal Lightbox */}
+      {/* Fullscreen Image Modal */}
       {fullScreenImage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
           onClick={() => setFullScreenImage(null)}
         >
-          <div
-            className="relative max-w-5xl max-h-[92vh] bg-[#121215] border border-[#282830] rounded-2xl p-4 shadow-2xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 mb-2 border-b border-[#202028]">
-              <span className="text-xs font-semibold text-zinc-300 font-mono">Figure Preview</span>
+          <div className="relative max-w-5xl max-h-[90vh] bg-[#101014] border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-3 border-b border-zinc-800 text-zinc-300 text-xs">
+              <span className="font-mono">Generated Plot</span>
               <div className="flex items-center gap-2">
                 <a
                   href={fullScreenImage}
-                  download="figure.png"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
+                  download="plot.png"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-white transition-colors"
                 >
                   <Download size={13} />
                   Download

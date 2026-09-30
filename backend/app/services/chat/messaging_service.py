@@ -30,7 +30,7 @@ from app.schema.chat import (
     SendMessageResponse,
 )
 from app.tools.python_sandbox import execute_python_code, execute_python_code_async
-from app.external_services.webhook_dispatcher import webhook_dispatcher
+from app.tools.cpp_sandbox import execute_cpp_code, execute_cpp_code_async
 from app.tools.web_search import (
     execute_web_search,
     firecrawl_web_search,
@@ -96,7 +96,7 @@ class MessagingService:
         self._llm = llm or DualLLM()
         self._retriever = retriever or YouTubeTranscriptRetriever()
         self._prompt = chat_rag_template
-        self._tool_llm = self._llm.bind_tools([execute_python_code])
+        self._tool_llm = self._llm.bind_tools([execute_python_code, execute_cpp_code])
 
     async def send_message(
         self,
@@ -278,8 +278,6 @@ class MessagingService:
 
                     tool_text, exec_res = await execute_python_code_async(
                         code=code,
-                        webhook_url=settings.SANDBOX_WEBHOOK_URL,
-                        webhook_secret=settings.SANDBOX_WEBHOOK_SECRET,
                     )
 
                     if exec_res.images:
@@ -287,22 +285,20 @@ class MessagingService:
                     if exec_res.artifacts:
                         collected_artifacts.extend(exec_res.artifacts)
 
-                    if settings.SANDBOX_WEBHOOK_URL:
-                        webhook_dispatcher.dispatch_background(
-                            webhook_url=settings.SANDBOX_WEBHOOK_URL,
-                            event_name="sandbox.tool.invoked",
-                            data={
-                                "session_id": str(session_id),
-                                "user_id": str(user_id),
-                                "tool_call_id": tool_id,
-                                "code": code,
-                                "duration_ms": exec_res.duration_ms,
-                                "images_count": len(exec_res.images),
-                                "artifacts_count": len(exec_res.artifacts),
-                                "success": exec_res.success,
-                            },
-                            secret=settings.SANDBOX_WEBHOOK_SECRET,
-                        )
+                    messages.append(ToolMessage(content=tool_text, tool_call_id=tool_id))
+
+                elif tool_name == "execute_cpp_code":
+                    code = tool_args.get("code", "")
+                    stdin = tool_args.get("stdin")
+                    _logger.info("chat.cpp_tool_execution_start", session_id=str(session_id), tool_id=tool_id)
+
+                    tool_text, exec_res = await execute_cpp_code_async(
+                        code=code,
+                        stdin=stdin,
+                    )
+
+                    if exec_res.artifacts:
+                        collected_artifacts.extend(exec_res.artifacts)
 
                     messages.append(ToolMessage(content=tool_text, tool_call_id=tool_id))
 
@@ -605,12 +601,6 @@ class MessagingService:
                         if tool_name == "execute_python_code":
                             any_sandbox_executed = True
                             code = tool_args.get("code", "")
-                            raw_webhook_url = settings.SANDBOX_WEBHOOK_URL
-                            url_masked = (
-                                raw_webhook_url[:18] + "..." + raw_webhook_url[-8:]
-                                if raw_webhook_url and len(raw_webhook_url) > 26
-                                else raw_webhook_url
-                            )
 
                             # Step 1: Emit running SSE status
                             status_payload = {
@@ -622,8 +612,6 @@ class MessagingService:
 
                             tool_text, exec_res = await execute_python_code_async(
                                 code=code,
-                                webhook_url=settings.SANDBOX_WEBHOOK_URL,
-                                webhook_secret=settings.SANDBOX_WEBHOOK_SECRET,
                             )
 
                             if exec_res.images:
@@ -642,22 +630,38 @@ class MessagingService:
                             }
                             yield f"event: status\ndata: {json.dumps(status_payload)}\n\n"
 
-                            if settings.SANDBOX_WEBHOOK_URL:
-                                webhook_dispatcher.dispatch_background(
-                                    webhook_url=settings.SANDBOX_WEBHOOK_URL,
-                                    event_name="sandbox.tool.invoked",
-                                    data={
-                                        "session_id": str(session_id),
-                                        "user_id": str(user_id),
-                                        "tool_call_id": tool_id,
-                                        "code": code,
-                                        "duration_ms": exec_res.duration_ms,
-                                        "images_count": len(exec_res.images),
-                                        "artifacts_count": len(exec_res.artifacts),
-                                        "success": exec_res.success,
-                                    },
-                                    secret=settings.SANDBOX_WEBHOOK_SECRET,
-                                )
+                            messages.append(ToolMessage(content=tool_text, tool_call_id=tool_id))
+
+                        elif tool_name == "execute_cpp_code":
+                            any_sandbox_executed = True
+                            code = tool_args.get("code", "")
+                            stdin = tool_args.get("stdin")
+
+                            # Step 1: Emit running SSE status
+                            status_payload = {
+                                "status": "executing_code",
+                                "message": "Compiling and running C++ code...",
+                                "code": code[:200] if len(code) > 200 else code,
+                            }
+                            yield f"event: status\ndata: {json.dumps(status_payload)}\n\n"
+
+                            tool_text, exec_res = await execute_cpp_code_async(
+                                code=code,
+                                stdin=stdin,
+                            )
+
+                            if exec_res.artifacts:
+                                collected_artifacts.extend(exec_res.artifacts)
+
+                            # Step 2: Emit completed SSE status
+                            status_payload = {
+                                "status": "code_executed",
+                                "message": f"Execution completed ({exec_res.duration_ms:.0f}ms)",
+                                "duration_ms": exec_res.duration_ms,
+                                "artifacts_count": len(exec_res.artifacts),
+                                "error": exec_res.error,
+                            }
+                            yield f"event: status\ndata: {json.dumps(status_payload)}\n\n"
 
                             messages.append(ToolMessage(content=tool_text, tool_call_id=tool_id))
 
@@ -730,7 +734,6 @@ class MessagingService:
                 "sandbox_executed": bool(any_sandbox_executed or collected_images or collected_artifacts),
                 "artifacts_count": len(collected_artifacts),
                 "images_count": len(collected_images),
-                "webhook_delivered": bool(settings.SANDBOX_WEBHOOK_URL) if (any_sandbox_executed or collected_images or collected_artifacts) else None,
             }
             yield f"event: done\ndata: {json.dumps(done_event)}\n\n"
 

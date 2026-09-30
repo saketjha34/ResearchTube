@@ -1,10 +1,10 @@
 """
-app.schema.sandbox — Pydantic Schemas for Python Sandbox Execution & Webhooks.
+app.schema.sandbox — Pydantic Schemas for Python & C++ Sandbox Execution.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -16,13 +16,15 @@ class SandboxArtifact(BaseModel):
     data_url: str  # Base64 data URL e.g. data:application/pdf;base64,...
 
 
+# =========================================================================
+# Python Sandbox Schemas
+# =========================================================================
+
 class ExecutePythonRequest(BaseModel):
     """Request payload for executing code in the Python Sandbox."""
 
     code: str = Field(..., description="Python source code to execute")
     timeout: Optional[int] = Field(None, description="Optional execution timeout in seconds")
-    webhook_url: Optional[str] = Field(None, description="Optional webhook URL to notify when execution completes")
-    webhook_secret: Optional[str] = Field(None, description="Optional secret for HMAC-SHA256 webhook signature")
 
 
 class ExecutePythonResponse(BaseModel):
@@ -37,50 +39,34 @@ class ExecutePythonResponse(BaseModel):
     artifacts: List[SandboxArtifact] = Field(default_factory=list)
     duration_ms: float = 0.0
     packages_installed: List[str] = Field(default_factory=list)
-    webhook_delivered: Optional[bool] = None
-    webhook_status: Optional[str] = None  # "delivered" | "rate_limited" | "failed" | "not_configured"
-    webhook_url: Optional[str] = None  # Masked target URL
-    webhook_error: Optional[str] = None  # Friendly error / limit explanation if any
 
 
-class WebhookTestRequest(BaseModel):
-    """Request to test a webhook endpoint with a ping event."""
-    url: str = Field(..., description="The target webhook endpoint URL to test")
-    secret: Optional[str] = Field(None, description="Optional secret key for signature verification")
+# =========================================================================
+# C++ Sandbox Schemas
+# =========================================================================
+
+class ExecuteCPPRequest(BaseModel):
+    """Request payload for compiling and executing code in the C++ Sandbox."""
+
+    code: str = Field(..., description="C++ source code to compile and execute")
+    timeout: Optional[int] = Field(None, description="Optional execution timeout in seconds")
+    compiler_flags: Optional[str] = Field(
+        None,
+        description="Optional g++ compiler flags (defaults to -std=c++20 -O2 -Wall -Wextra)",
+    )
+    stdin: Optional[str] = Field(None, description="Optional standard input to pass into the compiled binary")
 
 
-class WebhookTestResponse(BaseModel):
-    """Result of webhook connectivity test."""
+class ExecuteCPPResponse(BaseModel):
+    """Result returned from C++ Sandbox compilation and execution."""
+
     success: bool
-    status_code: Optional[int] = None
-    message: str
-    response_body: Optional[str] = None
-    latency_ms: Optional[float] = None
-
-
-class WebhookTriggerRequest(BaseModel):
-    """Request to trigger a simulated webhook event."""
-    url: Optional[str] = Field(None, description="Target webhook URL (defaults to configured SANDBOX_WEBHOOK_URL)")
-    event: str = Field("sandbox.execution.completed", description="Webhook event name to dispatch")
-    secret: Optional[str] = Field(None, description="Secret key for signature verification")
-    payload: Optional[Dict[str, Any]] = Field(None, description="Custom event data payload")
-
-
-class WebhookTriggerResponse(BaseModel):
-    """Result of triggering a simulated webhook event."""
-    success: bool
-    event: str
-    status_code: Optional[int] = None
-    message: str
-    response_body: Optional[str] = None
-    latency_ms: Optional[float] = None
-
-
-class WebhookConfigResponse(BaseModel):
-    """Current webhook subsystem configuration status."""
-    enabled: bool
-    default_webhook_url: Optional[str] = None  # Masked if configured
-    has_secret: bool
-    max_retries: int
-    timeout_sec: float
-    supported_events: List[str]
+    stdout: str = ""
+    stderr: str = ""
+    error: Optional[str] = None
+    compile_output: Optional[str] = None
+    compile_time_ms: float = 0.0
+    execution_time_ms: float = 0.0
+    duration_ms: float = 0.0
+    exit_code: Optional[int] = 0
+    artifacts: List[SandboxArtifact] = Field(default_factory=list)

@@ -42,20 +42,13 @@ def format_sandbox_result_for_llm(result: SandboxExecutionResult) -> str:
 
 async def execute_python_code_async(
     code: str,
-    webhook_url: Optional[str] = None,
-    webhook_secret: Optional[str] = None,
 ) -> Tuple[str, SandboxExecutionResult]:
     """
     Asynchronously run Python code in the E2B sandbox micro-VM.
     Returns (formatted_text_summary, execution_result_object).
     """
-    eff_webhook_url = webhook_url or settings.SANDBOX_WEBHOOK_URL
-    eff_webhook_secret = webhook_secret or settings.SANDBOX_WEBHOOK_SECRET
-
     result = await e2b_sandbox_service.execute_code(
         code=code,
-        webhook_url=eff_webhook_url,
-        webhook_secret=eff_webhook_secret,
     )
     formatted = format_sandbox_result_for_llm(result)
     return formatted, result
