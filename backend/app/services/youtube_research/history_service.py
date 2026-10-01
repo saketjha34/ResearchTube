@@ -10,7 +10,7 @@ from uuid import UUID
 
 from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from typing import Any, Optional
 from app.db.models.youtube import (
     ResearchRun,
     YouTubeVideo,
@@ -254,17 +254,54 @@ class HistoryService:
                     else raw.get("transcript_language")
                 )
 
+                def _clean_str(val: Any) -> Optional[str]:
+                    if val is None:
+                        return None
+                    s = str(val).strip()
+                    if s.lower() in ("none", "null", "n/a", ""):
+                        return None
+                    return s
+
+                clean_title = _clean_str(raw.get("title"))
+                clean_channel = _clean_str(raw.get("channel"))
+                clean_desc = _clean_str(raw.get("description"))
+                clean_published = _clean_str(raw.get("published_at"))
+
+                # Fallback to DB video record if title/channel/description is missing
+                yt_record = yt_by_uuid.get(rv_match.video_id) if (rv_match and rv_match.video_id) else None
+                if not clean_title and yt_record:
+                    clean_title = _clean_str(yt_record.title)
+                if not clean_channel and yt_record:
+                    clean_channel = _clean_str(yt_record.channel)
+                if not clean_desc and yt_record:
+                    clean_desc = _clean_str(yt_record.description)
+                if not clean_published and yt_record and yt_record.published_at:
+                    clean_published = yt_record.published_at.isoformat()
+
+                if not clean_title and video_id:
+                    clean_title = f"Video ({video_id})"
+
+                views_val = raw.get("views")
+                if views_val is None and yt_record and yt_record.views is not None:
+                    views_val = yt_record.views
+                likes_val = raw.get("likes")
+                if likes_val is None and yt_record and yt_record.likes is not None:
+                    likes_val = yt_record.likes
+                comments_val = raw.get("comments")
+                if comments_val is None and yt_record and yt_record.comments is not None:
+                    comments_val = yt_record.comments
+
                 rec = HistoryRecommendedResource(
                     rank=raw.get("rank"),
                     video_id=video_id,
-                    title=raw.get("title"),
-                    url=raw.get("url"),
-                    channel=raw.get("channel"),
-                    published_at=raw.get("published_at"),
-                    description=raw.get("description"),
-                    views=raw.get("views"),
-                    likes=raw.get("likes"),
-                    comments=raw.get("comments"),
+                    title=clean_title,
+                    url=raw.get("url") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else None),
+                    channel=clean_channel,
+                    published_at=clean_published,
+                    description=clean_desc,
+                    views=views_val,
+                    likes=likes_val,
+                    comments=comments_val,
                     transcript=raw.get("transcript"),
                     transcript_available=transcript_available,
                     transcript_language=transcript_language,

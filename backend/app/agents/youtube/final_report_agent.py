@@ -58,10 +58,10 @@ from app.schema.youtube import (
     YouTubeResearchResult,
     YouTubeVideoResult,
     ResourceAnalysis,
-    ResourceEvaluation,
     FinalReport,
 )
 from app.prompts.youtube import FinalReportPromptTemplate
+from app.tools.youtube_tools import fetch_oembed_details
 
 
 # ============================================================
@@ -273,17 +273,47 @@ async def final_report_agent(
         if not video and idx < len(research_result.videos):
             video = research_result.videos[idx]
             resource.video_id = video.video_id
+
+        # 1. URL
+        if not resource.url or resource.url.strip().lower() in ("none", "null", ""):
+            resource.url = (video.url if video and video.url else None) or f"https://www.youtube.com/watch?v={resource.video_id}"
+
+        # 2. Title reconciliation (NEVER leave "None" or empty)
+        if not resource.title or resource.title.strip().lower() in ("none", "null", ""):
+            if video and video.title and video.title.strip().lower() not in ("none", "null", ""):
+                resource.title = video.title
+            else:
+                oembed = fetch_oembed_details(resource.video_id)
+                resource.title = oembed.get("title") or f"YouTube Video ({resource.video_id})"
+
+        # 3. Channel reconciliation
+        if not resource.channel or resource.channel.strip().lower() in ("none", "null", ""):
+            if video and video.channel and video.channel.strip().lower() not in ("none", "null", ""):
+                resource.channel = video.channel
+            else:
+                oembed = fetch_oembed_details(resource.video_id)
+                resource.channel = oembed.get("channel")
+        if resource.channel and resource.channel.strip().lower() in ("none", "null", ""):
+            resource.channel = None
+
+        # 4. Description reconciliation
+        if not resource.description or resource.description.strip().lower() in ("none", "null", ""):
+            resource.description = video.description if video and video.description else None
+        if resource.description and resource.description.strip().lower() in ("none", "null", ""):
+            resource.description = None
+
+        # 5. Published at
+        if not resource.published_at or resource.published_at.strip().lower() in ("none", "null", ""):
+            resource.published_at = video.published_at if video and video.published_at else None
+        if resource.published_at and resource.published_at.strip().lower() in ("none", "null", ""):
+            resource.published_at = None
+
+        # 6. Metrics & Transcript
         if video:
             resource.transcript_available = video.transcript_available
             resource.transcript_language = video.transcript_language or resource.transcript_language
             if video.transcript:
                 resource.transcript = video.transcript
-            if not resource.url and video.url:
-                resource.url = video.url
-            if not resource.channel and video.channel:
-                resource.channel = video.channel
-            if not resource.published_at and video.published_at:
-                resource.published_at = video.published_at
             if resource.views is None and video.views is not None:
                 resource.views = video.views
             if resource.likes is None and video.likes is not None:

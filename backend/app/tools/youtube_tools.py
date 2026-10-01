@@ -22,8 +22,11 @@ PROXY SUPPORT (for cloud deployments where YouTube blocks GCP IPs):
     to use the Webshare-specific config.
 """
 
+import json
 import os
+import threading
 from typing import Optional
+import urllib.request
 
 # pyrefly: ignore [missing-import]
 import structlog
@@ -48,6 +51,9 @@ youtube = build(
     "v3",
     developerKey=settings.YOUTUBE_API_KEY,
 )
+
+# googleapiclient Resource objects are NOT thread-safe; synchronize multi-threaded access.
+_youtube_api_lock = threading.Lock()
 
 
 # ============================================================
@@ -179,7 +185,50 @@ def search_youtube(
 
 
 # ============================================================
-# TOOL 2: GET VIDEO DETAILS
+# OEMBED FALLBACK (Public, no API key required)
+# ============================================================
+
+def fetch_oembed_details(video_id: str) -> dict:
+    """
+    Fetch basic video title, channel, and thumbnail from YouTube's public oEmbed endpoint.
+    Requires no API key, works when YouTube Data API quota is exceeded or rate-limited.
+    """
+    if not video_id or not video_id.strip():
+        return {"success": False, "video_id": video_id, "error": "Empty video_id"}
+
+    video_id = video_id.strip()
+    url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return {
+                "success": True,
+                "video_id": video_id,
+                "title": data.get("title"),
+                "channel": data.get("author_name"),
+                "thumbnail_url": data.get("thumbnail_url"),
+                "url": f"https://www.youtube.com/watch?v={video_id}",
+                "description": None,
+                "published_at": None,
+                "views": None,
+                "likes": None,
+                "comments": None,
+            }
+    except Exception as exc:
+        logger.warning("oembed.failed", video_id=video_id, exc=str(exc))
+        return {
+            "success": False,
+            "video_id": video_id,
+            "error": str(exc),
+        }
+
+
+# ============================================================
+# TOOL 2: GET VIDEO DETAILS (Resilient with oEmbed fallback)
 # ============================================================
 
 @tool
@@ -188,6 +237,7 @@ def get_video_details(
 ) -> dict:
     """
     Get detailed metadata and statistics for a YouTube video.
+    Safely falls back to YouTube oEmbed if Data API fails or quota is exhausted.
 
     Args:
         video_id:
@@ -202,36 +252,104 @@ def get_video_details(
 
     video_id = video_id.strip()
 
-    response = youtube.videos().list(
-        part="snippet,statistics",
-        id=video_id,
-    ).execute()
+    try:
+        with _youtube_api_lock:
+            response = youtube.videos().list(
+                part="snippet,statistics",
+                id=video_id,
+            ).execute()
 
-    items = response.get("items", [])
+        items = response.get("items", [])
 
-    if not items:
-        return {
-            "success": False,
-            "error": "Video not found",
-            "video_id": video_id,
-        }
+        if items:
+            video = items[0]
+            snippet = video.get("snippet", {})
+            statistics = video.get("statistics", {})
 
-    video = items[0]
-    snippet = video.get("snippet", {})
-    statistics = video.get("statistics", {})
+            return {
+                "success": True,
+                "video_id": video_id,
+                "title": snippet.get("title"),
+                "description": snippet.get("description"),
+                "channel": snippet.get("channelTitle"),
+                "published_at": snippet.get("publishedAt"),
+                "views": statistics.get("viewCount"),
+                "likes": statistics.get("likeCount"),
+                "comments": statistics.get("commentCount"),
+                "url": f"https://www.youtube.com/watch?v={video_id}",
+            }
+    except Exception as exc:
+        logger.warning("youtube_api.details_failed_using_oembed", video_id=video_id, exc=str(exc))
+
+    # Fallback to public oEmbed
+    oembed = fetch_oembed_details(video_id)
+    if oembed.get("success"):
+        return oembed
 
     return {
-        "success": True,
+        "success": False,
+        "error": "Video not found",
         "video_id": video_id,
-        "title": snippet.get("title"),
-        "description": snippet.get("description"),
-        "channel": snippet.get("channelTitle"),
-        "published_at": snippet.get("publishedAt"),
-        "views": statistics.get("viewCount"),
-        "likes": statistics.get("likeCount"),
-        "comments": statistics.get("commentCount"),
-        "url": f"https://www.youtube.com/watch?v={video_id}",
     }
+
+
+def get_batch_video_details(video_ids: list[str]) -> dict[str, dict]:
+    """
+    Batch retrieve video details for multiple video IDs in 50-item chunks.
+    Falls back to oEmbed for any video that fails or is missing from YouTube Data API.
+    """
+    if not video_ids:
+        return {}
+
+    unique_ids: list[str] = []
+    seen: set[str] = set()
+    for vid in video_ids:
+        vid_s = vid.strip() if vid else ""
+        if vid_s and vid_s not in seen:
+            seen.add(vid_s)
+            unique_ids.append(vid_s)
+
+    results: dict[str, dict] = {}
+
+    # Process in chunks of 50 (YouTube Data API limit)
+    chunk_size = 50
+    for i in range(0, len(unique_ids), chunk_size):
+        chunk = unique_ids[i:i + chunk_size]
+        try:
+            with _youtube_api_lock:
+                response = youtube.videos().list(
+                    part="snippet,statistics",
+                    id=",".join(chunk),
+                ).execute()
+
+            for item in response.get("items", []):
+                vid = item.get("id")
+                snippet = item.get("snippet", {})
+                statistics = item.get("statistics", {})
+                if vid:
+                    results[vid] = {
+                        "success": True,
+                        "video_id": vid,
+                        "title": snippet.get("title"),
+                        "description": snippet.get("description"),
+                        "channel": snippet.get("channelTitle"),
+                        "published_at": snippet.get("publishedAt"),
+                        "views": statistics.get("viewCount"),
+                        "likes": statistics.get("likeCount"),
+                        "comments": statistics.get("commentCount"),
+                        "url": f"https://www.youtube.com/watch?v={vid}",
+                    }
+        except Exception as exc:
+            logger.warning("youtube_api.batch_failed", chunk_size=len(chunk), exc=str(exc))
+
+    # For any video IDs not resolved by Data API, fall back to oEmbed
+    for vid in unique_ids:
+        if vid not in results or not results[vid].get("title"):
+            oembed = fetch_oembed_details(vid)
+            if oembed.get("success"):
+                results[vid] = oembed
+
+    return results
 
 
 # ============================================================

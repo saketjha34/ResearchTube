@@ -194,16 +194,34 @@ def format_rag_context(
     sections = []
 
     for item in rag_context:
+        vid_id = item.get("video_id") or "unknown"
+        raw_title = item.get("title")
+        clean_title = (
+            raw_title.strip()
+            if raw_title and raw_title.strip().lower() not in ("none", "null", "")
+            else f"Video ({vid_id})"
+        )
+        raw_channel = item.get("channel")
+        clean_channel = (
+            raw_channel.strip()
+            if raw_channel and raw_channel.strip().lower() not in ("none", "null", "")
+            else "Unknown Channel"
+        )
+        views_str = str(item['views']) if item.get('views') is not None else "N/A"
+        likes_str = str(item['likes']) if item.get('likes') is not None else "N/A"
+        comments_str = str(item['comments']) if item.get('comments') is not None else "N/A"
+        published_str = str(item['published_at']) if item.get('published_at') is not None else "N/A"
+
         metadata_block = f"""
-VIDEO ID: {item['video_id']}
-TITLE: {item['title']}
-CHANNEL: {item['channel']}
-URL: {item['url']}
-VIEWS: {item['views']}
-LIKES: {item['likes']}
-COMMENTS: {item['comments']}
-PUBLISHED: {item['published_at']}
-TRANSCRIPT AVAILABLE: {item['transcript_available']}
+VIDEO ID: {vid_id}
+TITLE: {clean_title}
+CHANNEL: {clean_channel}
+URL: {item.get('url') or f'https://www.youtube.com/watch?v={vid_id}'}
+VIEWS: {views_str}
+LIKES: {likes_str}
+COMMENTS: {comments_str}
+PUBLISHED: {published_str}
+TRANSCRIPT AVAILABLE: {item.get('transcript_available', False)}
 """
 
         chunks = item.get("chunks", [])
@@ -220,7 +238,7 @@ TRANSCRIPT AVAILABLE: {item['transcript_available']}
 
         section = f"""
 ============================================================
-VIDEO: {item['title']} ({item['video_id']})
+VIDEO: {clean_title} ({vid_id})
 ============================================================
 
 METADATA:
@@ -302,6 +320,12 @@ async def context_analysis_agent(
 
             # Ensure evaluations are sorted by rank
             analysis.evaluations.sort(key=lambda x: x.rank)
+
+            # Reconcile titles from ground-truth videos
+            vid_title_map = {v.video_id: v.title for v in videos}
+            for ev in analysis.evaluations:
+                if not ev.title or ev.title.strip().lower() in ("none", "null", ""):
+                    ev.title = vid_title_map.get(ev.video_id) or f"Video ({ev.video_id})"
 
             # Fallback if evaluations list was empty
             if not analysis.evaluations:

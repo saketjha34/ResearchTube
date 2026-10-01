@@ -60,6 +60,8 @@ from app.schema.youtube import (
 from app.tools.youtube_tools import (
     search_youtube,
     get_video_details,
+    get_batch_video_details,
+    fetch_oembed_details,
     get_video_transcript,
 )
 from app.prompts.youtube import PlanYouTubeResearchPromptTemplate
@@ -157,14 +159,49 @@ def extract_all_youtube_video_ids(text: str | None) -> list[str]:
                 seen.add(vid)
                 found.append(vid)
 
-    # Check for standalone 11-character alphanumeric tokens (e.g. raw video IDs)
-    tokens = re.split(r"[\s,;|\n\r]+", text.strip())
+    # If any YouTube URLs were found, return them directly.
+    if found:
+        return found
+
+    # Only check standalone tokens if there are NO query stop words indicating a natural language search query
+    stripped = text.strip()
+    tokens = re.split(r"[\s,;|\n\r]+", stripped)
+    query_stop_words = {
+        "find", "search", "best", "video", "videos", "learn", "learning", "tutorial",
+        "tutorials", "course", "guide", "how", "what", "why", "who", "which", "when",
+        "where", "from", "scratch", "advanced", "basics", "concept", "concepts",
+        "development", "engineering", "programming", "application", "technology",
+        "stack", "full", "frontend", "backend", "fullstack", "with", "about", "into",
+        "over", "under", "after", "before", "between", "through", "during", "without",
+        "these", "those", "this", "that", "them", "they", "your", "mine", "some",
+        "please", "give", "show", "tell", "recommend", "research", "youtube", "online"
+    }
+
+    lower_tokens = [t.lower() for t in tokens if t]
+    if any(t in query_stop_words for t in lower_tokens):
+        return []
+
+    # Standalone raw video IDs: all tokens must be valid 11-char IDs and not all-lowercase alpha words
+    all_valid_ids = True
+    candidate_ids: list[str] = []
     for token in tokens:
         token = token.strip()
+        if not token:
+            continue
         if re.fullmatch(r"[a-zA-Z0-9_-]{11}", token):
-            if token not in seen:
-                seen.add(token)
-                found.append(token)
+            if token.isalpha() and token.islower():
+                all_valid_ids = False
+                break
+            candidate_ids.append(token)
+        else:
+            all_valid_ids = False
+            break
+
+    if all_valid_ids and candidate_ids:
+        for cid in candidate_ids:
+            if cid not in seen:
+                seen.add(cid)
+                found.append(cid)
 
     return found
 
@@ -191,16 +228,30 @@ async def fetch_single_video(
     info = preloaded_info or {}
 
     # 1. Populate basic search fields if available
-    if request.fields.title:
+    if request.fields.title and info.get("title"):
         result.title = info.get("title")
-    if request.fields.description:
+    if request.fields.description and info.get("description"):
         result.description = info.get("description")
-    if request.fields.channel:
+    if request.fields.channel and info.get("channel"):
         result.channel = info.get("channel")
-    if request.fields.published_at:
+    if request.fields.published_at and info.get("published_at"):
         result.published_at = info.get("published_at")
-    if request.fields.url:
-        result.url = f"https://www.youtube.com/watch?v={video_id}"
+    if info.get("views") is not None and request.fields.views:
+        try:
+            result.views = int(info["views"])
+        except (ValueError, TypeError):
+            pass
+    if info.get("likes") is not None and request.fields.likes:
+        try:
+            result.likes = int(info["likes"])
+        except (ValueError, TypeError):
+            pass
+    if info.get("comments") is not None and request.fields.comments:
+        try:
+            result.comments = int(info["comments"])
+        except (ValueError, TypeError):
+            pass
+    result.url = f"https://www.youtube.com/watch?v={video_id}"
 
     # 2. Fetch detailed statistics or missing metadata
     need_details = request.get_details or not result.title or not result.channel
@@ -212,28 +263,55 @@ async def fetch_single_video(
             )
 
             if details.get("success", True):
-                if request.fields.views:
-                    val = details.get("views")
-                    result.views = int(val) if val is not None else None
-                if request.fields.likes:
-                    val = details.get("likes")
-                    result.likes = int(val) if val is not None else None
-                if request.fields.comments:
-                    val = details.get("comments")
-                    result.comments = int(val) if val is not None else None
+                if request.fields.views and details.get("views") is not None:
+                    try:
+                        result.views = int(details["views"])
+                    except (ValueError, TypeError):
+                        pass
+                if request.fields.likes and details.get("likes") is not None:
+                    try:
+                        result.likes = int(details["likes"])
+                    except (ValueError, TypeError):
+                        pass
+                if request.fields.comments and details.get("comments") is not None:
+                    try:
+                        result.comments = int(details["comments"])
+                    except (ValueError, TypeError):
+                        pass
 
-                if not result.title:
+                if not result.title or result.title.strip().lower() in ("none", "null", ""):
                     result.title = details.get("title")
-                if not result.description:
+                if not result.description or result.description.strip().lower() in ("none", "null", ""):
                     result.description = details.get("description")
-                if not result.channel:
+                if not result.channel or result.channel.strip().lower() in ("none", "null", ""):
                     result.channel = details.get("channel")
-                if not result.published_at:
+                if not result.published_at or result.published_at.strip().lower() in ("none", "null", ""):
                     result.published_at = details.get("published_at")
                 if not result.url:
                     result.url = details.get("url") or f"https://www.youtube.com/watch?v={video_id}"
         except Exception as exc:
             print(f"[WARNING] Details unavailable for {video_id}: {exc}")
+
+    # Fallback to oEmbed if title or channel is still missing or "None"
+    if not result.title or result.title.strip().lower() in ("none", "null", ""):
+        try:
+            oembed = await asyncio.to_thread(fetch_oembed_details, video_id)
+            if oembed.get("success"):
+                result.title = oembed.get("title")
+                if not result.channel or result.channel.strip().lower() in ("none", "null", ""):
+                    result.channel = oembed.get("channel")
+        except Exception as exc:
+            print(f"[WARNING] oEmbed fallback failed for {video_id}: {exc}")
+
+    # Final safeguard: title should NEVER be None or "None"
+    if not result.title or result.title.strip().lower() in ("none", "null", ""):
+        result.title = f"YouTube Video ({video_id})"
+
+    # Clean channel & description if "none" string
+    if result.channel and result.channel.strip().lower() in ("none", "null", ""):
+        result.channel = None
+    if result.description and result.description.strip().lower() in ("none", "null", ""):
+        result.description = None
 
     # Ensure url is always populated
     if not result.url:
@@ -303,11 +381,12 @@ async def collect_video_data(
     if not target_video_ids:
         target_video_ids = extract_all_youtube_video_ids(request.topic)
 
-    # 1. Fetch all direct videos concurrently
+    # 1. Fetch all direct videos concurrently (with batch details pre-loaded to prevent concurrency bugs)
     if target_video_ids:
-        print(f"Direct video targets detected ({len(target_video_ids)} videos): {target_video_ids}. Fetching data...")
+        print(f"Direct video targets detected ({len(target_video_ids)} videos): {target_video_ids}. Pre-fetching details...")
+        batch_details = await asyncio.to_thread(get_batch_video_details, target_video_ids)
         tasks = [
-            fetch_single_video(vid, request)
+            fetch_single_video(vid, request, preloaded_info=batch_details.get(vid))
             for vid in target_video_ids
         ]
         direct_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -343,13 +422,23 @@ async def collect_video_data(
             print(f"[WARNING] YouTube search failed: {exc}")
             candidate_videos = []
 
+        # Batch pre-fetch details for candidates to ensure complete metadata
+        candidate_ids = [v.get("video_id") for v in candidate_videos if v.get("video_id") and v.get("video_id") not in seen_ids]
+        candidate_details = {}
+        if candidate_ids:
+            candidate_details = await asyncio.to_thread(get_batch_video_details, candidate_ids)
+
         for video in candidate_videos:
             vid = video.get("video_id")
             if not vid or vid in seen_ids:
                 continue
 
+            merged_info = dict(video)
+            if vid in candidate_details:
+                merged_info.update({k: v for k, v in candidate_details[vid].items() if v is not None})
+
             print(f"Processing candidate video {len(results) + 1}/{request.video_count}: {vid}...")
-            video_result = await fetch_single_video(vid, request, preloaded_info=video)
+            video_result = await fetch_single_video(vid, request, preloaded_info=merged_info)
             results.append(video_result)
             seen_ids.add(vid)
 

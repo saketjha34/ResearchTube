@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { Maximize2, Minimize2, RefreshCw, Info } from 'lucide-react'
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { Maximize2, Minimize2, RefreshCw, Info, ZoomIn, ZoomOut } from 'lucide-react'
 
 export interface GraphResource {
   video_id: string
@@ -16,8 +16,6 @@ interface Node {
   type: 'query' | 'video' | 'concept'
   x: number
   y: number
-  vx: number
-  vy: number
   size: number
   color: string
   originalData?: GraphResource
@@ -34,430 +32,439 @@ interface KnowledgeGraphProps {
   topics: string[]
 }
 
+const VB_W = 800
+const VB_H = 450
+const MIN_ZOOM = 0.4
+const MAX_ZOOM = 2.5
+
 export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGraphProps) {
   const [isOpen, setIsOpen] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const tooltipRef = useRef<HTMLDivElement>(null)
 
-  // Transform for Pan & Zoom
-  const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 })
-  const [isPanning, setIsPanning] = useState(false)
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 })
+  // Zoom & Pan state
+  const [transform, _setTransform] = useState({ x: 0, y: 0, k: 1 })
+  const transformRef = useRef({ x: 0, y: 0, k: 1 })
 
-  // Simulation Refs & States
-  const nodesRef = useRef<Node[]>([])
-  const linksRef = useRef<Link[]>([])
+  const setTransform = useCallback(
+    (updater: { x: number; y: number; k: number } | ((prev: { x: number; y: number; k: number }) => { x: number; y: number; k: number })) => {
+      _setTransform(prev => {
+        const next = typeof updater === 'function' ? updater(prev) : updater
+        transformRef.current = next
+        return next
+      })
+    },
+    []
+  )
+
+  // Nodes & Links (Stationary, deterministic layout - ZERO jitter)
   const [nodes, setNodes] = useState<Node[]>([])
   const [links, setLinks] = useState<Link[]>([])
-  const [tick, setTick] = useState(0)
+  const nodesRef = useRef<Node[]>([])
 
-  // Interactivity
-  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null)
+  // Keep nodesRef in sync
+  useEffect(() => {
+    nodesRef.current = nodes
+  }, [nodes])
+
+  // Dragging state
+  const draggedNodeIdRef = useRef<string | null>(null)
+  const isDraggingNodeRef = useRef(false)
+
+  // Panning state
+  const isPanningRef = useRef(false)
+  const panStartRef = useRef({ clientX: 0, clientY: 0, tx: 0, ty: 0 })
+
+  // Pinch-to-zoom state (mobile)
+  const pinchRef = useRef<{ dist: number } | null>(null)
+
+  // Hover state (node highlight + tooltip)
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
   const [hoveredNode, setHoveredNode] = useState<Node | null>(null)
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
 
-  const width = 800
-  const height = 450
-
-  // 1. Initialize Nodes & Links
-  useEffect(() => {
+  // --- 1. Deterministic Layout Generator (Completely Stable, No Physics Jitter) ---
+  const buildLayout = useCallback(() => {
     if (!query) return
+
+    const cx = VB_W / 2
+    const cy = VB_H / 2
 
     const newNodes: Node[] = []
     const newLinks: Link[] = []
 
-    // Central Query Node
+    // 1. Center Topic Node
     newNodes.push({
       id: 'query',
       label: query,
       type: 'query',
-      x: width / 2,
-      y: height / 2,
-      vx: 0,
-      vy: 0,
+      x: cx,
+      y: cy,
       size: 20,
-      color: '#ffffff'
+      color: '#ffffff',
     })
 
-    // Video Nodes
-    resources.forEach((res, index) => {
-      const angle = (index / resources.length) * Math.PI * 2
-      const radius = 110
-      const x = width / 2 + Math.cos(angle) * radius + (Math.random() - 0.5) * 15
-      const y = height / 2 + Math.sin(angle) * radius + (Math.random() - 0.5) * 15
-      
-      const nodeId = `video_${res.video_id}`
+    // 2. Video Nodes (Inner Circle)
+    const numVideos = resources.length
+    const videoAngles = new Map<string, number>()
+    const rVideoX = 135
+    const rVideoY = 110
+
+    resources.forEach((res, i) => {
+      const angle = numVideos > 0 ? (i / numVideos) * Math.PI * 2 - Math.PI / 2 : 0
+      const vid = `video_${res.video_id}`
+      videoAngles.set(vid, angle)
+
+      const cleanTitle = (res.title && !['none', 'null', 'n/a', ''].includes(res.title.trim().toLowerCase()))
+        ? res.title
+        : (res.video_id ? `Video (${res.video_id})` : 'Untitled Video')
+
       newNodes.push({
-        id: nodeId,
-        label: res.title || 'Untitled Video',
+        id: vid,
+        label: cleanTitle,
         type: 'video',
-        x,
-        y,
-        vx: 0,
-        vy: 0,
-        size: 14,
-        color: '#00f0ff', // Cyan glow
-        originalData: res
+        x: cx + Math.cos(angle) * rVideoX,
+        y: cy + Math.sin(angle) * rVideoY,
+        size: 13,
+        color: '#00f0ff',
+        originalData: res,
+      })
+      newLinks.push({ source: 'query', target: vid })
+    })
+
+    // 3. Unique Concepts & their connected videos
+    const conceptToVideos = new Map<string, string[]>()
+
+    resources.forEach(res => {
+      const vid = `video_${res.video_id}`
+      res.concepts_covered?.forEach(concept => {
+        const clean = concept?.trim()
+        if (!clean) return
+        if (!conceptToVideos.has(clean)) conceptToVideos.set(clean, [])
+        conceptToVideos.get(clean)!.push(vid)
+      })
+    })
+
+    topics.forEach(topic => {
+      const clean = topic?.trim()
+      if (!clean) return
+      if (!conceptToVideos.has(clean)) conceptToVideos.set(clean, [])
+    })
+
+    const conceptList = Array.from(conceptToVideos.keys())
+
+    // Calculate preferred radial angle for each concept to minimize crossing lines
+    const conceptTargets: { name: string; targetAngle: number }[] = conceptList.map(name => {
+      const connectedVids = conceptToVideos.get(name) || []
+      if (connectedVids.length > 0) {
+        let sumX = 0
+        let sumY = 0
+        connectedVids.forEach(vid => {
+          const ang = videoAngles.get(vid) ?? 0
+          sumX += Math.cos(ang)
+          sumY += Math.sin(ang)
+        })
+        const avgAngle = Math.atan2(sumY, sumX)
+        return { name, targetAngle: (avgAngle + Math.PI * 2) % (Math.PI * 2) }
+      }
+      return { name, targetAngle: 0 }
+    })
+
+    // Sort concepts so neighbors on the circle connect to nearby videos
+    conceptTargets.sort((a, b) => a.targetAngle - b.targetAngle)
+
+    // 4. Distribute concept nodes evenly along outer ellipse
+    const numConcepts = conceptTargets.length
+    const rConceptX = 270
+    const rConceptY = 175
+
+    conceptTargets.forEach((ct, i) => {
+      const angle = numConcepts > 0 ? (i / numConcepts) * Math.PI * 2 - Math.PI / 2 : 0
+      const cid = `concept_${ct.name}`
+
+      newNodes.push({
+        id: cid,
+        label: ct.name,
+        type: 'concept',
+        x: cx + Math.cos(angle) * rConceptX,
+        y: cy + Math.sin(angle) * rConceptY,
+        size: 7.5,
+        color: '#a855f7',
       })
 
-      newLinks.push({ source: 'query', target: nodeId })
-    })
-
-    // Concept Nodes
-    const allConcepts = new Set<string>()
-    resources.forEach(res => {
-      if (res.concepts_covered) {
-        res.concepts_covered.forEach(c => {
-          if (c) allConcepts.add(c)
+      const parentVids = conceptToVideos.get(ct.name) || []
+      if (parentVids.length > 0) {
+        parentVids.forEach(vid => {
+          newLinks.push({ source: vid, target: cid })
         })
+      } else {
+        newLinks.push({ source: 'query', target: cid })
       }
     })
-    topics.forEach(t => {
-      if (t) allConcepts.add(t)
-    })
 
-    const conceptArray = Array.from(allConcepts)
-    conceptArray.forEach((concept, index) => {
-      const angle = (index / conceptArray.length) * Math.PI * 2
-      const radius = 200
-      const x = width / 2 + Math.cos(angle) * radius + (Math.random() - 0.5) * 15
-      const y = height / 2 + Math.sin(angle) * radius + (Math.random() - 0.5) * 15
-      
-      const nodeId = `concept_${concept}`
-      newNodes.push({
-        id: nodeId,
-        label: concept,
-        type: 'concept',
-        x,
-        y,
-        vx: 0,
-        vy: 0,
-        size: 8,
-        color: '#a855f7' // Purple glow
-      })
-
-      resources.forEach(res => {
-        if (res.concepts_covered && res.concepts_covered.includes(concept)) {
-          newLinks.push({ source: `video_${res.video_id}`, target: nodeId })
-        }
-      })
-    })
-
-    nodesRef.current = newNodes
-    linksRef.current = newLinks
     setNodes(newNodes)
     setLinks(newLinks)
     setTransform({ x: 0, y: 0, k: 1 })
-  }, [query, resources, topics])
+  }, [query, resources, topics, setTransform])
 
-  // 2. Simulation Loop (Physics)
+  // Initialize layout when props change
   useEffect(() => {
-    let animId: number
-    
-    const runSimulation = () => {
-      const currentNodes = nodesRef.current
-      const currentLinks = linksRef.current
-      if (currentNodes.length === 0) {
-        animId = requestAnimationFrame(runSimulation)
-        return
+    buildLayout()
+  }, [buildLayout])
+
+  // --- 2. Screen to ViewBox Coordinate Transformation ---
+  const clientToVB = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current
+    if (!svg) return { vx: VB_W / 2, vy: VB_H / 2 }
+    const ctm = svg.getScreenCTM()
+    if (!ctm) {
+      const rect = svg.getBoundingClientRect()
+      return {
+        vx: (clientX - rect.left) * (VB_W / (rect.width || 1)),
+        vy: (clientY - rect.top) * (VB_H / (rect.height || 1)),
       }
+    }
+    const pt = svg.createSVGPoint()
+    pt.x = clientX
+    pt.y = clientY
+    const res = pt.matrixTransform(ctm.inverse())
+    return { vx: res.x, vy: res.y }
+  }, [])
 
-      const nodeMap: Record<string, Node> = {}
-      currentNodes.forEach(n => { nodeMap[n.id] = n })
-
-      // Repulsion between all node pairs
-      for (let i = 0; i < currentNodes.length; i++) {
-        const n1 = currentNodes[i]
-        for (let j = i + 1; j < currentNodes.length; j++) {
-          const n2 = currentNodes[j]
-          
-          const dx = n2.x - n1.x
-          const dy = n2.y - n1.y
-          const distSq = dx * dx + dy * dy || 1
-          const dist = Math.sqrt(distSq)
-          
-          const minDist = n1.type === 'query' || n2.type === 'query' ? 140 : 80
-          if (dist < minDist) {
-            const force = ((minDist * minDist) / distSq) * 0.12
-            const fx = (dx / dist) * force
-            const fy = (dy / dist) * force
-            
-            if (n1.id !== draggedNodeId) {
-              n1.vx -= fx
-              n1.vy -= fy
-            }
-            if (n2.id !== draggedNodeId) {
-              n2.vx += fx
-              n2.vy += fy
-            }
-          }
-        }
+  // --- 3. Zoom Anchored at ViewBox Point (vx, vy) ---
+  const zoomAt = useCallback((vx: number, vy: number, factor: number) => {
+    setTransform(prev => {
+      const nextK = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev.k * factor))
+      if (Math.abs(nextK - prev.k) < 1e-5) return prev
+      const scale = nextK / prev.k
+      return {
+        x: vx - (vx - prev.x) * scale,
+        y: vy - (vy - prev.y) * scale,
+        k: nextK,
       }
+    })
+  }, [setTransform])
 
-      // Link attraction (Hooke's law)
-      for (const link of currentLinks) {
-        const s = nodeMap[link.source]
-        const t = nodeMap[link.target]
-        if (!s || !t) continue
-        
-        const dx = t.x - s.x
-        const dy = t.y - s.y
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1
-        
-        let restLength = 100
-        if (s.type === 'query' || t.type === 'query') restLength = 70
-        
-        const force = (dist - restLength) * 0.02
-        const fx = (dx / dist) * force
-        const fy = (dy / dist) * force
-        
-        if (s.id !== draggedNodeId) {
-          s.vx += fx
-          s.vy += fy
-        }
-        if (t.id !== draggedNodeId) {
-          t.vx -= fx
-          t.vy -= fy
-        }
-      }
+  // --- 4. Native Wheel Handler (Controlled, Smooth Zoom) ---
+  useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
 
-      // Pull to center & Damping
-      const centerX = width / 2
-      const centerY = height / 2
-      for (const n of currentNodes) {
-        if (n.id === draggedNodeId) continue
-        
-        const dx = centerX - n.x
-        const dy = centerY - n.y
-        n.vx += dx * 0.005
-        n.vy += dy * 0.005
-        
-        n.vx *= 0.82
-        n.vy *= 0.82
-        
-        n.x += n.vx
-        n.y += n.vy
-      }
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
 
-      setTick(t => t + 1)
-      animId = requestAnimationFrame(runSimulation)
+      if (Math.abs(e.deltaY) < 1e-4) return
+
+      let dy = e.deltaY
+      if (e.deltaMode === 1) dy *= 16
+      else if (e.deltaMode === 2) dy *= 40
+
+      // Clamp delta to prevent erratic jumps on sudden trackpad scrolls
+      dy = Math.max(-50, Math.min(50, dy))
+
+      // Gentle exponential scaling (~4% per notch)
+      const factor = Math.exp(-dy * 0.001)
+
+      const { vx, vy } = clientToVB(e.clientX, e.clientY)
+      zoomAt(vx, vy, factor)
     }
 
-    animId = requestAnimationFrame(runSimulation)
-    return () => cancelAnimationFrame(animId)
-  }, [draggedNodeId])
+    svg.addEventListener('wheel', onWheel, { passive: false })
+    return () => svg.removeEventListener('wheel', onWheel)
+  }, [clientToVB, zoomAt])
 
-  // Coordinate Conversion (Screen space -> SVG space)
-  const getSVGCoords = (clientX: number, clientY: number) => {
-    if (!svgRef.current) return { x: 0, y: 0 }
-    const rect = svgRef.current.getBoundingClientRect()
-    const x = clientX - rect.left
-    const y = clientY - rect.top
-    return {
-      x: (x - transform.x) / transform.k,
-      y: (y - transform.y) / transform.k
-    }
-  }
-
-  // Mouse drag handler for nodes
-  const handleNodeMouseDown = (e: React.MouseEvent, node: Node) => {
-    e.stopPropagation()
-    setDraggedNodeId(node.id)
-    node.vx = 0
-    node.vy = 0
-  }
-
-  // Main SVG Interaction Handlers
+  // --- 5. Mouse Interactions (Pan, Drag Node, Tooltip) ---
   const handleSVGMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return // Left click only
-    setIsPanning(true)
-    setPanStart({ x: e.clientX - transform.x, y: e.clientY - transform.y })
+    if (e.button !== 0) return
+    if (isDraggingNodeRef.current) return
+
+    // Pan starts
+    isPanningRef.current = true
+    panStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      tx: transformRef.current.x,
+      ty: transformRef.current.y,
+    }
   }
 
   const handleSVGMouseMove = (e: React.MouseEvent) => {
-    const coords = getSVGCoords(e.clientX, e.clientY)
-
-    if (draggedNodeId) {
-      const node = nodesRef.current.find(n => n.id === draggedNodeId)
-      if (node) {
-        node.x = coords.x
-        node.y = coords.y
-        node.vx = 0
-        node.vy = 0
-        setTick(t => t + 1)
-      }
-    } else if (isPanning) {
-      setTransform(t => ({
-        ...t,
-        x: e.clientX - panStart.x,
-        y: e.clientY - panStart.y
-      }))
+    // 1. Move tooltip directly via DOM without React state re-rendering
+    if (tooltipRef.current && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const x = Math.min(rect.width - 270, Math.max(12, e.clientX - rect.left + 16))
+      const y = Math.min(rect.height - 150, Math.max(12, e.clientY - rect.top + 16))
+      tooltipRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`
     }
 
-    // Move tooltip if hovering
-    if (hoveredNodeId) {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect()
-        setTooltipPos({
-          x: e.clientX - rect.left + 15,
-          y: e.clientY - rect.top + 15
-        })
-      }
+    // 2. Drag single node if active
+    if (draggedNodeIdRef.current) {
+      const { vx, vy } = clientToVB(e.clientX, e.clientY)
+      const cur = transformRef.current
+      const graphX = (vx - cur.x) / cur.k
+      const graphY = (vy - cur.y) / cur.k
+
+      setNodes(prev =>
+        prev.map(node =>
+          node.id === draggedNodeIdRef.current
+            ? { ...node, x: graphX, y: graphY }
+            : node
+        )
+      )
+      return
+    }
+
+    // 3. Pan canvas
+    if (isPanningRef.current && svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect()
+      const scaleX = VB_W / (rect.width || 1)
+      const scaleY = VB_H / (rect.height || 1)
+
+      const dx = (e.clientX - panStartRef.current.clientX) * scaleX
+      const dy = (e.clientY - panStartRef.current.clientY) * scaleY
+
+      setTransform({
+        k: transformRef.current.k,
+        x: panStartRef.current.tx + dx,
+        y: panStartRef.current.ty + dy,
+      })
     }
   }
 
   const handleSVGMouseUp = () => {
-    setDraggedNodeId(null)
-    setIsPanning(false)
+    draggedNodeIdRef.current = null
+    isDraggingNodeRef.current = false
+    isPanningRef.current = false
   }
 
-  // --- Mobile Touch Screen Interaction Handlers ---
-  const getSVGTouchCoords = (clientX: number, clientY: number) => {
-    if (!svgRef.current) return { x: 0, y: 0 }
-    const rect = svgRef.current.getBoundingClientRect()
-    const x = clientX - rect.left
-    const y = clientY - rect.top
-    return {
-      x: (x - transform.x) / transform.k,
-      y: (y - transform.y) / transform.k
-    }
-  }
-
-  const handleNodeTouchStart = (e: React.TouchEvent, node: Node) => {
-    e.stopPropagation() // Prevent background panning
-    setDraggedNodeId(node.id)
-    node.vx = 0
-    node.vy = 0
-  }
-
+  // --- 6. Mobile Touch Interactions (1-finger Pan & 2-finger Pinch Zoom) ---
   const handleSVGTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return // Only handle single-finger pans
-    const touch = e.touches[0]
-    setIsPanning(true)
-    setPanStart({ x: touch.clientX - transform.x, y: touch.clientY - transform.y })
+    if (e.touches.length === 1) {
+      const t = e.touches[0]
+      isPanningRef.current = true
+      panStartRef.current = {
+        clientX: t.clientX,
+        clientY: t.clientY,
+        tx: transformRef.current.x,
+        ty: transformRef.current.y,
+      }
+      pinchRef.current = null
+    } else if (e.touches.length === 2) {
+      isPanningRef.current = false
+      draggedNodeIdRef.current = null
+      isDraggingNodeRef.current = false
+      const [t0, t1] = [e.touches[0], e.touches[1]]
+      const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY)
+      pinchRef.current = { dist }
+    }
   }
 
   const handleSVGTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return
-    const touch = e.touches[0]
-    const coords = getSVGTouchCoords(touch.clientX, touch.clientY)
+    if (e.cancelable) e.preventDefault()
 
-    if (draggedNodeId) {
-      if (e.cancelable) e.preventDefault() // Block browser scroll during drag
-      const node = nodesRef.current.find(n => n.id === draggedNodeId)
-      if (node) {
-        node.x = coords.x
-        node.y = coords.y
-        node.vx = 0
-        node.vy = 0
-        setTick(t => t + 1)
+    // 2-finger pinch zoom
+    if (e.touches.length === 2 && pinchRef.current) {
+      const [t0, t1] = [e.touches[0], e.touches[1]]
+      const newDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY)
+
+      if (pinchRef.current.dist > 5 && newDist > 5) {
+        const factor = Math.max(0.92, Math.min(1.08, newDist / pinchRef.current.dist))
+        const midX = (t0.clientX + t1.clientX) / 2
+        const midY = (t0.clientY + t1.clientY) / 2
+        const { vx, vy } = clientToVB(midX, midY)
+        zoomAt(vx, vy, factor)
+        pinchRef.current = { dist: newDist }
       }
-    } else if (isPanning) {
-      if (e.cancelable) e.preventDefault() // Block browser scroll during pan
-      setTransform(t => ({
-        ...t,
-        x: touch.clientX - panStart.x,
-        y: touch.clientY - panStart.y
-      }))
-    }
-  }
-
-  const handleSVGTouchEnd = () => {
-    setDraggedNodeId(null)
-    setIsPanning(false)
-  }
-
-  // Zooming via Native Non-Passive Event Listener (prevents page scroll and allows zooming over nodes)
-  useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-
-    const handleNativeWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const zoomFactor = 1.08;
-      
-      setTransform(prev => {
-        const nextK = e.deltaY < 0 ? prev.k * zoomFactor : prev.k / zoomFactor;
-        const boundedK = Math.max(0.15, Math.min(3, nextK));
-        
-        const rect = svg.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        
-        const dx = mouseX - prev.x;
-        const dy = mouseY - prev.y;
-        
-        return {
-          x: mouseX - dx * (boundedK / prev.k),
-          y: mouseY - dy * (boundedK / prev.k),
-          k: boundedK
-        };
-      });
-    };
-
-    svg.addEventListener('wheel', handleNativeWheel, { passive: false });
-    return () => {
-      svg.removeEventListener('wheel', handleNativeWheel);
-    };
-  }, []);
-
-  // Highlight connection state helper
-  const getHighlightState = (nodeId: string) => {
-    if (!hoveredNodeId) return 'normal'
-    if (nodeId === hoveredNodeId) return 'highlighted'
-
-    // If hovering a video node, highlight concepts connected to it
-    if (hoveredNodeId.startsWith('video_')) {
-      const isConnected = linksRef.current.some(l => 
-        (l.source === hoveredNodeId && l.target === nodeId) ||
-        (l.target === hoveredNodeId && l.source === nodeId)
-      )
-      return isConnected ? 'highlighted' : 'dimmed'
+      return
     }
 
-    // If hovering a concept node, highlight videos covering it
-    if (hoveredNodeId.startsWith('concept_')) {
-      const isConnected = linksRef.current.some(l => 
-        (l.source === nodeId && l.target === hoveredNodeId) ||
-        (l.target === nodeId && l.source === hoveredNodeId)
-      )
-      return isConnected ? 'highlighted' : 'dimmed'
-    }
+    // 1-finger drag node or pan
+    if (e.touches.length === 1 && !pinchRef.current) {
+      const t = e.touches[0]
 
-    return 'dimmed'
-  }
+      if (draggedNodeIdRef.current) {
+        const { vx, vy } = clientToVB(t.clientX, t.clientY)
+        const cur = transformRef.current
+        const graphX = (vx - cur.x) / cur.k
+        const graphY = (vy - cur.y) / cur.k
 
-  const getLinkHighlightState = (link: Link) => {
-    if (!hoveredNodeId) return 'normal'
-    const matchesSource = link.source === hoveredNodeId
-    const matchesTarget = link.target === hoveredNodeId
-    return (matchesSource || matchesTarget) ? 'highlighted' : 'dimmed'
-  }
+        setNodes(prev =>
+          prev.map(node =>
+            node.id === draggedNodeIdRef.current
+              ? { ...node, x: graphX, y: graphY }
+              : node
+          )
+        )
+      } else if (isPanningRef.current && svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect()
+        const scaleX = VB_W / (rect.width || 1)
+        const scaleY = VB_H / (rect.height || 1)
 
-  const handleReset = () => {
-    const currentNodes = nodesRef.current
-    currentNodes.forEach((n, index) => {
-      if (n.id === 'query') {
-        n.x = width / 2
-        n.y = height / 2
-      } else {
-        const angle = (index / currentNodes.length) * Math.PI * 2
-        const radius = n.type === 'video' ? 110 : 200
-        n.x = width / 2 + Math.cos(angle) * radius
-        n.y = height / 2 + Math.sin(angle) * radius
+        const dx = (t.clientX - panStartRef.current.clientX) * scaleX
+        const dy = (t.clientY - panStartRef.current.clientY) * scaleY
+
+        setTransform({
+          k: transformRef.current.k,
+          x: panStartRef.current.tx + dx,
+          y: panStartRef.current.ty + dy,
+        })
       }
-      n.vx = 0
-      n.vy = 0
+    }
+  }
+
+  const handleSVGTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) pinchRef.current = null
+    if (e.touches.length === 0) {
+      draggedNodeIdRef.current = null
+      isDraggingNodeRef.current = false
+      isPanningRef.current = false
+    }
+  }
+
+  // --- 7. Button Handlers ---
+  const handleZoomIn = () => zoomAt(VB_W / 2, VB_H / 2, 1.2)
+  const handleZoomOut = () => zoomAt(VB_W / 2, VB_H / 2, 1 / 1.2)
+  const handleReset = () => buildLayout()
+
+  // --- 8. Highlight Determination ---
+  const connectedNodeIds = useMemo(() => {
+    if (!hoveredNodeId) return new Set<string>()
+    const set = new Set<string>()
+    set.add(hoveredNodeId)
+    links.forEach(l => {
+      if (l.source === hoveredNodeId) set.add(l.target)
+      if (l.target === hoveredNodeId) set.add(l.source)
     })
-    setTransform({ x: 0, y: 0, k: 1 })
-    setTick(t => t + 1)
-  }
+    return set
+  }, [hoveredNodeId, links])
+
+  const connectedLinkKeys = useMemo(() => {
+    if (!hoveredNodeId) return new Set<string>()
+    const set = new Set<string>()
+    links.forEach(l => {
+      if (l.source === hoveredNodeId || l.target === hoveredNodeId) {
+        set.add(`${l.source}-${l.target}`)
+      }
+    })
+    return set
+  }, [hoveredNodeId, links])
+
+  // Scale compensation so elements look balanced at any zoom level
+  const scaleComp = Math.pow(transform.k, 0.4)
+  const strokeComp = Math.pow(transform.k, 0.5)
+
+  // Map for fast node coordinate lookup
+  const nodeMap = useMemo(() => {
+    const map = new Map<string, Node>()
+    nodes.forEach(n => map.set(n.id, n))
+    return map
+  }, [nodes])
 
   return (
-    <div className="border border-[#222222] bg-[#111111]" ref={containerRef}>
-      {/* Header Bar */}
+    <div className="border border-[#222222] bg-[#111111]">
+      {/* Header */}
       <div className="flex items-center justify-between border-b border-[#1c1c1c] px-6 py-4">
         <div className="flex items-center gap-2">
           <Info size={14} className="text-[#555555]" />
@@ -466,14 +473,14 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={handleReset}
+            title="Reset layout & zoom"
             className="flex items-center gap-1.5 text-[10px] font-bold text-[#666666] hover:text-white transition-colors uppercase tracking-wider"
-            title="Reset layout"
           >
             <RefreshCw size={11} /> Reset
           </button>
-          <button 
+          <button
             onClick={() => setIsOpen(!isOpen)}
             className="text-[10px] font-bold text-[#666666] hover:text-white transition-colors uppercase tracking-wider"
           >
@@ -482,30 +489,63 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
         </div>
       </div>
 
-      {/* Graph Area */}
+      {/* Graph Container */}
       {isOpen && (
-        <div className={`relative overflow-hidden bg-black select-none ${isFullscreen ? 'fixed inset-0 z-[300]' : 'h-[450px]'}`}>
-          {/* Controls overlaid on graph */}
-          <div className="absolute right-4 bottom-4 z-10 flex gap-2">
-            <button 
-              onClick={() => setIsFullscreen(!isFullscreen)} 
-              className="flex h-8 w-8 items-center justify-center border border-[#222222] bg-[#111111]/80 backdrop-blur-sm text-[#cccccc] hover:border-[#444444] hover:text-white transition-all rounded-md"
-              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+        <div
+          ref={containerRef}
+          className={`relative overflow-hidden bg-black select-none touch-none ${
+            isFullscreen ? 'fixed inset-0 z-50 h-screen w-screen' : 'h-[500px] w-full'
+          }`}
+        >
+          {/* Legend */}
+          <div className="absolute left-4 top-4 z-10 hidden sm:flex items-center gap-4 text-[9px] text-[#555555] font-bold tracking-wider uppercase bg-[#111111]/80 backdrop-blur-sm px-3 py-1.5 rounded border border-[#222222]/50 pointer-events-none">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]" /> Topic
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[#00f0ff] shadow-[0_0_8px_rgba(0,240,255,0.6)]" /> Videos
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-[#a855f7] shadow-[0_0_8px_rgba(168,85,247,0.6)]" /> Concepts
+            </div>
+            <div className="ml-2 text-[8px] text-[#444444]">Scroll / Pinch to Zoom • Drag to Pan</div>
+          </div>
+
+          {/* Zoom % badge */}
+          <div className="absolute left-4 bottom-4 z-10 text-[10px] font-mono text-[#555555] bg-[#111111]/80 backdrop-blur-sm px-2.5 py-1 rounded border border-[#222222]/40 pointer-events-none select-none">
+            {Math.round(transform.k * 100)}%
+          </div>
+
+          {/* Floating Controls */}
+          <div className="absolute right-4 bottom-4 z-10 flex flex-col gap-1.5">
+            <button
+              onClick={handleZoomIn}
+              title="Zoom in (+)"
+              className="flex h-8 w-8 items-center justify-center border border-[#222222] bg-[#111111]/80 backdrop-blur-sm text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-md"
             >
-              {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+              <ZoomIn size={14} />
+            </button>
+            <button
+              onClick={handleZoomOut}
+              title="Zoom out (-)"
+              className="flex h-8 w-8 items-center justify-center border border-[#222222] bg-[#111111]/80 backdrop-blur-sm text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-md"
+            >
+              <ZoomOut size={14} />
+            </button>
+            <button
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              className="flex h-8 w-8 items-center justify-center border border-[#222222] bg-[#111111]/80 backdrop-blur-sm text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-md"
+            >
+              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
           </div>
 
-          <div className="absolute left-4 top-4 z-10 hidden sm:flex items-center gap-4 text-[9px] text-[#555555] font-bold tracking-wider uppercase bg-[#111111]/50 backdrop-blur-sm px-3 py-1.5 rounded border border-[#222222]/30 pointer-events-none">
-            <div className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-white" /> Query</div>
-            <div className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#00f0ff]" /> Videos</div>
-            <div className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-[#a855f7]" /> Concepts</div>
-            <div className="ml-2 text-[8px] text-[#444444]">Scroll to Zoom • Drag background to Pan • Drag nodes to Arrange</div>
-          </div>
-
+          {/* SVG Canvas */}
           <svg
             ref={svgRef}
-            data-tick={tick}
+            viewBox={`0 0 ${VB_W} ${VB_H}`}
+            preserveAspectRatio="xMidYMid meet"
             className="h-full w-full cursor-grab active:cursor-grabbing"
             onMouseDown={handleSVGMouseDown}
             onMouseMove={handleSVGMouseMove}
@@ -517,14 +557,14 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
           >
             <defs>
               <filter id="glow-video" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="5" result="blur" />
+                <feGaussianBlur stdDeviation="3.5" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
               <filter id="glow-concept" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="4" result="blur" />
+                <feGaussianBlur stdDeviation="2.5" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
                   <feMergeNode in="SourceGraphic" />
@@ -532,27 +572,16 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
               </filter>
             </defs>
 
-            {/* Transform Group */}
-            <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.k})`}>
-              
-              {/* 1. Links */}
+            {/* Transform Group (Zoom & Pan applied cleanly here) */}
+            <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
+              {/* Edges */}
               {links.map((link, i) => {
-                const s = nodesRef.current.find(n => n.id === link.source)
-                const t = nodesRef.current.find(n => n.id === link.target)
+                const s = nodeMap.get(link.source)
+                const t = nodeMap.get(link.target)
                 if (!s || !t) return null
 
-                const hl = getLinkHighlightState(link)
-                let strokeColor = '#222222'
-                let strokeWidth = 1
-                let opacity = 0.5
-
-                if (hl === 'highlighted') {
-                  strokeColor = t.type === 'concept' ? '#a855f7' : '#00f0ff'
-                  strokeWidth = 1.8
-                  opacity = 0.9
-                } else if (hl === 'dimmed') {
-                  opacity = 0.08
-                }
+                const isHighlight = hoveredNodeId ? connectedLinkKeys.has(`${link.source}-${link.target}`) : false
+                const isDimmed = hoveredNodeId ? !isHighlight : false
 
                 return (
                   <line
@@ -561,40 +590,43 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
                     y1={s.y}
                     x2={t.x}
                     y2={t.y}
-                    stroke={strokeColor}
-                    strokeWidth={strokeWidth}
-                    opacity={opacity}
-                    className="transition-all duration-200"
+                    stroke={isHighlight ? (t.type === 'concept' ? '#a855f7' : '#00f0ff') : '#222222'}
+                    strokeWidth={(isHighlight ? 1.8 : 1) / strokeComp}
+                    opacity={isDimmed ? 0.08 : (isHighlight ? 0.9 : 0.45)}
+                    style={{ transition: 'stroke 0.15s ease, opacity 0.15s ease' }}
                   />
                 )
               })}
 
-              {/* 2. Nodes */}
+              {/* Nodes */}
               {nodes.map(node => {
-                const hl = getHighlightState(node.id)
-                let opacity = 1
-                let stroke = 'transparent'
-                let strokeWidth = 0
-                let r = node.size
+                const isHovered = node.id === hoveredNodeId
+                const isConnected = hoveredNodeId ? connectedNodeIds.has(node.id) : true
+                const isDimmed = hoveredNodeId ? !isConnected : false
+                const opacity = isDimmed ? 0.15 : 1
 
-                if (hl === 'highlighted') {
-                  opacity = 1
-                  stroke = '#ffffff'
-                  strokeWidth = 1.5
-                  r = node.size * 1.15
-                } else if (hl === 'dimmed') {
-                  opacity = 0.15
-                }
+                const filterGlow = node.type === 'video'
+                  ? 'url(#glow-video)'
+                  : node.type === 'concept' ? 'url(#glow-concept)' : undefined
 
-                const filterGlow = node.type === 'video' ? 'url(#glow-video)' : node.type === 'concept' ? 'url(#glow-concept)' : undefined
+                const effectiveR = node.size / scaleComp
+                const labelFontSize = Math.max(7.5, Math.min(10.5, 8.5 / scaleComp))
 
                 return (
                   <g
                     key={node.id}
-                    transform={`translate(${node.x}, ${node.y})`}
-                    className="transition-all duration-200 cursor-pointer"
-                    onMouseDown={(e) => handleNodeMouseDown(e, node)}
-                    onTouchStart={(e) => handleNodeTouchStart(e, node)}
+                    transform={`translate(${node.x},${node.y})`}
+                    className="cursor-pointer"
+                    onMouseDown={e => {
+                      e.stopPropagation()
+                      draggedNodeIdRef.current = node.id
+                      isDraggingNodeRef.current = true
+                    }}
+                    onTouchStart={e => {
+                      e.stopPropagation()
+                      draggedNodeIdRef.current = node.id
+                      isDraggingNodeRef.current = true
+                    }}
                     onMouseEnter={() => {
                       setHoveredNodeId(node.id)
                       setHoveredNode(node)
@@ -609,27 +641,56 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
                       }
                     }}
                   >
+                    {/* Generous hit area (prevents hover flickering) */}
                     <circle
-                      r={r}
+                      r={effectiveR + 10 / scaleComp}
+                      fill="transparent"
+                      pointerEvents="all"
+                    />
+
+                    {/* Visible node circle */}
+                    <circle
+                      r={effectiveR}
                       fill={node.color}
-                      stroke={stroke}
-                      strokeWidth={strokeWidth}
+                      stroke={isHovered ? '#ffffff' : (isConnected && hoveredNodeId ? node.color : 'transparent')}
+                      strokeWidth={(isHovered ? 2.5 : isConnected && hoveredNodeId ? 1.5 : 0) / strokeComp}
                       opacity={opacity}
                       filter={filterGlow}
-                      className="transition-all duration-200"
+                      style={{ transition: 'opacity 0.15s ease, stroke 0.15s ease' }}
                     />
-                    
-                    {/* Render static query label or concept labels if zoomed in */}
-                    {(node.type === 'query' || (node.type === 'concept' && transform.k > 0.85) || hl === 'highlighted') && (
+
+                    {/* Labels */}
+                    {node.type === 'query' && (
                       <text
-                        dy={node.size + 12}
+                        dy={effectiveR + 12 / scaleComp}
                         textAnchor="middle"
-                        fill={node.type === 'query' ? '#ffffff' : '#888888'}
-                        className={`text-[8px] font-bold select-none transition-all ${hl === 'highlighted' ? 'fill-white text-[9px]' : ''}`}
-                        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+                        fill="#ffffff"
                         opacity={opacity}
+                        style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: `${labelFontSize}px`, fontWeight: 700 }}
                       >
-                        {node.type === 'query' ? "TOPIC" : node.label.length > 20 ? node.label.substring(0, 18) + '...' : node.label}
+                        TOPIC
+                      </text>
+                    )}
+                    {node.type === 'video' && (
+                      <text
+                        dy={effectiveR + 12 / scaleComp}
+                        textAnchor="middle"
+                        fill="#888888"
+                        opacity={opacity}
+                        style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: `${labelFontSize}px`, fontWeight: 700 }}
+                      >
+                        {node.label.length > 20 ? node.label.substring(0, 18) + '...' : node.label}
+                      </text>
+                    )}
+                    {node.type === 'concept' && (transform.k > 0.7 || isConnected) && (
+                      <text
+                        dy={effectiveR + 12 / scaleComp}
+                        textAnchor="middle"
+                        fill={isHovered || isConnected ? '#ffffff' : '#888888'}
+                        opacity={opacity}
+                        style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: `${labelFontSize}px`, fontWeight: 600 }}
+                      >
+                        {node.label.length > 20 ? node.label.substring(0, 18) + '...' : node.label}
                       </text>
                     )}
                   </g>
@@ -638,62 +699,70 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
             </g>
           </svg>
 
-          {/* Floating Tooltip HTML Overlay */}
-          {hoveredNode && (
-            <div
-              className="absolute z-20 pointer-events-none rounded-xl border border-[#222222] bg-black/90 backdrop-blur-md px-4 py-3 shadow-2xl animate-fade-in max-w-sm text-left"
-              style={{
-                left: `${tooltipPos.x}px`,
-                top: `${tooltipPos.y}px`
-              }}
-            >
-              {hoveredNode.type === 'query' && (
-                <div>
-                  <p className="text-[9px] font-bold tracking-widest text-[#555555] uppercase mb-1">Search Topic</p>
-                  <p className="text-sm font-semibold text-white leading-relaxed">{hoveredNode.label}</p>
-                </div>
-              )}
-
-              {hoveredNode.type === 'video' && hoveredNode.originalData && (
-                <div className="space-y-1.5">
-                  <p className="text-[9px] font-bold tracking-widest text-[#00f0ff] uppercase">Recommended Video</p>
-                  <p className="text-xs font-bold text-white line-clamp-2 leading-relaxed">{hoveredNode.originalData.title}</p>
-                  <div className="flex items-center justify-between text-[10px] text-[#666666] pt-1">
-                    <span>{hoveredNode.originalData.channel}</span>
-                    <span className="font-bold text-[#00f0ff]">★ {hoveredNode.originalData.overall_score ? hoveredNode.originalData.overall_score.toFixed(1) : 'N/A'}/10</span>
+          {/* Hover Tooltip (Smooth GPU transform, zero React state re-rendering on mousemove) */}
+          <div
+            ref={tooltipRef}
+            className={`absolute top-0 left-0 z-20 pointer-events-none rounded-xl border border-[#222222] bg-black/95 backdrop-blur-md px-4 py-3 shadow-2xl max-w-sm text-left transition-opacity duration-150 ${
+              hoveredNode ? 'opacity-100' : 'opacity-0'
+            }`}
+            style={{ willChange: 'transform' }}
+          >
+            {hoveredNode && (
+              <>
+                {hoveredNode.type === 'query' && (
+                  <div>
+                    <p className="text-[9px] font-bold tracking-widest text-[#555555] uppercase mb-1">Search Topic</p>
+                    <p className="text-sm font-semibold text-white leading-relaxed">{hoveredNode.label}</p>
                   </div>
-                  {hoveredNode.originalData.concepts_covered && (
-                    <div className="pt-2 border-t border-[#1e1e1e]">
-                      <p className="text-[8px] font-bold tracking-wider text-[#555555] uppercase mb-1">Key Concepts</p>
-                      <div className="flex flex-wrap gap-1">
-                        {hoveredNode.originalData.concepts_covered.slice(0, 3).map(c => (
-                          <span key={c} className="text-[9px] px-1.5 py-0.5 bg-[#a855f7]/10 text-[#a855f7] border border-[#a855f7]/20 rounded">
-                            {c}
-                          </span>
-                        ))}
-                        {hoveredNode.originalData.concepts_covered.length > 3 && (
-                          <span className="text-[8px] text-[#444444] self-center">
-                            +{hoveredNode.originalData.concepts_covered.length - 3} more
-                          </span>
-                        )}
-                      </div>
+                )}
+                {hoveredNode.type === 'video' && hoveredNode.originalData && (
+                  <div className="space-y-1.5">
+                    <p className="text-[9px] font-bold tracking-widest text-[#00f0ff] uppercase">Recommended Video</p>
+                    <p className="text-xs font-bold text-white line-clamp-2 leading-relaxed">
+                      {(hoveredNode.originalData.title && !['none', 'null', 'n/a', ''].includes(hoveredNode.originalData.title.trim().toLowerCase()))
+                        ? hoveredNode.originalData.title
+                        : (hoveredNode.originalData.video_id ? `Video (${hoveredNode.originalData.video_id})` : 'Untitled Video')}
+                    </p>
+                    <div className="flex items-center justify-between text-[10px] text-[#666666] pt-1">
+                      <span>
+                        {(hoveredNode.originalData.channel && !['none', 'null', 'n/a', ''].includes(hoveredNode.originalData.channel.trim().toLowerCase()))
+                          ? hoveredNode.originalData.channel
+                          : ''}
+                      </span>
+                      {hoveredNode.originalData.overall_score && (
+                        <span className="font-bold text-[#00f0ff]">
+                          ★ {hoveredNode.originalData.overall_score.toFixed(1)}/10
+                        </span>
+                      )}
                     </div>
-                  )}
-                  <p className="text-[8px] text-[#444444] font-bold italic pt-1">Click to open on YouTube</p>
-                </div>
-              )}
-
-              {hoveredNode.type === 'concept' && (
-                <div>
-                  <p className="text-[9px] font-bold tracking-widest text-[#a855f7] uppercase mb-1">Key Concept</p>
-                  <p className="text-xs font-bold text-white leading-relaxed">{hoveredNode.label}</p>
-                  <p className="text-[9px] text-[#666666] mt-1 font-semibold">
-                    Covered by {linksRef.current.filter(l => l.target === hoveredNode.id).length} videos
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+                    {hoveredNode.originalData.concepts_covered && hoveredNode.originalData.concepts_covered.length > 0 && (
+                      <div className="pt-2 border-t border-[#1e1e1e]">
+                        <p className="text-[8px] font-bold tracking-wider text-[#555555] uppercase mb-1">Key Concepts</p>
+                        <div className="flex flex-wrap gap-1">
+                          {hoveredNode.originalData.concepts_covered.slice(0, 3).map(c => (
+                            <span key={c} className="text-[9px] px-1.5 py-0.5 bg-[#a855f7]/10 text-[#a855f7] border border-[#a855f7]/20 rounded">{c}</span>
+                          ))}
+                          {hoveredNode.originalData.concepts_covered.length > 3 && (
+                            <span className="text-[8px] text-[#444444] self-center">+{hoveredNode.originalData.concepts_covered.length - 3} more</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-[8px] text-[#444444] font-bold italic pt-1">Click to open on YouTube</p>
+                  </div>
+                )}
+                {hoveredNode.type === 'concept' && (
+                  <div>
+                    <p className="text-[9px] font-bold tracking-widest text-[#a855f7] uppercase mb-1">Key Concept</p>
+                    <p className="text-xs font-bold text-white leading-relaxed">{hoveredNode.label}</p>
+                    <p className="text-[9px] text-[#666666] mt-1 font-semibold">
+                      Covered in research results
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon, Calendar, Clock, Archive, ArchiveRestore } from 'lucide-react'
 import { runResearch, getHistory, getHistoryEntry, archiveHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
@@ -291,6 +291,21 @@ function ScoreBar({ label, value }: { label: string; value: number | null | unde
 
 function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number }) {
   const [open, setOpen] = useState(false)
+
+  // Clean strings so "None", "null", "N/A" never render
+  const cleanStr = (val: string | null | undefined): string | null => {
+    if (!val) return null
+    const trimmed = val.trim()
+    if (['none', 'null', 'n/a', 'undefined', ''].includes(trimmed.toLowerCase())) return null
+    return trimmed
+  }
+
+  const cleanTitle = cleanStr(res.title) || (res.video_id ? `Video (${res.video_id})` : 'YouTube Video')
+  const cleanChannel = cleanStr(res.channel)
+  const cleanDescription = cleanStr(res.description)
+  const videoUrl = res.url || (res.video_id ? `https://www.youtube.com/watch?v=${res.video_id}` : '#')
+  const thumbUrl = res.thumbnail_url || (res.video_id ? `https://img.youtube.com/vi/${res.video_id}/mqdefault.jpg` : null)
+
   return (
     <div className="border border-[#222222] bg-[#111111] overflow-hidden transition-all hover:border-[#333333]">
       <div className="p-6">
@@ -298,12 +313,29 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
           <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border border-[#333333] bg-black text-sm font-bold text-[#666666]">
             {rank}
           </span>
-          <div className="flex-1 min-w-0">
-            <a href={res.url} target="_blank" rel="noreferrer" className="text-base font-bold text-white hover:text-[#cccccc] transition-colors line-clamp-2 leading-snug">
-              {res.title}
+          {thumbUrl && (
+            <a
+              href={videoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="hidden sm:block flex-shrink-0 w-28 h-16 rounded overflow-hidden border border-[#222222] bg-[#1a1a1a] hover:border-[#444444] transition-colors relative group"
+            >
+              <img
+                src={thumbUrl}
+                alt={cleanTitle}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none'
+                }}
+              />
             </a>
-            {res.channel && <p className="mt-1.5 text-xs font-bold tracking-[0.2em] text-[#555555]">{res.channel.toUpperCase()}</p>}
-            {res.description && <p className="mt-3 text-sm text-[#888888] line-clamp-2 leading-relaxed">{res.description}</p>}
+          )}
+          <div className="flex-1 min-w-0">
+            <a href={videoUrl} target="_blank" rel="noreferrer" className="text-base font-bold text-white hover:text-[#cccccc] transition-colors line-clamp-2 leading-snug">
+              {cleanTitle}
+            </a>
+            {cleanChannel && <p className="mt-1.5 text-xs font-bold tracking-[0.2em] text-[#555555]">{cleanChannel.toUpperCase()}</p>}
+            {cleanDescription && <p className="mt-3 text-sm text-[#888888] line-clamp-2 leading-relaxed">{cleanDescription}</p>}
           </div>
           <div className="flex-shrink-0 text-right pl-4">
             <p className="text-3xl font-bold text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>{(res.overall_score ?? 0).toFixed(1)}</p>
