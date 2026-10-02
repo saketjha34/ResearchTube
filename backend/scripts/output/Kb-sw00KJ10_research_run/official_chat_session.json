@@ -1,0 +1,40 @@
+{
+  "session_id": "2fe173d5-1b51-457e-bf91-58e598840f6f",
+  "user_id": "eaa27f8a-4f42-4c6a-ae31-be81023932c8",
+  "user_email": "user@example.com",
+  "user_message_id": "62a506d4-19a8-4fd2-a837-62a3225eec42",
+  "assistant_message_id": "de7084a6-6084-48b5-acfb-ebdc0ff6f86d",
+  "question": "whats the complete step mentioned in this vidoe for aws eks setup and deployment",
+  "answer": "# AWS EKS setup and deployment steps mentioned in the video\n\nThe video is describing a **CI/CD deployment flow to AWS EKS** for an app (they mention a **Node app** and also an existing **Spring** template being updated to **Node** in the manifest) [1].\n\n## Complete step sequence\n\n1. **Prepare the deployment workflow**\n   - Use the same deployment pipeline structure already used before.\n   - The steps are said to remain the same across apps [1].\n\n2. **Check out the code**\n   - Pull the repository code in the CI/CD pipeline [1].\n\n3. **Configure AWS credentials**\n   - Set up the AWS **access key** and **secret access key** in the pipeline [1].\n\n4. **Set up `kubectl`**\n   - Install/configure `kubectl` or “Cube Cattle” as spoken in the video [1].\n\n5. **Update kubeconfig**\n   - Point your local/CI environment to the EKS cluster so `kubectl` can talk to it [1][2].\n\n6. **Verify cluster connection**\n   - Confirm the connection to the AWS EKS cluster before deploying [1].\n\n7. **Deploy to AWS EKS**\n   - Apply the deployment manifest and send the app to the cluster [1].\n\n8. **Update the Kubernetes manifest**\n   - Open `app.yaml`\n   - Replace the image from the **Spring** image to the **Node** image [1].\n\n## EKS cluster creation step\n\nThe video also shows creating the EKS cluster using **`eksctl`**:\n\n```bash\neksctl create cluster --name <cluster-name>\n```\n\nThat is presented as the setup step for creating the AWS EKS cluster if you don’t already have one [2].\n\n## In short\n\n**Flow:**  \n`Code checkout → AWS creds → kubectl setup → kubeconfig update → connection verify → manifest update → deploy to EKS`\n\n## Important note from the video\n\n- If the EKS cluster is **already created**, you can skip the cluster-creation step [2].\n- The video says the actual commands are executed **in the background** as part of the cluster setup, so you normally don’t run everything manually [2].\n\nIf you want, I can turn this into a **clean CI/CD pipeline checklist** or a **GitHub Actions EKS deployment flow**.",
+  "sources": [
+    {
+      "chunk_id": "04ed4945-44b4-40cd-a5a5-8e1cf3203a1e",
+      "index": 1,
+      "source_type": "transcript",
+      "url": "https://www.youtube.com/watch?v=Kb-sw00KJ10",
+      "engine": null,
+      "title": "Full Stack AI DevOps Course + Real Projects 🚀 | Docker + Kubernetes + CI/CD + Terraform | Job Ready",
+      "video_title": "Full Stack AI DevOps Course + Real Projects 🚀 | Docker + Kubernetes + CI/CD + Terraform | Job Ready",
+      "youtube_video_id": "Kb-sw00KJ10",
+      "start_time": null,
+      "end_time": null,
+      "similarity": 0.634,
+      "text_snippet": "Okay?\nAnd here\ndeploy\nuh your hello Node app to\nAWS EKS. This is done.\nOkay?\nSo, this is done and then over here,\nwhat we need is we need the steps for\ndeployment. So, what I'm going to do is\nI'm going to come over here.\nOkay? And here, I'm"
+    },
+    {
+      "chunk_id": "da01229f-bcee-45b5-b87f-1f3a39a48e77",
+      "index": 2,
+      "source_type": "transcript",
+      "url": "https://www.youtube.com/watch?v=Kb-sw00KJ10",
+      "engine": null,
+      "title": "Full Stack AI DevOps Course + Real Projects 🚀 | Docker + Kubernetes + CI/CD + Terraform | Job Ready",
+      "video_title": "Full Stack AI DevOps Course + Real Projects 🚀 | Docker + Kubernetes + CI/CD + Terraform | Job Ready",
+      "youtube_video_id": "Kb-sw00KJ10",
+      "start_time": null,
+      "end_time": null,
+      "similarity": 0.6034,
+      "text_snippet": "repeating again, you don't run this\nlocally on your machine, because when\nyou create cluster, all of these\ncommands are executed in the background.\nAnd uh for you, it's uh\nyou you don't need to run it. Okay, so\nso it's all done in the backg"
+    }
+  ],
+  "timestamp": "2026-10-02T13:11:43Z"
+}

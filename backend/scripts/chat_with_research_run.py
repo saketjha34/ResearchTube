@@ -97,7 +97,7 @@ from app.utils.security_utils import hash_password, verify_password
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-TARGET_VIDEO_ID = "Tq0vZU7Hp_M"
+TARGET_VIDEO_ID = "Kb-sw00KJ10"
 TARGET_USER_EMAIL = "user@example.com"
 TARGET_USER_PASSWORD = "stringst"
 

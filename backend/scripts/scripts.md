@@ -40,13 +40,13 @@ Both scripts use and authenticate as the default test user:
 
 ---
 
-## 3. Command 1: Run Research Flow (`run_research_flow.py`)
+## 3. Command 1: Run Research Workflow (`run_research_workflow.py`)
 
 Executes the complete 7-node LangGraph multi-agent pipeline directly:
 - **Agent 1:** Collects metadata and full 286,518-character transcript.
 - **Node 2:** Persists video in PostgreSQL.
 - **Node 3:** Chunks transcript into 363 chunks and embeds them in pgvector (768 dimensions).
-- **Agent 2:** Performs RAG semantic retrieval and evaluates curriculum depth, coverage, and quality.
+- **Agent 2:** Performs Hybrid RAG retrieval (pgvector + BM25 via RRF) and evaluates curriculum depth, coverage, and quality.
 - **Node 5:** Persists evaluation and ranking.
 - **Agent 3:** Synthesizes structured final report with 10-step learning path.
 - **Node 7:** Completes research run.
@@ -56,10 +56,10 @@ Executes the complete 7-node LangGraph multi-agent pipeline directly:
 ### Execution:
 ```powershell
 # From backend directory with venv active:
-python scripts/run_research_flow.py
+python scripts/run_research_workflow.py
 
 # Or inside Docker:
-docker exec youtube_research_api python scripts/run_research_flow.py
+docker exec youtube_research_api python scripts/run_research_workflow.py
 ```
 
 ---
@@ -69,7 +69,7 @@ docker exec youtube_research_api python scripts/run_research_flow.py
 Interacts directly with the official ResearchTube Chat Message Architecture:
 - Uses **`ChatService`** (`SessionService` + `MessagingService`).
 - Formats prompts **strictly** with [`templates/chat/chat_rag.txt`](file:///c:/Saket/Projects/ResearchTube/backend/app/prompts/templates/chat/chat_rag.txt) via [`app/prompts/chat.py`](file:///c:/Saket/Projects/ResearchTube/backend/app/prompts/chat.py).
-- Performs real-time **pgvector cosine distance retrieval** on the 363 transcript chunks.
+- Performs real-time **Hybrid Search** (Dense pgvector + BM25 sparse lexical search via Reciprocal Rank Fusion) on the 363 transcript chunks.
 - Persists all conversation turns (`ChatMessage` rows) with `sources` JSON to PostgreSQL.
 - Outputs inline bracket citations (`[1]`, `[2]`).
 
@@ -93,9 +93,22 @@ python scripts/chat_with_research_run.py --test-heuristic
 
 ---
 
-## 5. Linked Video Artifacts Directory
+## 5. Command 3: RAG Evaluation Benchmark (`evaluate_rag.py`)
 
-Both scripts share and link to the same dedicated video output folder:
+Runs automated LLM-as-a-judge benchmarking across the RAG pipeline using Pydantic structured validation:
+- Evaluates **Context Relevance**, **Faithfulness** (Hallucination detection), and **Answer Relevance**.
+- Tests exact commands, architectural reasoning, broad overviews, conversational bypass, and out-of-domain rejection.
+
+### Execution:
+```powershell
+python scripts/evaluate_rag.py
+```
+
+---
+
+## 6. Linked Video Artifacts Directory
+
+All scripts share and link to the same dedicated video output folder:
 `backend/scripts/output/Tq0vZU7Hp_M_research_run/`
 
 | File | Description |
@@ -107,4 +120,7 @@ Both scripts share and link to the same dedicated video output folder:
 | `final_report.md` | Clean GitHub-flavored Markdown pedagogical report with 10-step learning path. |
 | `official_chat_session.json` | Turn log of the latest question answered through the official ChatService. |
 | `heuristic_qa_results.json` | Results and cited chunk evidence from the 5-domain heuristic test suite. |
+| `rag_evaluation_report.json` | Full quantitative RAG benchmark evaluation metrics in JSON format. |
+| `rag_evaluation_report.md` | Markdown RAG evaluation report with latency, faithfulness, and relevance scores. |
 | `run_metadata.json` | ResearchRun ID, YouTube metadata, and timestamp record. |
+

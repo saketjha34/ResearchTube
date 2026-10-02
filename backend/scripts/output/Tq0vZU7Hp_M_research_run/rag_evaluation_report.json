@@ -1,0 +1,127 @@
+{
+  "target_video_id": "Tq0vZU7Hp_M",
+  "summary": {
+    "mean_context_relevance": 0.922,
+    "mean_faithfulness": 0.888,
+    "mean_answer_relevance": 0.934,
+    "mean_retrieval_latency_ms": 812.0
+  },
+  "tests": [
+    {
+      "test_index": 1,
+      "category": "Topic Specific (Docker)",
+      "query": "What Docker commands are introduced and how does the container flow work?",
+      "retrieval_latency_ms": 4144.98,
+      "chunks_retrieved_count": 2,
+      "max_similarity": 0.604,
+      "avg_similarity": 0.598,
+      "topic_hit_rate": 0.29,
+      "context_relevance": 0.86,
+      "faithfulness": 0.96,
+      "answer_relevance": 0.78,
+      "unsupported_claims": [],
+      "reasoning": "The retrieved chunks are clearly relevant to Docker architecture and container flow, but they do not include explicit command names. The answer is faithful because it correctly states that no specific Docker commands are shown and summarizes the container flow only using information present in the chunks. Answer relevance is moderately high since it addresses the flow well, but it only partially answers the command part by noting their absence rather than identifying any commands."
+    },
+    {
+      "test_index": 2,
+      "category": "Architectural (Kubernetes)",
+      "query": "What core Kubernetes objects are covered and how is local Minikube set up?",
+      "retrieval_latency_ms": 433.68,
+      "chunks_retrieved_count": 2,
+      "max_similarity": 0.554,
+      "avg_similarity": 0.55,
+      "topic_hit_rate": 0.67,
+      "context_relevance": 0.98,
+      "faithfulness": 0.91,
+      "answer_relevance": 0.98,
+      "unsupported_claims": [
+        "The setup is done with `choco install minikube`."
+      ],
+      "reasoning": "The retrieved chunks directly mention the three core Kubernetes objects (Pod, Deployment, Service) and explain Minikube as a local, single-node Kubernetes cluster with control plane and worker node inside one VM. The answer is highly relevant and mostly faithful. The only slightly unsupported detail is the exact installation command: the chunk says 'just choco install and you'll do mini cube' but does not clearly provide the exact combined command `choco install minikube`."
+    },
+    {
+      "test_index": 3,
+      "category": "Pipeline & Automation (CI/CD)",
+      "query": "What GitHub Actions workflow steps and triggers are demonstrated for CI/CD?",
+      "retrieval_latency_ms": 344.43,
+      "chunks_retrieved_count": 2,
+      "max_similarity": 0.624,
+      "avg_similarity": 0.609,
+      "topic_hit_rate": 0.86,
+      "context_relevance": 0.96,
+      "faithfulness": 0.83,
+      "answer_relevance": 0.98,
+      "unsupported_claims": [
+        "The workflow is triggered on push 'to the repo' as a general statement is supported, but the answer also implies a full CI/CD workflow structure beyond what is explicitly shown in the chunks.",
+        "'The deployment/release does not run on pull request in the shown example' is supported by chunk [2], but the phrasing may overstate the example as a general rule."
+      ],
+      "reasoning": "The retrieved chunks are highly relevant: they discuss push-triggered automation, build/test/check steps, ESLint, and a release/deploy job that depends on CI completing first. The answer mostly stays grounded in those chunks and directly addresses the question. Faithfulness is slightly reduced because it adds a bit of structure and interpretation beyond the exact wording in the references, though nothing major appears clearly false. The answer relevance is very high because it summarizes the demonstrated workflow steps and triggers clearly."
+    },
+    {
+      "test_index": 4,
+      "category": "Source Control (Git)",
+      "query": "What Git branching and commit concepts are explained for beginners?",
+      "retrieval_latency_ms": 249.98,
+      "chunks_retrieved_count": 2,
+      "max_similarity": 0.586,
+      "avg_similarity": 0.571,
+      "topic_hit_rate": 1.0,
+      "context_relevance": 0.88,
+      "faithfulness": 0.9,
+      "answer_relevance": 0.97,
+      "unsupported_claims": [
+        "The answer implies `git commit` 'puts them into a commit state' as a distinct Git state; the retrieved chunks say the changes are in commit state, but do not clearly explain it as a formal concept.",
+        "The answer frames `git remote add origin` and `git push origin <branch>` as part of 'Git branching and commit concepts' rather than adjacent setup/push concepts; this is slightly broader than the user asked, though still supported by the chunks."
+      ],
+      "reasoning": "The retrieved chunks are strongly relevant: they directly discuss basic Git commands, commit messages, and upcoming branching topics. The generated answer is largely faithful and answers the beginner-focused question well. A couple phrases add mild interpretation or organization beyond the exact wording of the chunks, but there is no major hallucination. The answer relevance is very high because it clearly summarizes beginner branching/commit-related concepts and mentions the branching strategy preview."
+    },
+    {
+      "test_index": 5,
+      "category": "Broad Video Overview",
+      "query": "Can you give me a full overview and roadmap of this complete video?",
+      "retrieval_latency_ms": 254.25,
+      "chunks_retrieved_count": 2,
+      "max_similarity": 0.507,
+      "avg_similarity": 0.489,
+      "topic_hit_rate": 0.57,
+      "context_relevance": 0.93,
+      "faithfulness": 0.84,
+      "answer_relevance": 0.96,
+      "unsupported_claims": [
+        "The statement that the video is a 'complete DevOps practical course' goes slightly beyond the chunks, which only say 'part one of our DevOps practical course' and imply a complete series.",
+        "The claim that Part 2 and Part 3 will cover 'the remaining topics of the full series' is more interpretive than explicitly supported; the chunks only say the creator will show what Part 2 and Part 3 will cover, without listing them here."
+      ],
+      "reasoning": "The retrieved chunks are highly relevant because they explicitly describe the video as Part 1 of a DevOps practical course and list the topics covered in this part, along with references to Part 2 and Part 3. The generated answer closely matches those details and directly answers the request for an overview/roadmap. Faithfulness is slightly reduced because it frames the series as a complete DevOps course and infers that Part 2/3 contain the remaining topics, which is not fully explicit in the provided text. Overall, the answer is strong and directly useful, with only minor overreach."
+    },
+    {
+      "test_index": 6,
+      "category": "Conversational Guardrail",
+      "query": "Hello, good morning! How are you today?",
+      "retrieval_latency_ms": 0.73,
+      "chunks_retrieved_count": 0,
+      "max_similarity": 0.0,
+      "avg_similarity": 0.0,
+      "topic_hit_rate": 1.0,
+      "context_relevance": 1.0,
+      "faithfulness": 1.0,
+      "answer_relevance": 1.0,
+      "unsupported_claims": [],
+      "reasoning": "Guardrail triggered: skipped RAG retrieval as intended."
+    },
+    {
+      "test_index": 7,
+      "category": "Out-of-Domain Guardrail",
+      "query": "How do I bake a triple-layer chocolate birthday cake?",
+      "retrieval_latency_ms": 255.95,
+      "chunks_retrieved_count": 0,
+      "max_similarity": 0.0,
+      "avg_similarity": 0.0,
+      "topic_hit_rate": 1.0,
+      "context_relevance": 1.0,
+      "faithfulness": 1.0,
+      "answer_relevance": 0.8,
+      "unsupported_claims": [],
+      "reasoning": "Guardrail triggered: skipped RAG retrieval as intended."
+    }
+  ]
+}

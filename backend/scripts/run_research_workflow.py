@@ -57,7 +57,7 @@ Artifacts Output Folder:
     └── run_metadata.json          (ResearchRun metadata and timestamps)
 
 Usage:
-    python scripts/run_research_flow.py
+    python scripts/run_research_workflow.py
     docker exec youtube_research_api python scripts/run_research_workflow.py
 ================================================================================
 """
@@ -105,8 +105,8 @@ from app.utils.security_utils import hash_password, verify_password
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-TARGET_URL = "https://www.youtube.com/watch?v=Tq0vZU7Hp_M"
-TARGET_VIDEO_ID = "Tq0vZU7Hp_M"
+TARGET_URL = "https://www.youtube.com/watch?v=Kb-sw00KJ10"
+TARGET_VIDEO_ID = "Kb-sw00KJ10"
 TARGET_USER_EMAIL = "user@example.com"
 TARGET_USER_PASSWORD = "stringst"
 
