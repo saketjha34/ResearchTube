@@ -94,6 +94,9 @@ class Settings(BaseSettings):
         except Exception:
             pass
 
+        # asyncpg does not accept ssl=false (expects ssl=disable or no param)
+        url = url.replace("?ssl=false", "").replace("&ssl=false", "")
+
         # Ensure the asyncpg driver prefix is present
         if url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)

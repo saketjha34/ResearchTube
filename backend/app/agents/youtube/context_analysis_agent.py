@@ -126,9 +126,12 @@ async def build_video_context(
 
     if db_uuid and video.transcript_available:
         try:
+            effective_query = user_query
+            if user_query.strip().startswith("http") and video.title:
+                effective_query = f"{video.title} - {user_query}"
             chunks = await retriever.similarity_search(
                 session=session,
-                query=user_query,
+                query=effective_query,
                 top_k=top_k,
                 db_video_ids=[db_uuid],
                 research_run_id=research_run_id,

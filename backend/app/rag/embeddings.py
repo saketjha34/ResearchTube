@@ -82,13 +82,19 @@ class GeminiEmbeddingService:
         if not texts:
             return []
 
-        vectors = self.embeddings.embed_documents(texts)
-        for vector in vectors:
-            if len(vector) != self.dimension:
-                raise ValueError(
-                    f"Embedding dimension mismatch. Expected {self.dimension}, got {len(vector)}."
-                )
-        return vectors
+        # Process in batches of 50 to respect Google API limits
+        batch_size = 50
+        all_vectors = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            vectors = self.embeddings.embed_documents(batch)
+            for vector in vectors:
+                if len(vector) != self.dimension:
+                    raise ValueError(
+                        f"Embedding dimension mismatch. Expected {self.dimension}, got {len(vector)}."
+                    )
+            all_vectors.extend(vectors)
+        return all_vectors
 
     async def embed_text_async(self, text: str) -> list[float]:
         return await asyncio.to_thread(self.embed_text, text)
@@ -139,13 +145,19 @@ class OpenAIEmbeddingService:
         if not texts:
             return []
 
-        vectors = self.embeddings.embed_documents(texts)
-        for vector in vectors:
-            if len(vector) != self.dimension:
-                raise ValueError(
-                    f"Embedding dimension mismatch. Expected {self.dimension}, got {len(vector)}."
-                )
-        return vectors
+        # Process in batches of 100 to prevent timeout and excessive request payload size
+        batch_size = 100
+        all_vectors = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            vectors = self.embeddings.embed_documents(batch)
+            for vector in vectors:
+                if len(vector) != self.dimension:
+                    raise ValueError(
+                        f"Embedding dimension mismatch. Expected {self.dimension}, got {len(vector)}."
+                    )
+            all_vectors.extend(vectors)
+        return all_vectors
 
     async def embed_text_async(self, text: str) -> list[float]:
         return await asyncio.to_thread(self.embed_text, text)
