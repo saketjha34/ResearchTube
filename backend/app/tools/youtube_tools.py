@@ -363,12 +363,13 @@ def _fetch_transcript_with_fallback(
     Attempt to fetch a transcript with 3 progressive fallbacks
     using only api.fetch() (compatible with youtube-transcript-api v1.x).
 
-    A proxy-aware API instance is built each call so that env var
-    changes at runtime are picked up (e.g. for testing).
+    A proxy-aware API instance is built first. If the proxy fails or drops connection,
+    it automatically falls back to a direct unproxied connection.
 
         Layer 1 — English (manual or auto-generated)
         Layer 2 — Common language variants (en-US, en-GB, en-IN, hi, es, etc.)
         Layer 3 — No language filter: accepts whatever YouTube has available
+        Direct fallback — Retries unproxied if proxy connection failed
 
     Returns:
         (transcript_text, language_label) or (None, None) on failure.
@@ -378,42 +379,59 @@ def _fetch_transcript_with_fallback(
 
     log = logger.bind(video_id=video_id)
 
-    # --------------------------------------------------------
-    # Layer 1: English (covers both manual and auto-generated)
-    # --------------------------------------------------------
-    try:
-        fetched = api.fetch(video_id, languages=["en"])
-        text = "\n".join(s.text for s in fetched)
-        if text.strip():
-            log.info("transcript.layer_ok", layer=1, language="en")
-            return text, "en"
-    except Exception as e:
-        log.warning("transcript.layer_failed", layer=1, exc=str(e))
+    def _try_layers(transcript_api: YouTubeTranscriptApi, prefix: str = "") -> tuple[str | None, str | None]:
+        # --------------------------------------------------------
+        # Layer 1: English (covers both manual and auto-generated)
+        # --------------------------------------------------------
+        try:
+            fetched = transcript_api.fetch(video_id, languages=["en"])
+            text = "\n".join(s.text for s in fetched)
+            if text.strip():
+                log.info("transcript.layer_ok", layer=f"{prefix}1", language="en")
+                return text, "en"
+        except Exception as e:
+            log.warning("transcript.layer_failed", layer=f"{prefix}1", exc=str(e))
 
-    # --------------------------------------------------------
-    # Layer 2: Common language variants (broad net)
-    # --------------------------------------------------------
-    other_languages = ["en-US", "en-GB", "en-IN", "en-AU", "hi", "es", "fr", "de", "pt"]
-    try:
-        fetched = api.fetch(video_id, languages=other_languages)
-        text = "\n".join(s.text for s in fetched)
-        if text.strip():
-            log.info("transcript.layer_ok", layer=2, language="variant")
-            return text, "variant"
-    except Exception as e:
-        log.warning("transcript.layer_failed", layer=2, exc=str(e))
+        # --------------------------------------------------------
+        # Layer 2: Common language variants (broad net)
+        # --------------------------------------------------------
+        other_languages = ["en-US", "en-GB", "en-IN", "en-AU", "hi", "es", "fr", "de", "pt"]
+        try:
+            fetched = transcript_api.fetch(video_id, languages=other_languages)
+            text = "\n".join(s.text for s in fetched)
+            if text.strip():
+                log.info("transcript.layer_ok", layer=f"{prefix}2", language="variant")
+                return text, "variant"
+        except Exception as e:
+            log.warning("transcript.layer_failed", layer=f"{prefix}2", exc=str(e))
 
-    # --------------------------------------------------------
-    # Layer 3: No language filter — take whatever is available
-    # --------------------------------------------------------
-    try:
-        fetched = api.fetch(video_id)
-        text = "\n".join(s.text for s in fetched)
-        if text.strip():
-            log.info("transcript.layer_ok", layer=3, language="any")
-            return text, "any"
-    except Exception as e:
-        log.warning("transcript.layer_failed", layer=3, exc=str(e))
+        # --------------------------------------------------------
+        # Layer 3: No language filter — take whatever is available
+        # --------------------------------------------------------
+        try:
+            fetched = transcript_api.fetch(video_id)
+            text = "\n".join(s.text for s in fetched)
+            if text.strip():
+                log.info("transcript.layer_ok", layer=f"{prefix}3", language="any")
+                return text, "any"
+        except Exception as e:
+            log.warning("transcript.layer_failed", layer=f"{prefix}3", exc=str(e))
+
+        return None, None
+
+    result, lang = _try_layers(api)
+    if result:
+        return result, lang
+
+    # If a proxy was configured and all layers failed, fall back to direct unproxied connection
+    proxy_url = os.getenv("YOUTUBE_PROXY_URL", "").strip()
+    webshare_user = os.getenv("WEBSHARE_PROXY_USERNAME", "").strip()
+    if proxy_url or webshare_user:
+        log.warning("transcript.proxy_failed_retrying_direct", reason="proxy_aborted_or_failed")
+        direct_api = YouTubeTranscriptApi()
+        result, lang = _try_layers(direct_api, prefix="direct_")
+        if result:
+            return result, lang
 
     log.error("transcript.exhausted", layers_tried=3)
     return None, None

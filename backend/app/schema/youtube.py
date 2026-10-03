@@ -213,7 +213,9 @@ class ResourceEvaluation(BaseModel):
         default_factory=list,
     )
 
-    recommendation_reason: str
+    recommendation_reason: str = Field(
+        description="Concise pedagogical reason why the learner should watch this video. Never mention 'Agent 1', 'Agent 2', or internal agent numbers."
+    )
 
     overall_score: float = Field(
         ge=0,
@@ -239,7 +241,10 @@ class ResourceAnalysis(BaseModel):
         default_factory=list,
     )
 
-    ranking_summary: str = ""
+    ranking_summary: str = Field(
+        default="",
+        description="Comparative pedagogical summary of the evaluated resources. Never mention 'Agent 1', 'Agent 2', or internal agent numbers."
+    )
 
 
 # ============================================================
@@ -371,7 +376,13 @@ class FinalReport(BaseModel):
     # METHODOLOGY
     # --------------------------------------------------------
 
-    methodology: str
+    methodology: str = Field(
+        description=(
+            "Brief, unified summary (2-3 concise sentences) of the research methodology: "
+            "semantic retrieval of tutorials, full transcript indexing with pgvector hybrid search, "
+            "and multi-dimensional pedagogical evaluation. NEVER mention 'Agent 1', 'Agent 2', or internal agent numbers."
+        )
+    )
 
     # --------------------------------------------------------
     # LIMITATIONS
@@ -379,13 +390,23 @@ class FinalReport(BaseModel):
 
     limitations: list[str] = Field(
         default_factory=list,
+        description=(
+            "2-3 brief, user-friendly limitations supported by the data (e.g., transcript availability, "
+            "framework version evolution). NEVER mention internal pipeline stages or agent numbers."
+        ),
     )
 
     # --------------------------------------------------------
     # CONCLUSION
     # --------------------------------------------------------
 
-    conclusion: str
+    conclusion: str = Field(
+        description=(
+            "Engaging, user-friendly, and actionable learning verdict written in an encouraging mentor tone. "
+            "Highlights where the learner should start (primary recommendation), how to combine complementary resources, "
+            "and practical next steps. NEVER mention 'Agent 1', 'Agent 2', or robotic evaluation formulas."
+        )
+    )
     
 
 class ResearchAPIRequest(BaseModel):

@@ -139,6 +139,8 @@ class LocalAuthService:
             token_hash=token_hash,
             expires_at=expires_at,
             revoked=False,
+            revoked_at=None,
+            replaced_by_hash=None,
         )
 
         db.add(refresh_token)
@@ -160,10 +162,21 @@ class LocalAuthService:
             )
         )
 
-        if not refresh_token or refresh_token.revoked:
+        if not refresh_token:
             return None
 
-        if refresh_token.expires_at < datetime.now(timezone.utc):
+        now = datetime.now(timezone.utc)
+
+        if refresh_token.revoked:
+            grace_sec = getattr(settings, "REFRESH_TOKEN_ROTATION_GRACE_PERIOD_SEC", 30)
+            if (
+                refresh_token.revoked_at
+                and (now - refresh_token.revoked_at).total_seconds() <= grace_sec
+            ):
+                return refresh_token
+            return None
+
+        if refresh_token.expires_at < now:
             return None
 
         return refresh_token
@@ -192,10 +205,18 @@ class LocalAuthService:
         raw_token: str,
     ) -> tuple[str, str]:
 
-        session = await self.get_refresh_session(db, raw_token)
+        token_hash = hash_refresh_token(raw_token)
+        session = await db.scalar(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        )
 
         if not session:
-            raise ValueError("Invalid or expired refresh token.")
+            raise ValueError("Invalid refresh token.")
+
+        now = datetime.now(timezone.utc)
+
+        if session.expires_at < now:
+            raise ValueError("Session expired due to inactivity. Please sign in again.")
 
         user = await db.scalar(
             select(User).where(User.id == session.user_id)
@@ -204,10 +225,44 @@ class LocalAuthService:
         if not user or not user.is_active:
             raise ValueError("User account is inactive.")
 
+        # Concurrency / Multi-tab Grace Window:
+        # If this token was already rotated within the grace window, don't crash
+        if session.revoked:
+            grace_sec = getattr(settings, "REFRESH_TOKEN_ROTATION_GRACE_PERIOD_SEC", 30)
+            if (
+                session.revoked_at
+                and (now - session.revoked_at).total_seconds() <= grace_sec
+                and session.replaced_by_hash
+            ):
+                new_access_token = create_access_token(user.id)
+                return new_access_token, raw_token
+
+            raise ValueError("Invalid or expired refresh token.")
+
+        # Standard rotation: Generate fresh pair and roll the 7-day inactivity clock forward
+        new_access_token = create_access_token(user.id)
+        new_raw_refresh_token = create_refresh_token()
+        new_token_hash = hash_refresh_token(new_raw_refresh_token)
+        new_expires_at = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+        # Mark old session as revoked with timestamp & replacement link
         session.revoked = True
+        session.revoked_at = now
+        session.replaced_by_hash = new_token_hash
+
+        new_refresh_token = RefreshToken(
+            user_id=user.id,
+            token_hash=new_token_hash,
+            expires_at=new_expires_at,
+            revoked=False,
+            revoked_at=None,
+            replaced_by_hash=None,
+        )
+
+        db.add(new_refresh_token)
         await db.commit()
 
-        return await self.create_token_pair(db, user)
+        return new_access_token, new_raw_refresh_token
 
     async def revoke_refresh_token(
         self,
@@ -215,10 +270,14 @@ class LocalAuthService:
         raw_token: str,
     ) -> None:
 
-        session = await self.get_refresh_session(db, raw_token)
+        token_hash = hash_refresh_token(raw_token)
+        session = await db.scalar(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        )
 
         if session:
             session.revoked = True
+            session.revoked_at = datetime.now(timezone.utc)
             await db.commit()
 
 

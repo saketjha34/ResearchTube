@@ -43,8 +43,9 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
 
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours (1 day)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7       # 7 days of inactivity
+    REFRESH_TOKEN_ROTATION_GRACE_PERIOD_SEC: int = 30  # 30-second concurrency grace window
 
     # ========================================================
     # GOOGLE OAUTH

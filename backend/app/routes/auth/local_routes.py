@@ -100,7 +100,7 @@ async def login(
     "/refresh",
     response_model=TokenResponse,
 )
-@limiter.limit("30/minute")        # token refresh abuse
+@limiter.limit("60/minute")        # accommodate multi-tabs and automatic rotation
 async def refresh(
     request: Request,
     data: RefreshTokenRequest,

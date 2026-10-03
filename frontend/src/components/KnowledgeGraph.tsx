@@ -38,6 +38,18 @@ const MIN_ZOOM = 0.2
 const MAX_ZOOM = 5.0
 const ZOOM_STEP = 1.25
 
+function stripMarkdown(text?: string | null): string {
+  if (!text) return ''
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/_(.*?)_/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^[#*-]\s+/gm, '')
+    .trim()
+}
+
 export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGraphProps) {
   const [isOpen, setIsOpen] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -112,7 +124,7 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
     // 1. Center Topic Node
     newNodes.push({
       id: 'query',
-      label: query,
+      label: stripMarkdown(query),
       type: 'query',
       x: cx,
       y: cy,
@@ -131,9 +143,10 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
       const vid = `video_${res.video_id}`
       videoAngles.set(vid, angle)
 
-      const cleanTitle = (res.title && !['none', 'null', 'n/a', ''].includes(res.title.trim().toLowerCase()))
+      const rawTitle = (res.title && !['none', 'null', 'n/a', ''].includes(res.title.trim().toLowerCase()))
         ? res.title
         : (res.video_id ? `Video (${res.video_id})` : 'Untitled Video')
+      const cleanTitle = stripMarkdown(rawTitle)
 
       newNodes.push({
         id: vid,
@@ -154,7 +167,7 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
     resources.forEach(res => {
       const vid = `video_${res.video_id}`
       res.concepts_covered?.forEach(concept => {
-        const clean = concept?.trim()
+        const clean = stripMarkdown(concept)
         if (!clean) return
         if (!conceptToVideos.has(clean)) conceptToVideos.set(clean, [])
         conceptToVideos.get(clean)!.push(vid)
@@ -162,7 +175,7 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
     })
 
     topics.forEach(topic => {
-      const clean = topic?.trim()
+      const clean = stripMarkdown(topic)
       if (!clean) return
       if (!conceptToVideos.has(clean)) conceptToVideos.set(clean, [])
     })
@@ -975,13 +988,13 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
               </div>
 
               <p className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2">
-                {selectedNode.originalData?.title || selectedNode.label}
+                {stripMarkdown(selectedNode.originalData?.title || selectedNode.label)}
               </p>
 
               {selectedNode.type === 'video' && selectedNode.originalData && (
                 <div className="mt-2 space-y-2">
                   <div className="flex items-center justify-between text-[11px] text-[#888888]">
-                    <span>{selectedNode.originalData.channel || 'YouTube Video'}</span>
+                    <span>{stripMarkdown(selectedNode.originalData.channel || 'YouTube Video')}</span>
                     {selectedNode.originalData.overall_score && (
                       <span className="font-bold text-[#00f0ff] bg-[#00f0ff]/10 px-2 py-0.5 rounded border border-[#00f0ff]/20">
                         ★ {selectedNode.originalData.overall_score.toFixed(1)}/10
@@ -993,7 +1006,7 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
                     <div className="flex flex-wrap gap-1 pt-1">
                       {selectedNode.originalData.concepts_covered.slice(0, 5).map(c => (
                         <span key={c} className="text-[9px] px-1.5 py-0.5 bg-[#a855f7]/15 text-[#c084fc] border border-[#a855f7]/30 rounded">
-                          {c}
+                          {stripMarkdown(c)}
                         </span>
                       ))}
                     </div>

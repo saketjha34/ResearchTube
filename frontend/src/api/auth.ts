@@ -119,6 +119,13 @@ export const logoutRequest = async (refreshToken: string): Promise<void> => {
   await authClient.post('/auth/logout', { refresh_token: refreshToken })
 }
 
+export const refreshTokenRequest = async (refreshToken: string): Promise<AuthResponse> => {
+  const response = await authClient.post<AuthResponse>('/auth/refresh', {
+    refresh_token: refreshToken,
+  })
+  return response.data
+}
+
 export const startGoogleLogin = (): void => {
   const googleAuthUrl = new URL(buildApiUrl('/auth/google'))
   googleAuthUrl.searchParams.set('prompt', 'select_account')

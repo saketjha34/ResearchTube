@@ -18,8 +18,28 @@ import {
   logoutRequest,
   persistAuthSession,
   registerRequest,
+  refreshTokenRequest,
   type User,
 } from '../api/auth'
+
+function parseJwtExp(token?: string | null): number | null {
+  if (!token) return null
+  try {
+    const base64Url = token.split('.')[1]
+    if (!base64Url) return null
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    const parsed = JSON.parse(jsonPayload)
+    return parsed.exp ? parsed.exp * 1000 : null
+  } catch {
+    return null
+  }
+}
 
 type AuthContextValue = {
   user: User | null
@@ -80,6 +100,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setLoading(false)
 
+    // Check if access token is expiring in < 5 minutes and silently renew
+    const checkAndRefreshIfNeeded = async () => {
+      const current = getAuthSession()
+      if (!current?.refresh_token) return
+
+      const expMs = parseJwtExp(current.access_token)
+      if (!expMs || expMs - Date.now() < 300000) {
+        try {
+          const fresh = await refreshTokenRequest(current.refresh_token)
+          persistAuthSession({
+            access_token: fresh.access_token,
+            refresh_token: fresh.refresh_token,
+            user: fresh.user,
+          })
+        } catch {
+          // If refresh failed because of > 7 days inactivity, clean up
+          clearAuthSession()
+        }
+      }
+    }
+
+    void checkAndRefreshIfNeeded()
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void checkAndRefreshIfNeeded()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     const syncFromStorage = () => {
       const next = getAuthSession()
       setUser(next?.user ?? null)
@@ -90,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener('auth:changed', syncFromStorage)
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('storage', syncFromStorage)
       window.removeEventListener('auth:changed', syncFromStorage)
     }

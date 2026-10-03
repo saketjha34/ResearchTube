@@ -150,7 +150,7 @@ def test_final_report_prompt_class():
         user_query="Rust introduction",
         context_text=context,
     )
-    assert "Agent 3 of a YouTube research system" in prompt
+    assert "ResearchTube Final Report Synthesis Engine" in prompt
     assert "Rust introduction" in prompt
     assert "Rust in 100 Seconds" in prompt
     assert "REPORT REQUIREMENTS" in prompt

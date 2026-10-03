@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Copy, Check, Search, X as XIcon, Calendar, Clock, Archive, ArchiveRestore } from 'lucide-react'
 import { runResearch, getHistory, getHistoryEntry, archiveHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
 import { useToast, ToastContainer } from '../components/Toast'
@@ -206,6 +208,151 @@ function Highlight({ text, query }: { text: string; query: string }) {
   )
 }
 
+function stripMarkdown(text?: string | null): string {
+  if (!text) return ''
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/_(.*?)_/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^[#*-]\s+/gm, '')
+    .trim()
+}
+
+function formatMarkdownText(raw?: string | null): string {
+  if (!raw) return ''
+  let text = raw.trim().replace(/\r\n/g, '\n')
+
+  // Convert single newline before bold header or numbered list into double newline
+  text = text.replace(/\n(?!\n)(\s*\*\*[^*]+?\*\*)/g, '\n\n$1')
+  text = text.replace(/\n(?!\n)(\s*\d+\.\s+)/g, '\n\n$1')
+  text = text.replace(/\n(?!\n)(\s*[-*]\s+)/g, '\n\n$1')
+
+  // Convert inline bold headings following a period, exclamation, or question into paragraph breaks
+  text = text.replace(/([.!?])\s+(\*\*[^*]+?\*\*:?)/g, '$1\n\n$2')
+
+  return text
+}
+
+function highlightChildren(children: React.ReactNode, query: string): React.ReactNode {
+  if (!query || !query.trim() || children == null) return children
+  if (typeof children === 'string') {
+    return <Highlight text={children} query={query} />
+  }
+  if (typeof children === 'number') {
+    return children
+  }
+  if (Array.isArray(children)) {
+    return children.map((c, i) => <React.Fragment key={i}>{highlightChildren(c, query)}</React.Fragment>)
+  }
+  if (React.isValidElement(children)) {
+    const props = (children as any).props
+    if (props && props.children) {
+      return React.cloneElement(children as React.ReactElement<any>, {
+        children: highlightChildren(props.children, query),
+      })
+    }
+  }
+  return children
+}
+
+interface MarkdownContentProps {
+  content?: string | null
+  searchQuery?: string
+  className?: string
+  inline?: boolean
+}
+
+function MarkdownContent({
+  content,
+  searchQuery = '',
+  className = '',
+  inline = false,
+}: MarkdownContentProps) {
+  if (!content) return null
+  const formatted = formatMarkdownText(content)
+
+  if (inline) {
+    return (
+      <span className={`inline ${className}`}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            p: ({ children }) => (
+              <span className="inline leading-relaxed">{highlightChildren(children, searchQuery)}</span>
+            ),
+            strong: ({ children }) => (
+              <strong className="font-bold text-white tracking-wide">
+                {highlightChildren(children, searchQuery)}
+              </strong>
+            ),
+            em: ({ children }) => (
+              <em className="italic text-[#d4d4d8]">
+                {highlightChildren(children, searchQuery)}
+              </em>
+            ),
+            code: ({ children }) => (
+              <code className="rounded bg-[#1a1a1a] px-1.5 py-0.5 font-mono text-xs text-zinc-300 border border-[#2a2a2a]">
+                {children}
+              </code>
+            ),
+          }}
+        >
+          {formatted}
+        </ReactMarkdown>
+      </span>
+    )
+  }
+
+  return (
+    <div className={`prose-custom ${className}`}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => (
+            <p className="mb-4 leading-relaxed last:mb-0">
+              {highlightChildren(children, searchQuery)}
+            </p>
+          ),
+          strong: ({ children }) => (
+            <strong className="font-bold text-white tracking-wide">
+              {highlightChildren(children, searchQuery)}
+            </strong>
+          ),
+          em: ({ children }) => (
+            <em className="italic text-[#d4d4d8]">
+              {highlightChildren(children, searchQuery)}
+            </em>
+          ),
+          code: ({ children }) => (
+            <code className="rounded bg-[#1a1a1a] px-1.5 py-0.5 font-mono text-xs text-zinc-300 border border-[#2a2a2a]">
+              {children}
+            </code>
+          ),
+          ul: ({ children }) => (
+            <ul className="my-3 ml-5 list-disc space-y-2 marker:text-[#666666]">
+              {children}
+            </ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="my-3 ml-5 list-decimal space-y-2 marker:text-[#666666]">
+              {children}
+            </ol>
+          ),
+          li: ({ children }) => (
+            <li className="leading-relaxed text-[#cccccc]">
+              {highlightChildren(children, searchQuery)}
+            </li>
+          ),
+        }}
+      >
+        {formatted}
+      </ReactMarkdown>
+    </div>
+  )
+}
+
 // Pulsing Gray Skeleton Box Loader for Toggling Past Research Runs
 function ReportSkeletonLoader() {
   return (
@@ -300,9 +447,9 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
     return trimmed
   }
 
-  const cleanTitle = cleanStr(res.title) || (res.video_id ? `Video (${res.video_id})` : 'YouTube Video')
-  const cleanChannel = cleanStr(res.channel)
-  const cleanDescription = cleanStr(res.description)
+  const cleanTitle = stripMarkdown(cleanStr(res.title)) || (res.video_id ? `Video (${res.video_id})` : 'YouTube Video')
+  const cleanChannel = stripMarkdown(cleanStr(res.channel))
+  const cleanDescription = stripMarkdown(cleanStr(res.description))
   const videoUrl = res.url || (res.video_id ? `https://www.youtube.com/watch?v=${res.video_id}` : '#')
   const thumbUrl = res.thumbnail_url || (res.video_id ? `https://img.youtube.com/vi/${res.video_id}/mqdefault.jpg` : null)
 
@@ -375,7 +522,7 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
               <p className="mb-3 text-xs font-bold tracking-[0.25em] text-[#555555]">CONCEPTS COVERED</p>
               <div className="flex flex-wrap gap-2">
                 {(res.concepts_covered ?? []).map((c) => (
-                  <span key={c} className="border border-[#222222] bg-black px-3.5 py-1 text-xs tracking-[0.1em] text-[#888888] font-medium">{c}</span>
+                  <span key={c} className="border border-[#222222] bg-black px-3.5 py-1 text-xs tracking-[0.1em] text-[#888888] font-medium">{stripMarkdown(c)}</span>
                 ))}
               </div>
             </div>
@@ -384,7 +531,14 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
             <div>
               <p className="mb-3 text-xs font-bold tracking-[0.25em] text-green-700">STRENGTHS</p>
               <ul className="space-y-2">
-                {(res.strengths ?? []).map((s) => <li key={s} className="flex items-start gap-2.5 text-sm text-[#888888]"><span className="mt-0.5 text-green-500 font-extrabold">+</span>{s}</li>)}
+                {(res.strengths ?? []).map((s, idx) => (
+                  <li key={idx} className="flex items-start gap-2.5 text-sm text-[#888888]">
+                    <span className="mt-0.5 text-green-500 font-extrabold">+</span>
+                    <div className="flex-1">
+                      <MarkdownContent content={s} inline />
+                    </div>
+                  </li>
+                ))}
               </ul>
             </div>
           )}
@@ -392,14 +546,23 @@ function ResourceCard({ res, rank }: { res: RecommendedResource; rank: number })
             <div>
               <p className="mb-3 text-xs font-bold tracking-[0.25em] text-red-700">WEAKNESSES</p>
               <ul className="space-y-2">
-                {(res.weaknesses ?? []).map((w) => <li key={w} className="flex items-start gap-2.5 text-sm text-[#888888]"><span className="mt-0.5 text-red-500 font-extrabold">-</span>{w}</li>)}
+                {(res.weaknesses ?? []).map((w, idx) => (
+                  <li key={idx} className="flex items-start gap-2.5 text-sm text-[#888888]">
+                    <span className="mt-0.5 text-red-500 font-extrabold">-</span>
+                    <div className="flex-1">
+                      <MarkdownContent content={w} inline />
+                    </div>
+                  </li>
+                ))}
               </ul>
             </div>
           )}
           {res.recommendation_reason && (
             <div>
               <p className="mb-2 text-xs font-bold tracking-[0.25em] text-[#555555]">WHY RECOMMENDED</p>
-              <p className="text-sm leading-relaxed text-[#888888]">{res.recommendation_reason}</p>
+              <div className="text-sm leading-relaxed text-[#888888]">
+                <MarkdownContent content={res.recommendation_reason} />
+              </div>
             </div>
           )}
           <div className="grid grid-cols-3 gap-6 border-t border-[#1a1a1a] pt-5 text-center">
@@ -518,9 +681,11 @@ export function ReportView({
               <BookOpen size={18} className="text-[#555555]" />
               <h2 className="text-xs font-bold tracking-[0.3em] text-[#999999]" style={{fontFamily:"'Space Grotesk',sans-serif"}}>EXECUTIVE SUMMARY</h2>
             </div>
-            <CopyButton text={exec} />
+            <CopyButton text={stripMarkdown(exec)} />
           </div>
-          <p className="text-lg leading-8 text-[#cccccc] font-medium"><Highlight text={exec} query={searchQuery} /></p>
+          <div className="text-base sm:text-lg leading-8 text-[#cccccc] font-normal">
+            <MarkdownContent content={exec} searchQuery={searchQuery} />
+          </div>
 
           {/* Date and time below the response */}
           {(effectiveCompletedAt || effectiveCreatedAt) && (
@@ -562,9 +727,14 @@ export function ReportView({
             <h2 className="text-xs font-bold tracking-[0.3em] text-[#999999]" style={{fontFamily:"'Space Grotesk',sans-serif"}}>KEY TOPICS</h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            {topics.map((t) => (
-              <span key={t} className="border border-[#222222] bg-black px-4 py-2.5 text-sm font-bold tracking-[0.1em] text-[#cccccc]">{t}</span>
-            ))}
+            {topics.map((t) => {
+              const cleanT = stripMarkdown(t)
+              return (
+                <span key={cleanT} className="border border-[#222222] bg-black px-4 py-2.5 text-sm font-bold tracking-[0.1em] text-[#cccccc]">
+                  <Highlight text={cleanT} query={searchQuery} />
+                </span>
+              )
+            })}
           </div>
         </div>
       )}
@@ -577,13 +747,15 @@ export function ReportView({
               <TrendingUp size={18} className="text-[#555555]" />
               <h2 className="text-xs font-bold tracking-[0.3em] text-[#999999]" style={{fontFamily:"'Space Grotesk',sans-serif"}}>LEARNING PATH</h2>
             </div>
-            <CopyButton text={path.map((s, i) => `${i + 1}. ${s}`).join('\n')} />
+            <CopyButton text={path.map((s, i) => `${i + 1}. ${stripMarkdown(s)}`).join('\n')} />
           </div>
           <ol className="space-y-4">
             {path.map((step, i) => (
-              <li key={i} className="flex items-start gap-4 text-base text-[#cccccc] font-medium">
+              <li key={i} className="flex items-start gap-4 text-base text-[#cccccc] font-normal">
                 <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center border border-[#333333] bg-black text-xs font-bold text-[#666666]">{i + 1}</span>
-                <span className="leading-relaxed mt-0.5"><Highlight text={step} query={searchQuery} /></span>
+                <div className="leading-relaxed mt-0.5 flex-1">
+                  <MarkdownContent content={step} searchQuery={searchQuery} inline />
+                </div>
               </li>
             ))}
           </ol>
@@ -596,14 +768,23 @@ export function ReportView({
           {method && (
             <div className="border border-[#222222] bg-[#111111] p-8">
               <p className="mb-4 text-xs font-bold tracking-[0.3em] text-[#555555]">METHODOLOGY</p>
-              <p className="text-base leading-8 text-[#888888] font-medium">{method}</p>
+              <div className="text-base leading-8 text-[#888888] font-normal">
+                <MarkdownContent content={method} searchQuery={searchQuery} />
+              </div>
             </div>
           )}
           {limits.length > 0 && (
             <div className="border border-[#222222] bg-[#111111] p-8">
               <p className="mb-4 text-xs font-bold tracking-[0.3em] text-[#555555]">LIMITATIONS</p>
               <ul className="space-y-3">
-                {limits.map((l) => <li key={l} className="flex items-start gap-3 text-base text-[#888888] font-medium"><span className="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#555555]" />{l}</li>)}
+                {limits.map((l, idx) => (
+                  <li key={idx} className="flex items-start gap-3 text-base text-[#888888] font-normal">
+                    <span className="mt-2.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[#555555]" />
+                    <div className="flex-1">
+                      <MarkdownContent content={l} searchQuery={searchQuery} inline />
+                    </div>
+                  </li>
+                ))}
               </ul>
             </div>
           )}
@@ -615,9 +796,11 @@ export function ReportView({
         <div className="border border-white bg-black p-8">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-xs font-bold tracking-[0.3em] text-[#555555]">CONCLUSION</p>
-            <CopyButton text={conc} />
+            <CopyButton text={stripMarkdown(conc)} />
           </div>
-          <p className="text-lg leading-8 text-white font-bold"><Highlight text={conc} query={searchQuery} /></p>
+          <div className="text-lg leading-8 text-[#e2e2e2] font-normal">
+            <MarkdownContent content={conc} searchQuery={searchQuery} />
+          </div>
         </div>
       )}
     </div>
