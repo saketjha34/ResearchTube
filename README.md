@@ -11,7 +11,7 @@
 
 ---
 
-## 📌 Project Overview
+## Project Overview
 
 Technical YouTube content including architecture lectures, conference talks, and deep-dive coding tutorials contains invaluable engineering knowledge. However, accessing and leveraging this knowledge presents major hurdles:
 - **Time Inefficiency:** Manually watching multiple 45-minute technical lectures to locate specific code implementations is slow and tedious.
@@ -34,8 +34,7 @@ For detailed installation instructions, environment variables configuration, loc
 *  **[Frontend Documentation & Setup Guide](frontend/README.md):** Complete guide for setting up React 19 SPA, Node.js dependencies, Vite build configurations, Tailwind CSS v4 styling, component hierarchy, and routing.
 
 ---
-
-## 🏛️ Visual System Architecture Map & Data Flow
+## Visual System Architecture Map & Data Flow
 
 ResearchTube is powered by a high-throughput, dual-engine backend supporting both **Autonomous Multi-Agent YouTube Research** and **Conversational Video RAG Chat**, unified by a **PostgreSQL 16 + pgvector Hybrid Search (BM25 + Dense Vectors via Reciprocal Rank Fusion)** engine.
 
@@ -43,28 +42,28 @@ ResearchTube is powered by a high-throughput, dual-engine backend supporting bot
 
 ```mermaid
 flowchart TD
-    subgraph Client["🖥️ CLIENT PRESENTATION LAYER (React 19 + TypeScript + Vite)"]
+    subgraph Client[" CLIENT PRESENTATION LAYER (React 19 + TypeScript + Vite)"]
         UI_Home["Landing & Dashboard"]
         UI_Research["Autonomous Research Canvas\n(2D Knowledge Graph + Report)"]
         UI_Chat["Conversational Chat Interface\n(SSE Streaming + Video Scope Selector)"]
         UI_Profile["Profile Analytics Dashboard\n(Research Metrics + Chat History Stats)"]
     end
 
-    subgraph Security["🛡️ SECURITY & API GATEWAY LAYER (FastAPI)"]
+    subgraph Security[" SECURITY & API GATEWAY LAYER (FastAPI)"]
         CORS["CORS & GZip Response Compression"]
         RateLimit["SlowAPI Rate Limiter (Token Bucket)"]
         JWT["JWT Auth & Session Guardian\n(Access: 30m / Refresh: 7-10d)"]
     end
 
-    subgraph DualEngines["🧠 CORE INTELLIGENCE ENGINES"]
-        subgraph ResearchEngine["🔬 Autonomous Multi-Agent Research Engine (LangGraph DAG)"]
+    subgraph DualEngines[" CORE INTELLIGENCE ENGINES"]
+        subgraph ResearchEngine[" Autonomous Multi-Agent Research Engine (LangGraph DAG)"]
             AG1["Agent 1: YouTube Researcher\n(Query Decomposition & Proxy Scraper)"]
             Chunker["Sliding Window Chunker\n(Window=1000, Overlap=150)"]
             AG2["Agent 2: RAG Evaluator\n(Relevance & Quality Scoring)"]
             AG3["Agent 3: Synthesis Engine\n(Markdown Report & Knowledge Graph)"]
         end
 
-        subgraph ChatEngine["💬 Conversational RAG Chat Engine"]
+        subgraph ChatEngine[" Conversational RAG Chat Engine"]
             ScopeHandler["Scope Resolver\n(Video / Library / General)"]
             HistoryBuffer["Multi-Turn History Window\n(Context-Preserving Buffer)"]
             PromptAssembler["Grounding Prompt Assembler\n(Context + Timestamp Anchors)"]
@@ -72,14 +71,14 @@ flowchart TD
         end
     end
 
-    subgraph HybridEngine["⚡ HYBRID RETRIEVAL & FUSION ENGINE (RRF)"]
+    subgraph HybridEngine[" HYBRID RETRIEVAL & FUSION ENGINE (RRF)"]
         DualEmbed["DualEmbeddingService\n(OpenAI text-embedding-3 / Gemini text-embedding-004)"]
         DenseSearch["Dense Vector Search\n(pgvector Cosine Distance <->)"]
         BM25Search["Sparse Lexical Search\n(PostgreSQL tsvector + GIN Index + ts_rank_cd)"]
         RRF["Reciprocal Rank Fusion (RRF)\nRRF_score = ∑ 1 / (60 + rank_i)"]
     end
 
-    subgraph Storage["🗄️ PERSISTENT DATA LAYER (PostgreSQL 16 + pgvector)"]
+    subgraph Storage[" PERSISTENT DATA LAYER (PostgreSQL 16 + pgvector)"]
         DB_Users[("users & refresh_tokens")]
         DB_Research[("research_runs & youtube_videos")]
         DB_Chunks[("video_chunks\n(Vector 768/1536 + tsvector GIN)")]
@@ -123,14 +122,14 @@ When a user initiates an autonomous research run, ResearchTube executes a cyclic
 
 ```mermaid
 flowchart LR
-    Start([🚀 User Query]) --> N1["Node 1: Validator\n(Sanitize Query & Quotas)"]
+    Start([ User Query]) --> N1["Node 1: Validator\n(Sanitize Query & Quotas)"]
     N1 --> N2["Node 2: Query Planner\n(Agent 1: 3-5 Sub-queries)"]
     N2 --> N3["Node 3: YouTube Crawler\n(3-Layer Proxy Mesh & Metadata)"]
     N3 --> N4["Node 4: Transcript Chunker\n(Sliding Window: W=1000, O=150)"]
     N4 --> N5["Node 5: Hybrid RAG Evaluator\n(Agent 2: Dense + BM25 Scoring)"]
     N5 --> N6["Node 6: Synthesizer Engine\n(Agent 3: Markdown & Knowledge Graph)"]
     N6 --> N7["Node 7: Transactional Persistence\n(PostgreSQL Atomic Commit)"]
-    N7 --> Done([📄 Publication-Ready Report & 2D Graph])
+    N7 --> Done([ Publication-Ready Report & 2D Graph])
 
     classDef agent fill:#161616,stroke:#333333,stroke-width:1px,color:#ffffff;
     classDef node fill:#111111,stroke:#262626,stroke-width:1px,color:#cccccc;
@@ -155,14 +154,14 @@ The conversational engine allows users to query researched materials with full c
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as 👤 User (React 19 SPA)
-    participant ChatAPI as 🛡️ FastAPI (/chat/sessions)
-    participant Scope as 🎯 Scope Resolver
-    participant History as 📜 Session History Buffer
-    participant Hybrid as ⚡ Hybrid Retriever (RRF)
-    participant PG as 🗄️ PostgreSQL (pgvector + GIN)
-    participant LLM as 🤖 Google Gemini / OpenAI
-    participant DB as 💾 chat_messages DB
+    actor User as  User (React 19 SPA)
+    participant ChatAPI as  FastAPI (/chat/sessions)
+    participant Scope as  Scope Resolver
+    participant History as  Session History Buffer
+    participant Hybrid as  Hybrid Retriever (RRF)
+    participant PG as  PostgreSQL (pgvector + GIN)
+    participant LLM as  Google Gemini / OpenAI
+    participant DB as  chat_messages DB
 
     User->>ChatAPI: POST /chat/sessions/{id}/messages (prompt, scope_mode, video_id)
     ChatAPI->>Scope: Resolve Scope (Single Video / All Research / General)
@@ -204,24 +203,24 @@ ResearchTube implements **Hybrid Search** combining dense vector semantics with 
 flowchart TD
     Q["User Query: 'How to fix docker remote disconnected error?'"]
 
-    subgraph DenseBranch["🧠 DENSE VECTOR BRANCH (Semantic Concepts)"]
+    subgraph DenseBranch[" DENSE VECTOR BRANCH (Semantic Concepts)"]
         Emb["DualEmbeddingService\n(Generates 768/1536-dim Vector)"]
         HNSW["PostgreSQL pgvector Query\nORDER BY embedding <=> query_vec LIMIT 20"]
         DenseList["Dense Ranked List\n[Rank 1, Rank 2, ... Rank 20]"]
         Emb --> HNSW --> DenseList
     end
 
-    subgraph SparseBranch["🔍 SPARSE LEXICAL BRANCH (Exact Keywords & Code)"]
+    subgraph SparseBranch[" SPARSE LEXICAL BRANCH (Exact Keywords & Code)"]
         FTS["PostgreSQL Full-Text Search\nplainto_tsquery('english', query)"]
         GIN["PostgreSQL GIN Index Scan\nORDER BY ts_rank_cd(search_vector, query) LIMIT 20"]
         SparseList["Sparse Ranked List\n[Rank 1, Rank 2, ... Rank 20]"]
         FTS --> GIN --> SparseList
     end
 
-    DenseList --> RRFMerge["⚡ RECIPROCAL RANK FUSION (RRF Engine)\nRRF_score(d) = 1/(60 + rank_dense) + 1/(60 + rank_sparse)"]
+    DenseList --> RRFMerge[" RECIPROCAL RANK FUSION (RRF Engine)\nRRF_score(d) = 1/(60 + rank_dense) + 1/(60 + rank_sparse)"]
     SparseList --> RRFMerge
 
-    RRFMerge --> FinalTopK["🎯 Top-K Calibrated Evidence Chunks\n(Passed to LLM with Video Timestamp Anchors)"]
+    RRFMerge --> FinalTopK[" Top-K Calibrated Evidence Chunks\n(Passed to LLM with Video Timestamp Anchors)"]
 ```
 
 #### Why Hybrid Search Wins:
@@ -232,7 +231,7 @@ flowchart TD
 
 ---
 
-## 🛠️ Detailed Technology Stack
+##  Detailed Technology Stack
 
 | Layer | Technology | Technical Purpose & Implementation Details |
 | :--- | :--- | :--- |
@@ -250,18 +249,18 @@ flowchart TD
 
 ---
 
-## 🌟 Core System Capabilities
+##  Core System Capabilities
 
-* **🤖 7-Node Autonomous LangGraph DAG Orchestrator:** Coordinated state-machine execution across 3 specialized AI agents (Agent 1: YouTube Researcher, Agent 2: Hybrid RAG Evaluator, Agent 3: Synthesizer Engine).
-* **⚡ PostgreSQL 16 Hybrid Retrieval Engine (BM25 + pgvector + RRF):** Fuses dense semantic vectors (`pgvector` Cosine Distance `<=>`) with sparse lexical matching (`tsvector` + GIN index + `ts_rank_cd`) using Reciprocal Rank Fusion ($k=60$) to eliminate vector hallucinations on exact code commands, CLI flags, and function signatures.
-* **💬 Conversational Video RAG Assistant:** Interactive multi-turn chat with token-by-token Server-Sent Events (SSE) streaming, context-preserving history buffers, and verifiable second-level video timestamp anchors.
-* **🎯 Dynamic Scope Resolution:** Instant switching between single video scope (`video`), full research run scope (`run`), or entire personal video library (`none`).
-* **🛡️ 3-Layer Proxy-Resilient Scraper Mesh:** Zero-failure transcript extraction leveraging Webshare residential proxy pools, environment proxy failovers, and sequential language tag scanning (`en` $\rightarrow$ `en-US` $\rightarrow$ `hi` $\rightarrow$ `es` $\rightarrow$ auto-generated).
-* **📊 Interactive 2D Knowledge Graph:** Real-time visual network mapping connections between research topics, video tutorials, and extracted engineering concepts.
-* **📄 Publication-Grade Technical Reports:** Automated synthesis of structured markdown dossiers complete with score meters, prerequisite learning paths, architectural trade-offs, and timestamped citations.
-* **📈 Unified Research & Conversational Analytics:** Comprehensive user intelligence dashboard tracking research runs, audience reach, average RAG scores, turn breakdowns, video-scoped discussions, grounding rates, and top discussed videos.
-* **🔗 Public Collaboration & Sharing:** One-click public sharing tokens for research reports and chat sessions, featuring instant conversation forking into user accounts.
-* **🔐 Enterprise Session Guardian:** Hardened JWT session security with 30-minute access tokens, sliding 7–10 day refresh tokens, Argon2 password hashing, and endpoint rate limiting.
+* **7-Node Autonomous LangGraph DAG Orchestrator:** Coordinated state-machine execution across 3 specialized AI agents (Agent 1: YouTube Researcher, Agent 2: Hybrid RAG Evaluator, Agent 3: Synthesizer Engine).
+* **PostgreSQL 16 Hybrid Retrieval Engine (BM25 + pgvector + RRF):** Fuses dense semantic vectors (`pgvector` Cosine Distance `<=>`) with sparse lexical matching (`tsvector` + GIN index + `ts_rank_cd`) using Reciprocal Rank Fusion ($k=60$) to eliminate vector hallucinations on exact code commands, CLI flags, and function signatures.
+* **Conversational Video RAG Assistant:** Interactive multi-turn chat with token-by-token Server-Sent Events (SSE) streaming, context-preserving history buffers, and verifiable second-level video timestamp anchors.
+* **Dynamic Scope Resolution:** Instant switching between single video scope (`video`), full research run scope (`run`), or entire personal video library (`none`).
+* **3-Layer Proxy-Resilient Scraper Mesh:** Zero-failure transcript extraction leveraging Webshare residential proxy pools, environment proxy failovers, and sequential language tag scanning (`en` $\rightarrow$ `en-US` $\rightarrow$ `hi` $\rightarrow$ `es` $\rightarrow$ auto-generated).
+* **Interactive 2D Knowledge Graph:** Real-time visual network mapping connections between research topics, video tutorials, and extracted engineering concepts.
+* **Publication-Grade Technical Reports:** Automated synthesis of structured markdown dossiers complete with score meters, prerequisite learning paths, architectural trade-offs, and timestamped citations.
+* **Unified Research & Conversational Analytics:** Comprehensive user intelligence dashboard tracking research runs, audience reach, average RAG scores, turn breakdowns, video-scoped discussions, grounding rates, and top discussed videos.
+* **Public Collaboration & Sharing:** One-click public sharing tokens for research reports and chat sessions, featuring instant conversation forking into user accounts.
+* **Enterprise Session Guardian:** Hardened JWT session security with 30-minute access tokens, sliding 7–10 day refresh tokens, Argon2 password hashing, and endpoint rate limiting.
 
 
 ## 👨‍💻 Author & Attribution
