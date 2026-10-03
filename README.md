@@ -1,4 +1,4 @@
-# ResearchTube 🎓🤖
+# ResearchTube
 
 > **Automated Multi-Agent YouTube Research Platform**
 > Transform raw YouTube video streams into structured, publication-grade research reports using **LangGraph autonomous agents**, **PostgreSQL pgvector RAG**, and **Google Gemini 3.5**.
@@ -26,12 +26,12 @@ Technical YouTube content including architecture lectures, conference talks, and
 
 ---
 
-##  Running Frontend & Backend (Setup Documentation)
+## Running Frontend & Backend (Setup Documentation)
 
 For detailed installation instructions, environment variables configuration, local development setups, and subsystem architecture specs, refer to the respective subsystem documentation:
 
-*  **[Backend Documentation & Setup Guide](backend/README.md):** Complete guide for installing Python 3.12 dependencies, setting up `.env` secret keys, initializing PostgreSQL `pgvector` schemas, running FastAPI servers, and exploring interactive Swagger API docs.
-*  **[Frontend Documentation & Setup Guide](frontend/README.md):** Complete guide for setting up React 19 SPA, Node.js dependencies, Vite build configurations, Tailwind CSS v4 styling, component hierarchy, and routing.
+* **[Backend Documentation & Setup Guide](backend/README.md):** Complete guide for installing Python 3.12 dependencies, setting up credentials via [ENV_SETUP.md](backend/ENV_SETUP.md), managing database migrations via [MIGRATIONS.md](backend/MIGRATIONS.md), initializing PostgreSQL `pgvector` schemas, running FastAPI servers, and exploring interactive Swagger API docs.
+* **[Frontend Documentation & Setup Guide](frontend/README.md):** Complete guide for setting up React 19 SPA, Node.js dependencies, Vite build configurations, Tailwind CSS v4 styling, component hierarchy, and routing.
 
 ---
 ## Visual System Architecture Map & Data Flow
@@ -263,7 +263,7 @@ flowchart TD
 * **Enterprise Session Guardian:** Hardened JWT session security with 30-minute access tokens, sliding 7–10 day refresh tokens, Argon2 password hashing, and endpoint rate limiting.
 
 
-## 👨‍💻 Author & Attribution
+## Author & Attribution
 
 Designed and built by **Saket Jha**.
 - **GitHub:** [@saketjha34](https://github.com/saketjha34)

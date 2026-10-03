@@ -4,9 +4,13 @@ Welcome to the backend server engine of **ResearchTube** — an automated, multi
 
 This document covers the architectural design, database schemas, agent workflows, hybrid retrieval mechanics, conversational streaming engine, tool implementations, and comprehensive setup instructions.
 
+### Core Documentation Links
+* [Environment Configuration Guide (ENV_SETUP.md)](ENV_SETUP.md) - Step-by-step instructions for acquiring API keys (Google Gemini, YouTube Data v3, Google OAuth), setting up JWT secrets, configuring local/production database URLs, and proxy credentials.
+* [Database Migrations Guide (MIGRATIONS.md)](MIGRATIONS.md) - Operational reference for managing Alembic migrations with asynchronous SQLAlchemy (`asyncpg`) across dual workmodes (`dev` and `prod`), including Supabase connection pooler configurations.
+
 ---
 
-## 🏗️ System Architecture & Tech Stack
+## System Architecture & Tech Stack
 
 The backend is built as an asynchronous Python application using a modern enterprise stack:
 
@@ -23,6 +27,7 @@ The backend is built as an asynchronous Python application using a modern enterp
     *   **DualEmbeddingService:** Resilient multi-provider embedding generator utilizing OpenAI `text-embedding-3-small` (primary) and Google `text-embedding-004` (fallback).
     *   **Language Models:** Google `Gemini 3.5 Flash` via `google-genai` with fallback support for OpenAI GPT-4o-mini.
 *   **Object Relational Mapper:** `SQLAlchemy 2.0` (asynchronous engine using modern mapped columns typing).
+*   **Database Migrations:** `Alembic` configured for asyncpg with dual workmode targeting (`-x env=dev` and `-x env=prod`).
 *   **Security & Protection:** `slowapi` (FastAPI rate limiter implementing token bucket algorithms) and `pwdlib[argon2]` (secure credential hashing).
 *   **Session Management:** JWT Access Tokens (30m) paired with SHA-256 hashed sliding Refresh Tokens (7–10 days).
 *   **Observability:** `structlog` (structured JSON logging optimized for GCP Cloud Logging).
@@ -30,7 +35,7 @@ The backend is built as an asynchronous Python application using a modern enterp
 
 ---
 
-## 🗄️ Database Schema & Models
+## Database Schema & Models
 
 The database contains tables representing user profiles, local/social authentication accounts, autonomous research graph artifacts, and multi-turn conversational chat sessions.
 
@@ -246,20 +251,20 @@ erDiagram
 
 ---
 
-## 🤖 Multi-Agent Graph Orchestration (7-Node LangGraph DAG)
+## Multi-Agent Graph Orchestration (7-Node LangGraph DAG)
 
 The research pipeline uses a state-machine architecture managed by `LangGraph` in [`youtube_graph.py`](file:///c:/Saket/Projects/ResearchTube/backend/app/graph/youtube_graph.py).
 
 ```mermaid
 flowchart LR
-    Start([🚀 User Query]) --> N1["Node 1: Validator\n(Sanitize Query & Quotas)"]
+    Start([User Query]) --> N1["Node 1: Validator\n(Sanitize Query & Quotas)"]
     N1 --> N2["Node 2: Query Planner\n(Agent 1: 3-5 Sub-queries)"]
     N2 --> N3["Node 3: YouTube Proxy Scraper\n(Agent 1: 3-Layer Proxy Mesh)"]
     N3 --> N4["Node 4: Transcript Chunker & Ingest\n(Sliding Window: W=1000, O=150)"]
     N4 --> N5["Node 5: Hybrid RAG Evaluator\n(Agent 2: Dense + BM25 Scoring)"]
     N5 --> N6["Node 6: Synthesizer Engine\n(Agent 3: Markdown & Knowledge Graph)"]
     N6 --> N7["Node 7: Transactional Persistence\n(PostgreSQL Atomic Commit)"]
-    N7 --> End([📄 Publication-Ready Report & 2D Graph])
+    N7 --> End([Publication-Ready Report & 2D Graph])
 
     classDef agent fill:#161616,stroke:#3b82f6,stroke-width:1.5px,color:#ffffff;
     classDef node fill:#111111,stroke:#262626,stroke-width:1px,color:#cccccc;
@@ -305,7 +310,7 @@ class ResearchState(TypedDict):
 
 ---
 
-## 💬 Conversational Video RAG Chat Engine & Streaming Architecture
+## Conversational Video RAG Chat Engine & Streaming Architecture
 
 ResearchTube includes a conversational intelligence engine that allows users to ask questions grounded directly in researched YouTube video transcripts with source citations and real-time Server-Sent Events (SSE) streaming.
 
@@ -314,14 +319,14 @@ ResearchTube includes a conversational intelligence engine that allows users to 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as 👤 User (React 19 SPA)
-    participant ChatAPI as 🛡️ FastAPI (/chat/sessions)
-    participant Scope as 🎯 Scope Resolver
-    participant History as 📜 Session History Buffer
-    participant Hybrid as ⚡ Hybrid Retriever (RRF)
-    participant PG as 🗄️ PostgreSQL (pgvector + GIN)
-    participant LLM as 🤖 Google Gemini / OpenAI
-    participant DB as 💾 chat_messages DB
+    actor User as User (React 19 SPA)
+    participant ChatAPI as FastAPI (/chat/sessions)
+    participant Scope as Scope Resolver
+    participant History as Session History Buffer
+    participant Hybrid as Hybrid Retriever (RRF)
+    participant PG as PostgreSQL (pgvector + GIN)
+    participant LLM as Google Gemini / OpenAI
+    participant DB as chat_messages DB
 
     User->>ChatAPI: POST /chat/sessions/{id}/messages/stream (prompt, scope_mode, video_id)
     ChatAPI->>Scope: Resolve Scope (Single Video / Research Run / General)
@@ -373,7 +378,7 @@ Streaming endpoints yield structured events:
 
 ---
 
-## ⚡ Hybrid Retrieval Engine (BM25 + pgvector + RRF)
+## Hybrid Retrieval Engine (BM25 + pgvector + RRF)
 
 Traditional vector search excels at high-level semantic abstractions but often struggles with exact code identifiers, CLI flags (e.g. `--build`, `alembic upgrade head`), and technical terminology. Conversely, pure keyword search fails on paraphrasing, conceptual inquiries, and synonyms.
 
@@ -383,25 +388,25 @@ ResearchTube implements **Hybrid Search** combining dense vector semantics with 
 flowchart TD
     Q["User Query: 'How to configure docker proxy mesh?'"]
 
-    subgraph DenseBranch["🧠 DENSE VECTOR BRANCH (Semantic Concepts)"]
+    subgraph DenseBranch["DENSE VECTOR BRANCH (Semantic Concepts)"]
         Emb["DualEmbeddingService\n(Generates 768-dim Vector)"]
         HNSW["PostgreSQL pgvector Query\nORDER BY embedding <=> query_vec LIMIT 20"]
         DenseList["Dense Ranked List\n[Rank 1, Rank 2, ... Rank 20]"]
         Emb --> HNSW --> DenseList
     end
 
-    subgraph SparseBranch["🔍 SPARSE LEXICAL BRANCH (Exact Keywords & Code)"]
+    subgraph SparseBranch["SPARSE LEXICAL BRANCH (Exact Keywords & Code)"]
         FTS["PostgreSQL Full-Text Search\nwebsearch_to_tsquery('english', query)"]
         GIN["PostgreSQL GIN Index Scan\nORDER BY ts_rank_cd(search_vector, query) LIMIT 20"]
         SparseList["Sparse Ranked List\n[Rank 1, Rank 2, ... Rank 20]"]
         FTS --> GIN --> SparseList
     end
 
-    DenseList --> RRFMerge["⚡ RECIPROCAL RANK FUSION (RRF Engine)\nRRF_score(d) = ∑ 1 / (60 + rank_m(d))"]
+    DenseList --> RRFMerge["RECIPROCAL RANK FUSION (RRF Engine)\nRRF_score(d) = ∑ 1 / (60 + rank_m(d))"]
     SparseList --> RRFMerge
 
     RRFMerge --> Calibrate["Calibrated Similarity Score Normalization"]
-    Calibrate --> FinalTopK["🎯 Top-K Calibrated Evidence Chunks\n(Passed to LLM with Timestamp Anchors)"]
+    Calibrate --> FinalTopK["Top-K Calibrated Evidence Chunks\n(Passed to LLM with Timestamp Anchors)"]
 ```
 
 ### Mathematical Formulation
@@ -416,7 +421,7 @@ $$\text{Similarity}_{\text{calibrated}} = 0.50 + 0.35 \times \left(1.0 - \frac{\
 
 ---
 
-## 🛠️ Tool-Calling Proxy Pipeline
+## Tool-Calling Proxy Pipeline
 
 Outbound YouTube API and scraper requests are routed through a proxy-aware factory class in [`youtube_tools.py`](file:///c:/Saket/Projects/ResearchTube/backend/app/tools/youtube_tools.py) to resolve IP blockages:
 
@@ -426,7 +431,7 @@ Outbound YouTube API and scraper requests are routed through a proxy-aware facto
 
 ---
 
-## 🚦 Router Registry & Middleware
+## Router Registry & Middleware
 
 ### Core Middlewares
 *   **Rate Limiting:** Managed using the decoded JWT payload `user_id` when authenticated (guaranteeing fair-use across multiple browser sessions) and client IP for public endpoints.
@@ -471,17 +476,96 @@ Outbound YouTube API and scraper requests are routed through a proxy-aware facto
 
 ---
 
-## ⚙️ Running Locally
+## Configuration & Environment Setup (ENV_SETUP.md)
 
-### Prerequisites
-Before running, you must create a configuration `.env` file containing API keys and OAuth tokens. 
+All credentials, database URLs, and operational switches are managed via environment variables located in `backend/.env`.
 
-> [!IMPORTANT]
-> Detailed instructions on how to generate the Google Gemini API key, YouTube v3 API key, and Google OAuth credentials can be found in [`ENV_SETUP.md`](file:///c:/Saket/Projects/ResearchTube/backend/ENV_SETUP.md). **Do not copy credential generation steps into this configuration.**
+For a full step-by-step walkthrough covering how to generate each third-party key, see the dedicated guide:  
+**[Environment Configuration Guide (ENV_SETUP.md)](ENV_SETUP.md)**.
 
+### Core Environment Variables Reference
+
+| Variable | Required? | Purpose & Constraints |
+|---|---|---|
+| `GEMINI_API_KEY` | Required | API key from Google AI Studio for Gemini 3.5 Flash and text-embedding-004 |
+| `YOUTUBE_API_KEY` | Required | Google Cloud Console YouTube Data v3 API key for video search & metadata |
+| `DATABASE_URL` | Required | PostgreSQL connection URL with asyncpg (`postgresql+asyncpg://...`) |
+| `ENVIRONMENT` | Required | Operating environment switch (`dev` for local Docker, `prod` for cloud) |
+| `JWT_SECRET_KEY` | Required | 256-bit cryptographically secure secret used for signing JWT tokens |
+| `GOOGLE_CLIENT_ID` | Required | Google Cloud OAuth 2.0 Web Client ID for Google login |
+| `GOOGLE_CLIENT_SECRET` | Required | Google Cloud OAuth 2.0 Client Secret |
+| `PROD_DATABASE_URL` | Prod only | Remote PostgreSQL pooler connection URL (Supabase port 6543) |
+| `FRONTEND_URL_PROD` | Prod only | Canonical URL of deployed frontend for CORS whitelist verification |
+| `YOUTUBE_PROXY_URL` | Prod only | Residential/datacenter proxy endpoint to avoid YouTube cloud IP blocks |
+| `WEBSHARE_PROXY_USERNAME` | Optional | Webshare residential rotating proxy username |
+| `WEBSHARE_PROXY_PASSWORD` | Optional | Webshare residential rotating proxy password |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Optional | Lifetime of short-lived JWT access tokens (default: `30`) |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | Optional | Sliding lifetime of refresh tokens (default: `7` to `10`) |
+
+### Quick Environment Initialization
 ```bash
 cp .env.example .env
-# Open .env and add your respective credential keys.
+# Populate GEMINI_API_KEY, YOUTUBE_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and JWT_SECRET_KEY
+```
+
+---
+
+## Database Migrations with Alembic (MIGRATIONS.md)
+
+Database schema migrations are orchestrated through Alembic, configured with asynchronous SQLAlchemy 2.0 (`asyncpg`) and native `pgvector` extension awareness.
+
+For complete migration instructions, dual-environment workflows, and rollback procedures, refer to:  
+**[Database Migrations Guide (MIGRATIONS.md)](MIGRATIONS.md)**.
+
+### Dual Workmode Architecture
+Alembic inspects the `-x env=<mode>` command-line argument (falling back to `ENVIRONMENT` in `.env`) to select the target database:
+
+*   **Development (`-x env=dev`):** Connects to `DATABASE_URL` targeting the local Docker PostgreSQL database.
+*   **Production (`-x env=prod`):** Connects to `PROD_DATABASE_URL` targeting remote hosted PostgreSQL (Supabase, Neon, RDS).
+
+### Supabase & PgBouncer Pooler Support
+When targeting Supabase connection poolers on transaction port `6543`, `alembic/env.py` automatically injects `statement_cache_size = 0` to prevent PgBouncer prepared-statement collisions.
+
+### Common Migration Commands
+
+```bash
+# Check current migration revision
+docker compose exec api alembic -x env=dev current
+
+# Apply pending migrations (Development via Docker)
+docker compose exec api alembic -x env=dev upgrade head
+
+# Apply pending migrations (Production via host environment)
+alembic -x env=prod upgrade head
+
+# Generate a new auto-detected migration from SQLAlchemy model changes
+docker compose exec api alembic -x env=dev revision --autogenerate -m "describe_schema_change"
+
+# Stamp existing database schema as up-to-date (useful if tables already exist)
+docker compose exec api alembic -x env=dev stamp head
+```
+
+---
+
+## Running Locally
+
+Follow this systematic setup guide to run the backend service on your local workstation.
+
+### Step 1: Configure Environment Variables
+Copy the template configuration file and supply the required API credentials as documented in [ENV_SETUP.md](ENV_SETUP.md):
+```bash
+cp .env.example .env
+```
+
+### Step 2: Initialize Database & Run Migrations
+Synchronize your database schema with the latest migration revisions as documented in [MIGRATIONS.md](MIGRATIONS.md):
+```bash
+# If using Docker Compose:
+docker compose up -d db
+docker compose exec api alembic -x env=dev upgrade head
+
+# If running directly on host:
+alembic -x env=dev upgrade head
 ```
 
 ---
@@ -499,19 +583,23 @@ cp .env.example .env
     docker compose ps
     ```
 3.  **Inspect Logs:**
-    View container standard output (formatted as JSON):
+    View container standard output (formatted as structured JSON):
     ```bash
     docker compose logs -f api
     ```
+4.  **Access Interactive Docs:**
+    * API Root: `http://localhost:8000`
+    * Swagger UI Docs: `http://localhost:8000/docs`
+    * Health Status: `http://localhost:8000/health`
 
 ---
 
 ### Option B: Run Locally (Bare-metal Virtual Environment)
 
-If you prefer running the FastAPI app directly on your host machine (for instance, to ease local hot-reloading debugging):
+If you prefer running the FastAPI app directly on your host machine for development or debugging:
 
 1.  **Configure PostgreSQL with pgvector:**
-    Ensure you have a local PostgreSQL instance running and the `pgvector` extension installed. Create a database named `youtube_research`.
+    Ensure a local PostgreSQL 16 instance is running and the `pgvector` extension is active. Create a database named `youtube_research`.
 2.  **Create and Activate Virtual Environment:**
     ```bash
     python -m venv venv
@@ -524,23 +612,27 @@ If you prefer running the FastAPI app directly on your host machine (for instanc
     ```bash
     pip install -r requirements.txt
     ```
-4.  **Export Local Environment Variables:**
-    Update `.env` to point `DATABASE_URL` to your local PostgreSQL instance:
+4.  **Export Local Database Connection:**
+    Update `DATABASE_URL` in `.env`:
     ```env
     DATABASE_URL=postgresql+asyncpg://<username>:<password>@localhost:5432/youtube_research
     ```
-5.  **Start Dev Server:**
+5.  **Execute Database Migrations:**
+    ```bash
+    alembic -x env=dev upgrade head
+    ```
+6.  **Start Development Server:**
     Launch the FastAPI app with Uvicorn (hot-reload enabled):
     ```bash
     uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
     ```
-    The API docs will be available at `http://127.0.0.1:8000/docs`.
+    The Swagger API documentation will be available at `http://127.0.0.1:8000/docs`.
 
 ---
 
-## 🧪 Testing
+## Testing
 
-The repository contains backend integration tests covering the proxy wrapper configurations, DB connections, and YouTube scraping pipelines.
+The repository contains backend integration tests covering proxy configurations, database operations, and YouTube scraping pipelines.
 
 *   **Run inside Docker:**
     ```bash
