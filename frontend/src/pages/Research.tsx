@@ -447,22 +447,32 @@ export function ReportView({
   const rawResources: RecommendedResource[] = ('recommended_resources' in r ? ((r as any).recommended_resources ?? []) : [])
 
   // Resolve transcript_available using videos array if available
-  const videoList: { video_id: string; transcript_available?: boolean | null }[] =
-    videos ?? ('videos' in r ? ((r as any).videos ?? []) : [])
-  const videoMap = new Map<string, { video_id: string; transcript_available?: boolean | null }>(
-    videoList.map((v: any) => [v.video_id, v])
-  )
-  const resources: RecommendedResource[] = rawResources.map((res) => {
-    const vMatch = videoMap.get(res.video_id)
-    return {
-      ...res,
-      transcript_available:
-        vMatch?.transcript_available !== undefined && vMatch?.transcript_available !== null
-          ? Boolean(vMatch.transcript_available)
-          : res.transcript_available,
-    }
-  })
-  const topics: string[] = ('key_topics' in r ? ((r as any).key_topics ?? []) : [])
+  const videoList: { video_id: string; transcript_available?: boolean | null }[] = useMemo(() => {
+    return videos ?? ('videos' in r ? ((r as any).videos ?? []) : [])
+  }, [videos, r])
+
+  const videoMap = useMemo(() => {
+    return new Map<string, { video_id: string; transcript_available?: boolean | null }>(
+      videoList.map((v: any) => [v.video_id, v])
+    )
+  }, [videoList])
+
+  const resources: RecommendedResource[] = useMemo(() => {
+    return rawResources.map((res) => {
+      const vMatch = videoMap.get(res.video_id)
+      return {
+        ...res,
+        transcript_available:
+          vMatch?.transcript_available !== undefined && vMatch?.transcript_available !== null
+            ? Boolean(vMatch.transcript_available)
+            : res.transcript_available,
+      }
+    })
+  }, [rawResources, videoMap])
+
+  const topics: string[] = useMemo(() => {
+    return 'key_topics' in r ? ((r as any).key_topics ?? []) : []
+  }, [r])
   const path: string[] = ('learning_path' in r ? ((r as any).learning_path ?? []) : [])
   const conc = 'conclusion' in r ? (r as ResearchResponse['report']).conclusion : (r as HistoryItem).conclusion ?? ''
   const method = 'methodology' in r ? (r as ResearchResponse['report']).methodology : (r as HistoryItem).methodology ?? ''

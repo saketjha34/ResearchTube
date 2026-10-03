@@ -14,9 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.rag.embeddings import (
     BaseEmbeddingService,
-    GeminiEmbeddingService,
-    OpenAIEmbeddingService,
-    DualEmbeddingService,
 )
 from app.rag.youtube.retriever import YouTubeTranscriptRetriever, PGVectorRetriever
 
