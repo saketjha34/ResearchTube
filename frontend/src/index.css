@@ -223,3 +223,14 @@ a {
 .katex-display::-webkit-scrollbar-thumb:hover {
   background: #555555;
 }
+
+/* Mobile Sidebar Drawer Open: Hide floating chat bars and jump buttons so they never overlap the sidebar */
+@media (max-width: 767px) {
+  body.sidebar-mobile-open .chat-bottom-bar,
+  body.sidebar-mobile-open .chat-scroll-bottom-btn {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+}

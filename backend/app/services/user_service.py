@@ -13,9 +13,18 @@ from app.db.models import (
     ResearchVideo,
     ResourceEvaluation,
     TranscriptChunk,
-    FinalReport
+    FinalReport,
+    ChatSession,
+    ChatMessage,
+    MessageRole
 )
-from app.schema.user_stats import UserStatsResponse, ChannelStat, ConceptStat
+from app.schema.user_stats import (
+    UserStatsResponse,
+    ChannelStat,
+    ConceptStat,
+    ChatVideoStat,
+    ChatScopeStat
+)
 
 
 class UserService:
@@ -176,6 +185,91 @@ class UserService:
             for concept, count in concept_counter.most_common(10)
         ]
 
+        # ----------------------------------------------------
+        # CHAT & CONVERSATIONAL RAG STATISTICS
+        # ----------------------------------------------------
+        # 1. Total sessions, pinned, shared, video-scoped
+        sessions_query = await db.execute(
+            select(
+                func.count(ChatSession.id).label("total"),
+                func.count(ChatSession.id).filter(ChatSession.is_pinned == True).label("pinned"),
+                func.count(ChatSession.id).filter(ChatSession.is_shared == True).label("shared"),
+                func.count(ChatSession.id).filter(
+                    (ChatSession.scope_mode == "video") | (ChatSession.video_id.isnot(None))
+                ).label("video_scoped")
+            )
+            .where(ChatSession.user_id == user_id)
+        )
+        sess_row = sessions_query.first()
+        total_chat_sessions = sess_row.total if sess_row else 0
+        pinned_chat_sessions = sess_row.pinned if sess_row else 0
+        shared_chat_sessions = sess_row.shared if sess_row else 0
+        total_video_scoped_sessions = sess_row.video_scoped if sess_row else 0
+
+        # 2. Total messages and role breakdown
+        messages_query = await db.execute(
+            select(
+                func.count(ChatMessage.id).label("total"),
+                func.count(ChatMessage.id).filter(ChatMessage.role == MessageRole.USER).label("user_msgs"),
+                func.count(ChatMessage.id).filter(ChatMessage.role == MessageRole.ASSISTANT).label("ai_msgs"),
+                func.count(ChatMessage.id).filter(
+                    (ChatMessage.role == MessageRole.ASSISTANT) &
+                    ChatMessage.sources.isnot(None) &
+                    (ChatMessage.sources != "[]")
+                ).label("grounded_msgs")
+            )
+            .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+            .where(ChatSession.user_id == user_id)
+        )
+        msg_row = messages_query.first()
+        total_chat_messages = msg_row.total if msg_row else 0
+        total_user_messages = msg_row.user_msgs if msg_row else 0
+        total_assistant_messages = msg_row.ai_msgs if msg_row else 0
+        total_rag_grounded_messages = msg_row.grounded_msgs if msg_row else 0
+
+        average_messages_per_session = (
+            round(total_chat_messages / total_chat_sessions, 1) if total_chat_sessions > 0 else 0.0
+        )
+        rag_grounding_rate = (
+            round((total_rag_grounded_messages / total_assistant_messages) * 100, 1)
+            if total_assistant_messages > 0 else 0.0
+        )
+
+        # 3. Top discussed videos in chat
+        top_chat_videos_query = await db.execute(
+            select(
+                YouTubeVideo.title,
+                YouTubeVideo.channel,
+                func.count(ChatSession.id).label("count")
+            )
+            .join(ChatSession, ChatSession.video_id == YouTubeVideo.id)
+            .where(
+                ChatSession.user_id == user_id,
+                ChatSession.video_id.isnot(None)
+            )
+            .group_by(YouTubeVideo.title, YouTubeVideo.channel)
+            .order_by(func.count(ChatSession.id).desc())
+            .limit(5)
+        )
+        top_discussed_videos = [
+            ChatVideoStat(title=row[0] or "Untitled Video", channel=row[1], chat_count=row[2])
+            for row in top_chat_videos_query.all()
+        ]
+
+        # 4. Scope distribution
+        scope_query = await db.execute(
+            select(
+                ChatSession.scope_mode,
+                func.count(ChatSession.id)
+            )
+            .where(ChatSession.user_id == user_id)
+            .group_by(ChatSession.scope_mode)
+        )
+        chat_scope_distribution = [
+            ChatScopeStat(scope=row[0] or "none", count=row[1])
+            for row in scope_query.all()
+        ]
+
         return UserStatsResponse(
             total_research_runs=total_runs,
             completed_research_runs=completed_runs,
@@ -191,7 +285,19 @@ class UserService:
             total_beginner_friendly_videos=total_beginner_friendly_videos,
             total_transcript_chunks=total_transcript_chunks,
             top_channels=top_channels,
-            top_concepts=top_concepts
+            top_concepts=top_concepts,
+            total_chat_sessions=total_chat_sessions,
+            total_chat_messages=total_chat_messages,
+            total_user_messages=total_user_messages,
+            total_assistant_messages=total_assistant_messages,
+            average_messages_per_session=average_messages_per_session,
+            total_video_scoped_sessions=total_video_scoped_sessions,
+            total_rag_grounded_messages=total_rag_grounded_messages,
+            rag_grounding_rate=rag_grounding_rate,
+            pinned_chat_sessions=pinned_chat_sessions,
+            shared_chat_sessions=shared_chat_sessions,
+            top_discussed_videos=top_discussed_videos,
+            chat_scope_distribution=chat_scope_distribution
         )
 
 

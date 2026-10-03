@@ -1,4 +1,4 @@
-﻿import { UserRound,
+import { UserRound,
   Menu,
   X,
   FlaskConical,
@@ -77,6 +77,23 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       setSidebarTab('research')
     }
   }, [location.pathname])
+
+  // Close mobile drawer on route navigation
+  useEffect(() => {
+    setOpen(false)
+  }, [location.pathname, location.search])
+
+  // Sync mobile drawer open state with body class to hide overlapping fixed/pinned elements
+  useEffect(() => {
+    if (open) {
+      document.body.classList.add('sidebar-mobile-open')
+    } else {
+      document.body.classList.remove('sidebar-mobile-open')
+    }
+    return () => {
+      document.body.classList.remove('sidebar-mobile-open')
+    }
+  }, [open])
 
   // --- Research State --------------------------------------------------------
   const [history, setHistory] = useState<HistoryItem[]>([])
@@ -313,6 +330,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   }, [searchOpen])
 
   const handleNewAction = () => {
+    setOpen(false)
     if (sidebarTab === 'chat' || location.pathname.startsWith('/chat')) {
       navigate('/chat')
     } else {
@@ -949,9 +967,18 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <>
+      {/* Mobile Backdrop Overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/75 backdrop-blur-xs md:hidden animate-fade-in"
+          onClick={() => setOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Mobile Toggle */}
       <button
-        className="fixed left-4 top-4 z-40 inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#222222] bg-black text-white md:hidden"
+        className="fixed left-4 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-md border border-[#222222] bg-black text-white md:hidden shadow-lg cursor-pointer"
         onClick={() => setOpen((v) => !v)}
         aria-label="Toggle navigation"
       >
@@ -959,8 +986,8 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </button>
 
       <aside
-        className={`fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-[#181818] bg-black transition-all duration-300 md:translate-x-0 pb-16 md:pb-0 ${
-          open ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed left-0 top-0 z-50 md:z-30 flex h-screen flex-col border-r border-[#181818] bg-black transition-all duration-300 md:translate-x-0 ${
+          open ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
         }`}
         style={{ width: collapsed ? '64px' : '288px' }}
       >
@@ -1195,7 +1222,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Delete Research Run Modal */}
       {deleteTargetRunId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
           <div className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
             <h3 className="text-base font-bold text-white">Delete Research Run</h3>
             <p className="text-xs text-[#888888] leading-relaxed">
@@ -1232,7 +1259,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Delete Chat Session Modal */}
       {deleteTargetChatId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
           <div className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
             <h3 className="text-base font-bold text-white">Delete Chat Session</h3>
             <p className="text-xs text-[#888888] leading-relaxed">
@@ -1258,7 +1285,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Rename Research Run Modal */}
       {renameTargetRunId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
           <form
             onSubmit={(e) => void confirmRename(e)}
             className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4"
@@ -1293,7 +1320,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Rename Chat Session Modal */}
       {renameTargetChatId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
           <form
             onSubmit={(e) => void confirmRenameChat(e)}
             className="w-full max-w-sm border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4"
@@ -1328,7 +1355,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Share Modal */}
       {shareTargetRunId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 px-4 backdrop-blur-xs">
           <div className="w-full max-w-md border border-[#222222] bg-[#111111] p-6 shadow-2xl animate-fade-in rounded-2xl space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -1387,7 +1414,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Ctrl+K Search Palette Modal */}
       {searchOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/80 px-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center pt-20 bg-black/80 px-4 backdrop-blur-xs">
           <div className="w-full max-w-lg border border-[#222222] bg-[#111111] shadow-2xl animate-fade-in rounded-2xl overflow-hidden">
             {/* Search Input Row */}
             <div className="flex items-center gap-3 border-b border-[#222222] px-4 py-3">

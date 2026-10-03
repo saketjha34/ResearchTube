@@ -747,7 +747,7 @@ export default function Chat() {
               </h1>
             </div>
 
-            <div className="w-full">
+            <div className="w-full chat-bottom-bar">
               <ChatInput
                 input={input}
                 setInput={setInput}
@@ -835,7 +835,7 @@ export default function Chat() {
 
             {/* Jump to latest button when user scrolled up */}
             {showScrollBottomBtn && (
-              <div className="relative flex justify-center z-30 -mt-10 mb-2 pointer-events-none">
+              <div className="chat-scroll-bottom-btn relative flex justify-center z-10 -mt-10 mb-2 pointer-events-none">
                 <button
                   type="button"
                   onClick={() => scrollToBottom(true)}
@@ -849,7 +849,7 @@ export default function Chat() {
             )}
 
             {/* Input Bar pinned at the bottom */}
-            <div className="flex-shrink-0 w-full pt-2 pb-3 sm:pb-4 bg-gradient-to-t from-black via-black/95 to-transparent z-40 relative">
+            <div className="chat-bottom-bar flex-shrink-0 w-full pt-2 pb-3 sm:pb-4 bg-gradient-to-t from-black via-black/95 to-transparent z-20 relative">
               <div className="w-full max-w-5xl mx-auto px-4">
                 <ChatInput
                   input={input}
