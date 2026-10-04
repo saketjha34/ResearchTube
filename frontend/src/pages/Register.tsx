@@ -34,6 +34,12 @@ function Register() {
 
     try {
       await register(fullName, username, email, password)
+      try {
+        localStorage.removeItem('rt_onboarding_done')
+        localStorage.setItem('rt_force_onboarding', '1')
+      } catch {
+        // ignore localStorage access issues
+      }
       navigate('/research', { replace: true })
     } catch (submitError) {
       setError(

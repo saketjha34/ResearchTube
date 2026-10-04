@@ -8,14 +8,14 @@ export default function Footer() {
   return (
     <footer className="border-t border-[#181818] bg-black text-white">
       <div className="mx-auto max-w-6xl px-6 py-16">
-        <div className="grid gap-10 md:grid-cols-12">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-12">
           {/* Brand Info */}
-          <div className="md:col-span-7 space-y-4">
+          <div className="max-w-md space-y-4">
             <Link to="/" className="inline-flex items-center gap-2 text-sm font-semibold tracking-[0.35em] text-white">
               RESEARCHTUBE
               <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] tracking-normal text-zinc-400">v1.0</span>
             </Link>
-            <p className="max-w-md text-sm text-[#999999] leading-relaxed">
+            <p className="text-sm text-[#999999] leading-relaxed">
               Automated multi-agent YouTube research platform. Extracts transcripts, computes pgvector embeddings, and synthesizes publication-grade research reports.
             </p>
             <div className="flex items-center gap-3 pt-2">
@@ -32,10 +32,10 @@ export default function Footer() {
             </div>
           </div>
 
-          {/* Quick Links */}
-          <div className="md:col-span-5 space-y-3 md:text-right">
+          {/* Navigation Links */}
+          <div className="space-y-3 text-left">
             <p className="text-xs font-semibold tracking-[0.2em] text-[#999999]">NAVIGATION</p>
-            <ul className="space-y-2 text-sm text-zinc-400 flex flex-col md:items-end">
+            <ul className="space-y-2 text-sm text-zinc-400">
               <li>
                 <Link to="/" className="hover:text-white transition-colors">Home</Link>
               </li>

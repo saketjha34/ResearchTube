@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { Maximize2, Minimize2, RefreshCw, Info, ZoomIn, ZoomOut, X, ExternalLink } from 'lucide-react'
 
 export interface GraphResource {
@@ -350,7 +351,7 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
     return () => {
       container.removeEventListener('wheel', onWheel)
     }
-  }, [clientToVB, zoomAt, isOpen])
+  }, [clientToVB, zoomAt, isOpen, isFullscreen])
 
   // --- 6. Robust Pointer/Mouse Events for Canvas Pan & Node Dragging ---
   useEffect(() => {
@@ -623,7 +624,7 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
       container.removeEventListener('touchend', onTouchEnd)
       container.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [clientToVB, clientToGraph, zoomAt, setTransform, isOpen])
+  }, [clientToVB, clientToGraph, zoomAt, setTransform, isOpen, isFullscreen])
 
   // --- 8. Button Handlers ---
   const handleZoomIn = () => zoomAt(VB_W / 2, VB_H / 2, ZOOM_STEP)
@@ -669,372 +670,485 @@ export default function KnowledgeGraph({ query, resources, topics }: KnowledgeGr
     return map
   }, [nodes])
 
-  return (
-    <div className="border border-[#222222] bg-[#111111]">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#1c1c1c] px-4 sm:px-6 py-3.5">
-        <div className="flex items-center gap-2">
-          <Info size={14} className="text-[#555555]" />
-          <span className="text-[10px] sm:text-xs font-bold tracking-[0.2em] text-[#888888] uppercase">
-            Interactive Video Knowledge Graph
-          </span>
+  // Lock body scroll and listen for Escape key when in fullscreen mode
+  useEffect(() => {
+    if (!isFullscreen) return
+
+    const originalOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFullscreen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = originalOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isFullscreen])
+
+  // Canvas content renderer (shared cleanly between inline and fullscreen portal)
+  const renderCanvasContent = () => (
+    <>
+      {/* Legend */}
+      <div className="absolute left-3 sm:left-4 top-3 sm:top-4 z-10 flex flex-wrap items-center gap-2.5 sm:gap-4 text-[9px] text-[#555555] font-bold tracking-wider uppercase bg-[#111111]/85 backdrop-blur-md px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#222222]/60 pointer-events-none select-none">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)]" /> Topic
         </div>
-        <div className="flex items-center gap-3 sm:gap-4">
-          <button
-            onClick={handleReset}
-            title="Reset layout & zoom (100%)"
-            className="flex items-center gap-1.5 text-[10px] font-bold text-[#666666] hover:text-white transition-colors uppercase tracking-wider py-1 px-1.5 rounded active:scale-95"
-          >
-            <RefreshCw size={11} /> Reset
-          </button>
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="text-[10px] font-bold text-[#666666] hover:text-white transition-colors uppercase tracking-wider py-1 px-1.5 rounded active:scale-95"
-          >
-            {isOpen ? 'Collapse' : 'Expand'}
-          </button>
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-[#00f0ff] shadow-[0_0_8px_rgba(0,240,255,0.7)]" /> Videos
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-[#a855f7] shadow-[0_0_8px_rgba(168,85,247,0.7)]" /> Concepts
+        </div>
+        <div className="hidden md:inline-block ml-1 text-[8px] text-[#444444] border-l border-[#222222] pl-2.5">
+          Scroll / Ctrl+Scroll / Pinch to Zoom • Drag to Pan
         </div>
       </div>
 
-      {/* Graph Container */}
-      {isOpen && (
-        <div
-          ref={containerRef}
-          onPointerDown={handleCanvasPointerDown}
-          onDoubleClick={handleCanvasDoubleClick}
-          className={`relative overflow-hidden bg-black select-none touch-none cursor-grab active:cursor-grabbing ${
-            isFullscreen
-              ? 'fixed inset-0 z-50 h-screen w-screen'
-              : 'h-[400px] sm:h-[480px] md:h-[520px] w-full'
-          }`}
-          style={{ touchAction: 'none' }}
+      {/* Zoom % badge */}
+      <div className="absolute left-3 sm:left-4 bottom-3 sm:bottom-4 z-10 text-[10px] font-mono text-[#777777] bg-[#111111]/85 backdrop-blur-md px-2.5 py-1 rounded-md border border-[#222222]/60 pointer-events-none select-none">
+        {Math.round(transform.k * 100)}%
+      </div>
+
+      {/* Floating Controls */}
+      <div className="absolute right-3 sm:right-4 bottom-3 sm:bottom-4 z-10 flex flex-col gap-1.5 sm:gap-2">
+        <button
+          onClick={handleZoomIn}
+          title="Zoom in (+)"
+          className="flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center border border-[#222222] bg-[#111111]/85 backdrop-blur-md text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-lg shadow-lg active:scale-90 cursor-pointer"
         >
-          {/* Legend */}
-          <div className="absolute left-3 sm:left-4 top-3 sm:top-4 z-10 flex flex-wrap items-center gap-2.5 sm:gap-4 text-[9px] text-[#555555] font-bold tracking-wider uppercase bg-[#111111]/85 backdrop-blur-md px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#222222]/60 pointer-events-none">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.7)]" /> Topic
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#00f0ff] shadow-[0_0_8px_rgba(0,240,255,0.7)]" /> Videos
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#a855f7] shadow-[0_0_8px_rgba(168,85,247,0.7)]" /> Concepts
-            </div>
-            <div className="hidden md:inline-block ml-1 text-[8px] text-[#444444] border-l border-[#222222] pl-2.5">
-              Scroll / Ctrl+Scroll / Pinch to Zoom • Drag to Pan
-            </div>
-          </div>
+          <ZoomIn size={15} />
+        </button>
+        <button
+          onClick={handleZoomOut}
+          title="Zoom out (-)"
+          className="flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center border border-[#222222] bg-[#111111]/85 backdrop-blur-md text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-lg shadow-lg active:scale-90 cursor-pointer"
+        >
+          <ZoomOut size={15} />
+        </button>
+        <button
+          onClick={handleReset}
+          title="Fit / Reset (100%)"
+          className="flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center border border-[#222222] bg-[#111111]/85 backdrop-blur-md text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-lg shadow-lg active:scale-90 cursor-pointer"
+        >
+          <RefreshCw size={13} />
+        </button>
+        <button
+          onClick={() => setIsFullscreen(!isFullscreen)}
+          title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Expand to Fullscreen'}
+          className="flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center border border-[#222222] bg-[#111111]/85 backdrop-blur-md text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-lg shadow-lg active:scale-90 cursor-pointer"
+        >
+          {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        </button>
+      </div>
 
-          {/* Zoom % badge */}
-          <div className="absolute left-3 sm:left-4 bottom-3 sm:bottom-4 z-10 text-[10px] font-mono text-[#777777] bg-[#111111]/85 backdrop-blur-md px-2.5 py-1 rounded-md border border-[#222222]/60 pointer-events-none select-none">
-            {Math.round(transform.k * 100)}%
-          </div>
+      {/* SVG Canvas */}
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${VB_W} ${VB_H}`}
+        preserveAspectRatio="xMidYMid meet"
+        className="h-full w-full pointer-events-auto"
+      >
+        <defs>
+          <filter id="glow-video" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="glow-concept" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
 
-          {/* Floating Controls */}
-          <div className="absolute right-3 sm:right-4 bottom-3 sm:bottom-4 z-10 flex flex-col gap-1.5 sm:gap-2">
-            <button
-              onClick={handleZoomIn}
-              title="Zoom in (+)"
-              className="flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center border border-[#222222] bg-[#111111]/85 backdrop-blur-md text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-lg shadow-lg active:scale-90"
-            >
-              <ZoomIn size={15} />
-            </button>
-            <button
-              onClick={handleZoomOut}
-              title="Zoom out (-)"
-              className="flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center border border-[#222222] bg-[#111111]/85 backdrop-blur-md text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-lg shadow-lg active:scale-90"
-            >
-              <ZoomOut size={15} />
-            </button>
-            <button
-              onClick={handleReset}
-              title="Fit / Reset (100%)"
-              className="flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center border border-[#222222] bg-[#111111]/85 backdrop-blur-md text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-lg shadow-lg active:scale-90"
-            >
-              <RefreshCw size={13} />
-            </button>
-            <button
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-              className="flex h-9 w-9 sm:h-8 sm:w-8 items-center justify-center border border-[#222222] bg-[#111111]/85 backdrop-blur-md text-[#cccccc] hover:border-[#555555] hover:text-white transition-colors rounded-lg shadow-lg active:scale-90"
-            >
-              {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-            </button>
-          </div>
+        {/* Transform Group (Zoom & Pan applied cleanly here) */}
+        <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
+          {/* Edges */}
+          {links.map((link, i) => {
+            const s = nodeMap.get(link.source)
+            const t = nodeMap.get(link.target)
+            if (!s || !t) return null
 
-          {/* SVG Canvas */}
-          <svg
-            ref={svgRef}
-            viewBox={`0 0 ${VB_W} ${VB_H}`}
-            preserveAspectRatio="xMidYMid meet"
-            className="h-full w-full pointer-events-auto"
-          >
-            <defs>
-              <filter id="glow-video" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="3.5" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-              <filter id="glow-concept" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="2.5" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
+            const isHighlight = highlightedNodeId ? connectedLinkKeys.has(`${link.source}-${link.target}`) : false
+            const isDimmed = highlightedNodeId ? !isHighlight : false
 
-            {/* Transform Group (Zoom & Pan applied cleanly here) */}
-            <g transform={`translate(${transform.x},${transform.y}) scale(${transform.k})`}>
-              {/* Edges */}
-              {links.map((link, i) => {
-                const s = nodeMap.get(link.source)
-                const t = nodeMap.get(link.target)
-                if (!s || !t) return null
+            return (
+              <line
+                key={`link-${i}`}
+                x1={s.x}
+                y1={s.y}
+                x2={t.x}
+                y2={t.y}
+                stroke={isHighlight ? (t.type === 'concept' ? '#a855f7' : '#00f0ff') : '#222222'}
+                strokeWidth={(isHighlight ? 2.0 : 1.0) / strokeComp}
+                opacity={isDimmed ? 0.08 : (isHighlight ? 0.95 : 0.45)}
+                style={{ transition: 'stroke 0.15s ease, opacity 0.15s ease' }}
+              />
+            )
+          })}
 
-                const isHighlight = highlightedNodeId ? connectedLinkKeys.has(`${link.source}-${link.target}`) : false
-                const isDimmed = highlightedNodeId ? !isHighlight : false
+          {/* Nodes */}
+          {nodes.map(node => {
+            const isNodeSelected = selectedNode?.id === node.id
+            const isNodeHovered = hoveredNodeId === node.id
+            const isHighlighted = isNodeSelected || isNodeHovered
+            const isConnected = highlightedNodeId ? connectedNodeIds.has(node.id) : true
+            const isDimmed = highlightedNodeId ? !isConnected : false
+            const opacity = isDimmed ? 0.15 : 1
 
-                return (
-                  <line
-                    key={`link-${i}`}
-                    x1={s.x}
-                    y1={s.y}
-                    x2={t.x}
-                    y2={t.y}
-                    stroke={isHighlight ? (t.type === 'concept' ? '#a855f7' : '#00f0ff') : '#222222'}
-                    strokeWidth={(isHighlight ? 2.0 : 1.0) / strokeComp}
-                    opacity={isDimmed ? 0.08 : (isHighlight ? 0.95 : 0.45)}
-                    style={{ transition: 'stroke 0.15s ease, opacity 0.15s ease' }}
+            const filterGlow = node.type === 'video'
+              ? 'url(#glow-video)'
+              : node.type === 'concept' ? 'url(#glow-concept)' : undefined
+
+            const effectiveR = node.size / scaleComp
+            const labelFontSize = Math.max(7.5, Math.min(11.0, 9.0 / scaleComp))
+
+            return (
+              <g
+                key={node.id}
+                transform={`translate(${node.x},${node.y})`}
+                className="cursor-pointer"
+                onPointerDown={e => handleNodePointerDown(e, node)}
+                onClick={e => handleNodeClick(e, node)}
+                onMouseEnter={() => setHoveredNodeId(node.id)}
+                onMouseLeave={() => setHoveredNodeId(null)}
+              >
+                {/* Generous hit area (prevents touch/hover flickering) */}
+                <circle
+                  r={effectiveR + 12 / scaleComp}
+                  fill="transparent"
+                  pointerEvents="all"
+                />
+
+                {/* Visible node circle */}
+                <circle
+                  r={effectiveR}
+                  fill={node.color}
+                  stroke={isHighlighted ? '#ffffff' : (isConnected && highlightedNodeId ? node.color : 'transparent')}
+                  strokeWidth={(isHighlighted ? 2.5 : isConnected && highlightedNodeId ? 1.5 : 0) / strokeComp}
+                  opacity={opacity}
+                  filter={filterGlow}
+                  style={{ transition: 'opacity 0.15s ease, stroke 0.15s ease, transform 0.15s ease' }}
+                />
+
+                {/* Node Selection Ring */}
+                {isNodeSelected && (
+                  <circle
+                    r={effectiveR + 4 / scaleComp}
+                    fill="none"
+                    stroke="#00f0ff"
+                    strokeWidth={1.5 / strokeComp}
+                    strokeDasharray="3 3"
+                    opacity={0.9}
                   />
-                )
-              })}
-
-              {/* Nodes */}
-              {nodes.map(node => {
-                const isNodeSelected = selectedNode?.id === node.id
-                const isNodeHovered = hoveredNodeId === node.id
-                const isHighlighted = isNodeSelected || isNodeHovered
-                const isConnected = highlightedNodeId ? connectedNodeIds.has(node.id) : true
-                const isDimmed = highlightedNodeId ? !isConnected : false
-                const opacity = isDimmed ? 0.15 : 1
-
-                const filterGlow = node.type === 'video'
-                  ? 'url(#glow-video)'
-                  : node.type === 'concept' ? 'url(#glow-concept)' : undefined
-
-                const effectiveR = node.size / scaleComp
-                const labelFontSize = Math.max(7.5, Math.min(11.0, 9.0 / scaleComp))
-
-                return (
-                  <g
-                    key={node.id}
-                    transform={`translate(${node.x},${node.y})`}
-                    className="cursor-pointer"
-                    onPointerDown={e => handleNodePointerDown(e, node)}
-                    onClick={e => handleNodeClick(e, node)}
-                    onMouseEnter={() => setHoveredNodeId(node.id)}
-                    onMouseLeave={() => setHoveredNodeId(null)}
-                  >
-                    {/* Generous hit area (prevents touch/hover flickering) */}
-                    <circle
-                      r={effectiveR + 12 / scaleComp}
-                      fill="transparent"
-                      pointerEvents="all"
-                    />
-
-                    {/* Visible node circle */}
-                    <circle
-                      r={effectiveR}
-                      fill={node.color}
-                      stroke={isHighlighted ? '#ffffff' : (isConnected && highlightedNodeId ? node.color : 'transparent')}
-                      strokeWidth={(isHighlighted ? 2.5 : isConnected && highlightedNodeId ? 1.5 : 0) / strokeComp}
-                      opacity={opacity}
-                      filter={filterGlow}
-                      style={{ transition: 'opacity 0.15s ease, stroke 0.15s ease, transform 0.15s ease' }}
-                    />
-
-                    {/* Node Selection Ring */}
-                    {isNodeSelected && (
-                      <circle
-                        r={effectiveR + 4 / scaleComp}
-                        fill="none"
-                        stroke="#00f0ff"
-                        strokeWidth={1.5 / strokeComp}
-                        strokeDasharray="3 3"
-                        opacity={0.9}
-                      />
-                    )}
-
-                    {/* Labels */}
-                    {node.type === 'query' && (
-                      <text
-                        dy={effectiveR + 13 / scaleComp}
-                        textAnchor="middle"
-                        fill="#ffffff"
-                        opacity={opacity}
-                        style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: `${labelFontSize}px`, fontWeight: 700 }}
-                      >
-                        TOPIC
-                      </text>
-                    )}
-                    {node.type === 'video' && (
-                      <text
-                        dy={effectiveR + 13 / scaleComp}
-                        textAnchor="middle"
-                        fill="#999999"
-                        opacity={opacity}
-                        style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: `${labelFontSize}px`, fontWeight: 700 }}
-                      >
-                        {node.label.length > 20 ? node.label.substring(0, 18) + '...' : node.label}
-                      </text>
-                    )}
-                    {node.type === 'concept' && (transform.k > 0.6 || isConnected) && (
-                      <text
-                        dy={effectiveR + 13 / scaleComp}
-                        textAnchor="middle"
-                        fill={isHighlighted || isConnected ? '#ffffff' : '#888888'}
-                        opacity={opacity}
-                        style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: `${labelFontSize}px`, fontWeight: 600 }}
-                      >
-                        {node.label.length > 22 ? node.label.substring(0, 20) + '...' : node.label}
-                      </text>
-                    )}
-                  </g>
-                )
-              })}
-            </g>
-          </svg>
-
-          {/* Floating Hover Tooltip for Desktop */}
-          <div
-            ref={tooltipRef}
-            className={`absolute top-0 left-0 z-20 pointer-events-none rounded-xl border border-[#222222] bg-black/95 backdrop-blur-md px-4 py-3 shadow-2xl max-w-sm text-left transition-opacity duration-150 hidden sm:block ${
-              hoveredNodeId && !selectedNode ? 'opacity-100' : 'opacity-0'
-            }`}
-            style={{ willChange: 'transform' }}
-          >
-            {activeNode && !selectedNode && (
-              <>
-                {activeNode.type === 'query' && (
-                  <div>
-                    <p className="text-[9px] font-bold tracking-widest text-[#555555] uppercase mb-1">Search Topic</p>
-                    <p className="text-sm font-semibold text-white leading-relaxed">{activeNode.label}</p>
-                  </div>
                 )}
-                {activeNode.type === 'video' && activeNode.originalData && (
-                  <div className="space-y-1.5">
-                    <p className="text-[9px] font-bold tracking-widest text-[#00f0ff] uppercase">Recommended Video</p>
-                    <p className="text-xs font-bold text-white line-clamp-2 leading-relaxed">
-                      {(activeNode.originalData.title && !['none', 'null', 'n/a', ''].includes(activeNode.originalData.title.trim().toLowerCase()))
-                        ? activeNode.originalData.title
-                        : (activeNode.originalData.video_id ? `Video (${activeNode.originalData.video_id})` : 'Untitled Video')}
-                    </p>
-                    <div className="flex items-center justify-between text-[10px] text-[#666666] pt-1">
-                      <span>{activeNode.originalData.channel || ''}</span>
-                      {activeNode.originalData.overall_score && (
-                        <span className="font-bold text-[#00f0ff]">
-                          ★ {activeNode.originalData.overall_score.toFixed(1)}/10
-                        </span>
+
+                {/* Labels */}
+                {node.type === 'query' && (
+                  <text
+                    dy={effectiveR + 13 / scaleComp}
+                    textAnchor="middle"
+                    fill="#ffffff"
+                    opacity={opacity}
+                    style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: `${labelFontSize}px`, fontWeight: 700 }}
+                  >
+                    TOPIC
+                  </text>
+                )}
+                {node.type === 'video' && (
+                  <text
+                    dy={effectiveR + 13 / scaleComp}
+                    textAnchor="middle"
+                    fill="#999999"
+                    opacity={opacity}
+                    style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: `${labelFontSize}px`, fontWeight: 700 }}
+                  >
+                    {node.label.length > 20 ? node.label.substring(0, 18) + '...' : node.label}
+                  </text>
+                )}
+                {node.type === 'concept' && (transform.k > 0.6 || isConnected) && (
+                  <text
+                    dy={effectiveR + 13 / scaleComp}
+                    textAnchor="middle"
+                    fill={isHighlighted || isConnected ? '#ffffff' : '#888888'}
+                    opacity={opacity}
+                    style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: `${labelFontSize}px`, fontWeight: 600 }}
+                  >
+                    {node.label.length > 22 ? node.label.substring(0, 20) + '...' : node.label}
+                  </text>
+                )}
+              </g>
+            )
+          })}
+        </g>
+      </svg>
+
+      {/* Floating Hover Tooltip for Desktop */}
+      <div
+        ref={tooltipRef}
+        className={`absolute top-0 left-0 z-20 pointer-events-none rounded-xl border border-[#222222] bg-black/95 backdrop-blur-md px-4 py-3 shadow-2xl max-w-sm text-left transition-opacity duration-150 hidden sm:block ${
+          hoveredNodeId && !selectedNode ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{ willChange: 'transform' }}
+      >
+        {activeNode && !selectedNode && (
+          <>
+            {activeNode.type === 'query' && (
+              <div>
+                <p className="text-[9px] font-bold tracking-widest text-[#555555] uppercase mb-1">Search Topic</p>
+                <p className="text-sm font-semibold text-white leading-relaxed">{activeNode.label}</p>
+              </div>
+            )}
+            {activeNode.type === 'video' && activeNode.originalData && (
+              <div className="space-y-1.5">
+                <p className="text-[9px] font-bold tracking-widest text-[#00f0ff] uppercase">Recommended Video</p>
+                <p className="text-xs font-bold text-white line-clamp-2 leading-relaxed">
+                  {(activeNode.originalData.title && !['none', 'null', 'n/a', ''].includes(activeNode.originalData.title.trim().toLowerCase()))
+                    ? activeNode.originalData.title
+                    : (activeNode.originalData.video_id ? `Video (${activeNode.originalData.video_id})` : 'Untitled Video')}
+                </p>
+                <div className="flex items-center justify-between text-[10px] text-[#666666] pt-1">
+                  <span>{activeNode.originalData.channel || ''}</span>
+                  {activeNode.originalData.overall_score && (
+                    <span className="font-bold text-[#00f0ff]">
+                      ★ {activeNode.originalData.overall_score.toFixed(1)}/10
+                    </span>
+                  )}
+                </div>
+                {activeNode.originalData.concepts_covered && activeNode.originalData.concepts_covered.length > 0 && (
+                  <div className="pt-2 border-t border-[#1e1e1e]">
+                    <p className="text-[8px] font-bold tracking-wider text-[#555555] uppercase mb-1">Key Concepts</p>
+                    <div className="flex flex-wrap gap-1">
+                      {activeNode.originalData.concepts_covered.slice(0, 3).map(c => (
+                        <span key={c} className="text-[9px] px-1.5 py-0.5 bg-[#a855f7]/10 text-[#a855f7] border border-[#a855f7]/20 rounded">{c}</span>
+                      ))}
+                      {activeNode.originalData.concepts_covered.length > 3 && (
+                        <span className="text-[8px] text-[#444444] self-center">+{activeNode.originalData.concepts_covered.length - 3} more</span>
                       )}
                     </div>
-                    {activeNode.originalData.concepts_covered && activeNode.originalData.concepts_covered.length > 0 && (
-                      <div className="pt-2 border-t border-[#1e1e1e]">
-                        <p className="text-[8px] font-bold tracking-wider text-[#555555] uppercase mb-1">Key Concepts</p>
-                        <div className="flex flex-wrap gap-1">
-                          {activeNode.originalData.concepts_covered.slice(0, 3).map(c => (
-                            <span key={c} className="text-[9px] px-1.5 py-0.5 bg-[#a855f7]/10 text-[#a855f7] border border-[#a855f7]/20 rounded">{c}</span>
-                          ))}
-                          {activeNode.originalData.concepts_covered.length > 3 && (
-                            <span className="text-[8px] text-[#444444] self-center">+{activeNode.originalData.concepts_covered.length - 3} more</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    <p className="text-[8px] text-[#555555] font-bold italic pt-1">Click node to select / view</p>
                   </div>
                 )}
-                {activeNode.type === 'concept' && (
-                  <div>
-                    <p className="text-[9px] font-bold tracking-widest text-[#a855f7] uppercase mb-1">Key Concept</p>
-                    <p className="text-xs font-bold text-white leading-relaxed">{activeNode.label}</p>
-                    <p className="text-[9px] text-[#666666] mt-1 font-semibold">
-                      Covered in curriculum analysis
-                    </p>
-                  </div>
-                )}
-              </>
+                <p className="text-[8px] text-[#555555] font-bold italic pt-1">Click node to select / view</p>
+              </div>
             )}
+            {activeNode.type === 'concept' && (
+              <div>
+                <p className="text-[9px] font-bold tracking-widest text-[#a855f7] uppercase mb-1">Key Concept</p>
+                <p className="text-xs font-bold text-white leading-relaxed">{activeNode.label}</p>
+                <p className="text-[9px] text-[#666666] mt-1 font-semibold">
+                  Covered in curriculum analysis
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Persistent Selected Node Detail Card (Perfect for Mobile Tap & Desktop Selection) */}
+      {selectedNode && (
+        <div className="absolute left-3 right-3 sm:left-4 sm:right-auto sm:max-w-md bottom-14 sm:bottom-4 z-30 rounded-xl border border-[#333333] bg-[#0c0c0c]/95 backdrop-blur-xl p-3.5 sm:p-4 shadow-2xl text-left animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-start justify-between gap-3 mb-1.5">
+            <span className={`text-[9px] font-bold tracking-widest uppercase ${
+              selectedNode.type === 'video' ? 'text-[#00f0ff]' : selectedNode.type === 'concept' ? 'text-[#a855f7]' : 'text-white'
+            }`}>
+              {selectedNode.type === 'video' ? 'Selected Video' : selectedNode.type === 'concept' ? 'Selected Concept' : 'Search Topic'}
+            </span>
+            <button
+              onClick={() => setSelectedNode(null)}
+              title="Close"
+              className="text-[#666666] hover:text-white p-1 rounded-md transition-colors cursor-pointer"
+            >
+              <X size={14} />
+            </button>
           </div>
 
-          {/* Persistent Selected Node Detail Card (Perfect for Mobile Tap & Desktop Selection) */}
-          {selectedNode && (
-            <div className="absolute left-3 right-3 sm:left-4 sm:right-auto sm:max-w-md bottom-14 sm:bottom-4 z-30 rounded-xl border border-[#333333] bg-[#0c0c0c]/95 backdrop-blur-xl p-3.5 sm:p-4 shadow-2xl text-left animate-in fade-in slide-in-from-bottom-2 duration-200">
-              <div className="flex items-start justify-between gap-3 mb-1.5">
-                <span className={`text-[9px] font-bold tracking-widest uppercase ${
-                  selectedNode.type === 'video' ? 'text-[#00f0ff]' : selectedNode.type === 'concept' ? 'text-[#a855f7]' : 'text-white'
-                }`}>
-                  {selectedNode.type === 'video' ? 'Selected Video' : selectedNode.type === 'concept' ? 'Selected Concept' : 'Search Topic'}
-                </span>
-                <button
-                  onClick={() => setSelectedNode(null)}
-                  title="Close"
-                  className="text-[#666666] hover:text-white p-1 rounded-md transition-colors"
-                >
-                  <X size={14} />
-                </button>
+          <p className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2">
+            {stripMarkdown(selectedNode.originalData?.title || selectedNode.label)}
+          </p>
+
+          {selectedNode.type === 'video' && selectedNode.originalData && (
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-[#888888]">
+                <span>{stripMarkdown(selectedNode.originalData.channel || 'YouTube Video')}</span>
+                {selectedNode.originalData.overall_score && (
+                  <span className="font-bold text-[#00f0ff] bg-[#00f0ff]/10 px-2 py-0.5 rounded border border-[#00f0ff]/20">
+                    ★ {selectedNode.originalData.overall_score.toFixed(1)}/10
+                  </span>
+                )}
               </div>
 
-              <p className="text-xs sm:text-sm font-bold text-white leading-snug line-clamp-2">
-                {stripMarkdown(selectedNode.originalData?.title || selectedNode.label)}
-              </p>
-
-              {selectedNode.type === 'video' && selectedNode.originalData && (
-                <div className="mt-2 space-y-2">
-                  <div className="flex items-center justify-between text-[11px] text-[#888888]">
-                    <span>{stripMarkdown(selectedNode.originalData.channel || 'YouTube Video')}</span>
-                    {selectedNode.originalData.overall_score && (
-                      <span className="font-bold text-[#00f0ff] bg-[#00f0ff]/10 px-2 py-0.5 rounded border border-[#00f0ff]/20">
-                        ★ {selectedNode.originalData.overall_score.toFixed(1)}/10
-                      </span>
-                    )}
-                  </div>
-
-                  {selectedNode.originalData.concepts_covered && selectedNode.originalData.concepts_covered.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {selectedNode.originalData.concepts_covered.slice(0, 5).map(c => (
-                        <span key={c} className="text-[9px] px-1.5 py-0.5 bg-[#a855f7]/15 text-[#c084fc] border border-[#a855f7]/30 rounded">
-                          {stripMarkdown(c)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {selectedNode.originalData.url && (
-                    <a
-                      href={selectedNode.originalData.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-black bg-[#00f0ff] hover:bg-[#38bdf8] px-3 py-1.5 rounded-lg transition-colors mt-1"
-                    >
-                      <ExternalLink size={13} /> Watch on YouTube
-                    </a>
-                  )}
+              {selectedNode.originalData.concepts_covered && selectedNode.originalData.concepts_covered.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {selectedNode.originalData.concepts_covered.slice(0, 5).map(c => (
+                    <span key={c} className="text-[9px] px-1.5 py-0.5 bg-[#a855f7]/15 text-[#c084fc] border border-[#a855f7]/30 rounded">
+                      {stripMarkdown(c)}
+                    </span>
+                  ))}
                 </div>
               )}
 
-              {selectedNode.type === 'concept' && (
-                <p className="text-[10px] text-[#888888] mt-1.5">
-                  Highlighted lines connect this concept to all recommended course videos covering it.
-                </p>
+              {selectedNode.originalData.url && (
+                <a
+                  href={selectedNode.originalData.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-black bg-[#00f0ff] hover:bg-[#38bdf8] px-3 py-1.5 rounded-lg transition-colors mt-1"
+                >
+                  <ExternalLink size={13} /> Watch on YouTube
+                </a>
               )}
             </div>
           )}
+
+          {selectedNode.type === 'concept' && (
+            <p className="text-[10px] text-[#888888] mt-1.5">
+              Highlighted lines connect this concept to all recommended course videos covering it.
+            </p>
+          )}
         </div>
       )}
-    </div>
+    </>
+  )
+
+  return (
+    <>
+      {/* 1. Fullscreen Portal (Mounted to document.body to break free from ancestor CSS transforms & layout constraints) */}
+      {isFullscreen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] h-screen w-screen bg-black flex flex-col overflow-hidden select-none animate-in fade-in duration-200"
+          style={{ touchAction: 'none' }}
+        >
+          {/* Fullscreen Header */}
+          <div className="flex items-center justify-between border-b border-[#222222] bg-[#0c0c0c] px-4 sm:px-6 py-3 flex-shrink-0 z-30">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <Info size={15} className="text-[#00f0ff] flex-shrink-0" />
+              <span
+                className="text-xs sm:text-sm font-bold tracking-[0.2em] text-white uppercase truncate"
+                style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+              >
+                Interactive Video Knowledge Graph
+              </span>
+              <span className="hidden md:inline-block text-[10px] text-[#555555] font-mono border-l border-[#222222] pl-3">
+                {resources.length} videos • {topics.length} topics
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              <button
+                onClick={handleReset}
+                title="Reset layout & zoom (100%)"
+                className="flex items-center gap-1.5 text-xs font-semibold text-[#888888] hover:text-white bg-[#1a1a1a] hover:bg-[#252525] border border-[#2a2a2a] transition-colors py-1.5 px-3 rounded-lg active:scale-95 cursor-pointer"
+              >
+                <RefreshCw size={12} />
+                <span>Reset</span>
+              </button>
+              <button
+                onClick={() => setIsFullscreen(false)}
+                title="Exit fullscreen (Esc)"
+                className="flex items-center gap-1.5 text-xs font-bold text-black bg-white hover:bg-[#e0e0e0] transition-colors py-1.5 px-3.5 rounded-lg active:scale-95 cursor-pointer shadow-md"
+              >
+                <Minimize2 size={13} />
+                <span>Exit Fullscreen</span>
+                <kbd className="hidden sm:inline-block ml-1 text-[9px] bg-black/15 px-1.5 py-0.5 rounded font-mono text-black/70">Esc</kbd>
+              </button>
+            </div>
+          </div>
+
+          {/* Fullscreen Canvas Container */}
+          <div
+            ref={containerRef}
+            onPointerDown={handleCanvasPointerDown}
+            onDoubleClick={handleCanvasDoubleClick}
+            className="relative flex-1 w-full h-full overflow-hidden bg-black select-none touch-none cursor-grab active:cursor-grabbing"
+            style={{ touchAction: 'none' }}
+          >
+            {renderCanvasContent()}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 2. Inline Card */}
+      <div className="border border-[#222222] bg-[#111111]">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-[#1c1c1c] px-4 sm:px-6 py-3.5">
+          <div className="flex items-center gap-2">
+            <Info size={14} className="text-[#555555]" />
+            <span className="text-[10px] sm:text-xs font-bold tracking-[0.2em] text-[#888888] uppercase">
+              Interactive Video Knowledge Graph
+            </span>
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={handleReset}
+              title="Reset layout & zoom (100%)"
+              className="flex items-center gap-1.5 text-[10px] font-bold text-[#666666] hover:text-white transition-colors uppercase tracking-wider py-1 px-1.5 rounded active:scale-95 cursor-pointer"
+            >
+              <RefreshCw size={11} /> Reset
+            </button>
+            <button
+              onClick={() => {
+                setIsOpen(true)
+                setIsFullscreen(true)
+              }}
+              title="Expand to Fullscreen"
+              className="flex items-center gap-1.5 text-[10px] font-bold text-[#666666] hover:text-white transition-colors uppercase tracking-wider py-1 px-1.5 rounded active:scale-95 cursor-pointer"
+            >
+              <Maximize2 size={11} /> Fullscreen
+            </button>
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="text-[10px] font-bold text-[#666666] hover:text-white transition-colors uppercase tracking-wider py-1 px-1.5 rounded active:scale-95 cursor-pointer"
+            >
+              {isOpen ? 'Collapse' : 'Expand'}
+            </button>
+          </div>
+        </div>
+
+        {/* Graph Container or Fullscreen Placeholder */}
+        {isOpen && (
+          isFullscreen ? (
+            /* Placeholder while in fullscreen so page layout does not jump */
+            <div className="h-[400px] sm:h-[480px] md:h-[520px] w-full flex flex-col items-center justify-center gap-3 bg-black/60 p-6 text-center select-none">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#333333] bg-[#181818] text-[#00f0ff]">
+                <Maximize2 size={20} />
+              </div>
+              <p className="text-xs sm:text-sm font-bold text-white tracking-wide">
+                Viewing Knowledge Graph in Fullscreen
+              </p>
+              <p className="text-[11px] text-[#666666] max-w-sm">
+                Press <kbd className="px-1.5 py-0.5 bg-[#222222] text-[#cccccc] rounded border border-[#333333] font-mono text-[10px]">Esc</kbd> or click below to return to normal view.
+              </p>
+              <button
+                onClick={() => setIsFullscreen(false)}
+                className="mt-2 flex items-center gap-1.5 text-xs font-bold text-black bg-white hover:bg-[#e0e0e0] px-4 py-2 rounded-lg transition-colors cursor-pointer active:scale-95 shadow-lg"
+              >
+                <Minimize2 size={13} /> Exit Fullscreen
+              </button>
+            </div>
+          ) : (
+            <div
+              ref={containerRef}
+              onPointerDown={handleCanvasPointerDown}
+              onDoubleClick={handleCanvasDoubleClick}
+              className="relative overflow-hidden bg-black select-none touch-none cursor-grab active:cursor-grabbing h-[400px] sm:h-[480px] md:h-[520px] w-full"
+              style={{ touchAction: 'none' }}
+            >
+              {renderCanvasContent()}
+            </div>
+          )
+        )}
+      </div>
+    </>
   )
 }
 

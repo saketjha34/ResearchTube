@@ -6,7 +6,6 @@ import { ArrowUp, Loader2, Play, BookOpen, Target, TrendingUp, CheckCircle, Aler
 import { runResearch, getHistory, getHistoryEntry, archiveHistoryEntry, type ResearchResponse, type HistoryItem } from '../api/research'
 import { useToast, ToastContainer } from '../components/Toast'
 import KnowledgeGraph from '../components/KnowledgeGraph'
-import { Onboarding } from '../components/Onboarding'
 
 const GREETINGS = [
   "What rabbit hole are we exploring today?",
@@ -1248,7 +1247,6 @@ function Research() {
         </button>
       </div>
     )}
-    <Onboarding />
     <ToastContainer toasts={toasts} dismiss={dismiss} />
     </>
   )
@@ -1357,7 +1355,7 @@ function InputBox({
   }
 
   return (
-    <div className="w-full border border-[#222222] bg-[#111111] transition-all focus-within:border-[#444444] rounded-2xl shadow-xl overflow-hidden">
+    <div data-tour="research-input" className="w-full border border-[#222222] bg-[#111111] transition-all focus-within:border-[#444444] rounded-2xl shadow-xl overflow-hidden">
       {/* Attached Video Chips (Rendered when videos are linked) */}
       {attachedVideos.length > 0 && (
         <div className="px-5 pt-4 pb-2 flex flex-wrap items-center gap-2 border-b border-[#1c1c1c] bg-[#0c0c0d]">
@@ -1492,6 +1490,7 @@ function InputBox({
 
           {/* Beside the Video? button: Link Custom Videos Button */}
           <button
+            data-tour="link-videos"
             type="button"
             onClick={() => {
               setVideoInputOpen(!videoInputOpen)
@@ -1518,6 +1517,7 @@ function InputBox({
 
         {/* Submit Research Button */}
         <button
+          data-tour="submit-research"
           type="button"
           onClick={onSubmit}
           disabled={loading || (!query.trim() && attachedVideos.length === 0)}

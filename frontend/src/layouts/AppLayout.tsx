@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
+import { Onboarding } from '../components/Onboarding'
 
 function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
@@ -10,15 +11,15 @@ function AppLayout() {
   const isFullHeight = isChat || isResearch
 
   return (
-    <div className={`min-h-screen bg-black text-white ${isFullHeight ? 'h-screen overflow-hidden' : ''}`}>
+    <div className={`min-h-screen bg-black text-white overflow-x-hidden ${isFullHeight ? 'h-screen overflow-hidden' : ''}`}>
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
       <main
-        className={`transition-all duration-300 ${
+        className={`transition-all duration-300 min-w-0 ${
           collapsed ? 'md:ml-20' : 'md:ml-72'
         } ${
           isFullHeight
             ? 'h-screen flex flex-col overflow-hidden p-0'
-            : 'px-4 pb-24 pt-20 md:px-10 md:pb-10 md:pt-10'
+            : 'px-3.5 sm:px-6 pb-24 pt-16 md:px-10 md:pb-10 md:pt-10'
         }`}
       >
         {isFullHeight ? (
@@ -34,6 +35,7 @@ function AppLayout() {
           </div>
         )}
       </main>
+      <Onboarding />
     </div>
   )
 }

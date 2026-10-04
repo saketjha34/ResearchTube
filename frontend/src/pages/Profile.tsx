@@ -202,9 +202,9 @@ function Profile() {
   const chatScopeDistribution = Array.isArray(stats?.chat_scope_distribution) ? stats!.chat_scope_distribution : []
 
   return (
-    <section className="space-y-8 pb-12 animate-fade-in">
+    <section className="space-y-6 sm:space-y-8 pb-16 animate-fade-in w-full max-w-7xl mx-auto min-w-0">
       {/* Top User Identity Header */}
-      <header className="border border-[#222222] bg-[#111111] p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-sm">
+      <header className="border border-[#222222] bg-[#111111] p-4 sm:p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 shadow-sm min-w-0">
         <div className="flex items-center gap-4">
           {shouldShowImage ? (
             <img
@@ -233,7 +233,7 @@ function Profile() {
         </div>
 
         {/* Quick link to Settings */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <Link
             to="/settings"
             className="flex items-center gap-2 rounded-xl border border-[#2a2a2a] bg-[#161616] px-4 py-2 text-xs font-medium text-[#cccccc] hover:border-[#444444] hover:text-white hover:bg-[#202020] transition-all cursor-pointer"
@@ -504,21 +504,21 @@ function Profile() {
                   </div>
 
                   {/* Top Key Concepts Map */}
-                  <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4 flex-1">
+                  <div className="border border-[#222222] bg-[#111111] p-4 sm:p-6 rounded-xl space-y-4 flex-1 min-w-0">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-[#777777] flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                       <BookOpen size={14} className="text-[#888888]" /> Top Research Concepts
                     </h3>
                     {topConcepts.length === 0 ? (
                       <p className="text-xs text-[#555555] py-4 text-center">No research reports analyzed yet.</p>
                     ) : (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2">
                         {topConcepts.map((concept) => (
                           <div 
                             key={concept.concept} 
-                            className="flex items-center gap-2 bg-[#161616] border border-[#282828] hover:border-[#444444] hover:bg-[#202020] px-3 py-1.5 rounded-lg text-xs transition-colors"
+                            className="flex items-center gap-1.5 sm:gap-2 bg-[#161616] border border-[#282828] hover:border-[#444444] hover:bg-[#202020] px-2.5 sm:px-3 py-1.5 rounded-lg text-xs transition-colors max-w-full min-w-0"
                           >
-                            <span className="text-[#cccccc] font-medium">{concept.concept}</span>
-                            <span className="bg-[#242424] text-[10px] text-white font-bold px-1.5 py-0.5 rounded-md">
+                            <span className="text-[#cccccc] font-medium truncate max-w-[180px] xs:max-w-[260px] sm:max-w-none" title={concept.concept}>{concept.concept}</span>
+                            <span className="bg-[#242424] text-[10px] text-white font-bold px-1.5 py-0.5 rounded-md flex-shrink-0">
                               {concept.count}
                             </span>
                           </div>
@@ -535,133 +535,133 @@ function Profile() {
           {/* SECTION 2: CHAT & CONVERSATIONAL AI INTELLIGENCE             */}
           {/* ============================================================ */}
           {(activeTab === 'all' || activeTab === 'chat') && (
-            <section className="space-y-6 pt-2">
-              <header>
-                <h2 className="text-xl font-semibold flex items-center gap-2 text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                  <MessageSquare className="text-[#888888]" size={20} /> Chat
+            <section className="space-y-6 pt-2 min-w-0">
+              <header className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-white" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                  <MessageSquare className="text-[#888888]" size={18} /> Chat
                 </h2>
                 <p className="text-xs text-[#777777] mt-0.5">Conversational history and video discussion insights.</p>
               </header>
 
               {/* Chat Overview Top 4 KPI Cards */}
-              <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-2.5 sm:gap-4 grid-cols-2 lg:grid-cols-4">
                 {/* Card 1: TOTAL CONVERSATIONS */}
-                <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-[#3a3a3a] transition-all group">
+                <div className="border border-[#222222] bg-[#111111] p-3 sm:p-4 md:p-5 rounded-xl hover:border-[#3a3a3a] transition-all group flex flex-col justify-between min-w-0 overflow-hidden">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Conversations</span>
-                    <MessageSquare size={16} className="text-[#555555] group-hover:text-white transition-colors" />
+                    <span className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">Conversations</span>
+                    <MessageSquare size={15} className="text-[#555555] group-hover:text-white transition-colors flex-shrink-0" />
                   </div>
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-3xl font-semibold text-white">{stats.total_chat_sessions ?? 0}</span>
+                  <div className="mt-2 flex items-baseline gap-1.5 sm:gap-2">
+                    <span className="text-2xl sm:text-3xl font-semibold text-white">{stats.total_chat_sessions ?? 0}</span>
                     <span className="text-xs text-[#666666]">threads</span>
                   </div>
-                  <p className="text-[11px] text-[#666666] mt-1.5 flex items-center gap-1.5">
-                    <span className="text-[#888888] font-medium">{stats.pinned_chat_sessions ?? 0}</span> pinned
+                  <p className="text-[10px] sm:text-[11px] text-[#666666] mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 leading-tight">
+                    <span><span className="text-[#888888] font-medium">{stats.pinned_chat_sessions ?? 0}</span> pinned</span>
                     <span>•</span>
-                    <span className="text-[#888888] font-medium">{stats.shared_chat_sessions ?? 0}</span> shared
+                    <span><span className="text-[#888888] font-medium">{stats.shared_chat_sessions ?? 0}</span> shared</span>
                   </p>
                 </div>
 
                 {/* Card 2: MESSAGES EXCHANGED */}
-                <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-[#3a3a3a] transition-all group">
+                <div className="border border-[#222222] bg-[#111111] p-3 sm:p-4 md:p-5 rounded-xl hover:border-[#3a3a3a] transition-all group flex flex-col justify-between min-w-0 overflow-hidden">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Messages Exchanged</span>
-                    <Activity size={16} className="text-[#555555] group-hover:text-white transition-colors" />
+                    <span className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">Messages</span>
+                    <Activity size={15} className="text-[#555555] group-hover:text-white transition-colors flex-shrink-0" />
                   </div>
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-3xl font-semibold text-white">{stats.total_chat_messages ?? 0}</span>
+                  <div className="mt-2 flex items-baseline gap-1.5 sm:gap-2">
+                    <span className="text-2xl sm:text-3xl font-semibold text-white">{stats.total_chat_messages ?? 0}</span>
                     <span className="text-xs text-[#666666]">turns</span>
                   </div>
-                  <p className="text-[11px] text-[#666666] mt-1.5 flex items-center gap-1.5">
-                    <span className="text-[#888888] font-medium">{stats.total_user_messages ?? 0}</span> queries
+                  <p className="text-[10px] sm:text-[11px] text-[#666666] mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 leading-tight">
+                    <span><span className="text-[#888888] font-medium">{stats.total_user_messages ?? 0}</span> queries</span>
                     <span>•</span>
-                    <span className="text-[#888888] font-medium">{stats.total_assistant_messages ?? 0}</span> AI answers
+                    <span><span className="text-[#888888] font-medium">{stats.total_assistant_messages ?? 0}</span> AI</span>
                   </p>
                 </div>
 
                 {/* Card 3: VIDEO DISCUSSIONS */}
-                <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-[#3a3a3a] transition-all group">
+                <div className="border border-[#222222] bg-[#111111] p-3 sm:p-4 md:p-5 rounded-xl hover:border-[#3a3a3a] transition-all group flex flex-col justify-between min-w-0 overflow-hidden">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Video Discussions</span>
-                    <Film size={16} className="text-[#555555] group-hover:text-white transition-colors" />
+                    <span className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">Video Discussions</span>
+                    <Film size={15} className="text-[#555555] group-hover:text-white transition-colors flex-shrink-0" />
                   </div>
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-3xl font-semibold text-white">{stats.total_video_scoped_sessions ?? 0}</span>
+                  <div className="mt-2 flex items-baseline gap-1.5 sm:gap-2">
+                    <span className="text-2xl sm:text-3xl font-semibold text-white">{stats.total_video_scoped_sessions ?? 0}</span>
                     <span className="text-xs text-[#666666]">scoped</span>
                   </div>
-                  <p className="text-[11px] text-[#666666] mt-1.5">
+                  <p className="text-[10px] sm:text-[11px] text-[#666666] mt-1.5 leading-tight line-clamp-2" title={(stats.total_chat_sessions ?? 0) > 0 ? `${Math.round(((stats.total_video_scoped_sessions ?? 0) / stats.total_chat_sessions) * 100)}% of conversations focused on specific videos` : 'No video-scoped chats yet'}>
                     {(stats.total_chat_sessions ?? 0) > 0
-                      ? `${Math.round(((stats.total_video_scoped_sessions ?? 0) / stats.total_chat_sessions) * 100)}% of conversations focused on specific videos`
-                      : 'No video-scoped chats yet'}
+                      ? `${Math.round(((stats.total_video_scoped_sessions ?? 0) / stats.total_chat_sessions) * 100)}% focused on videos`
+                      : 'No video-scoped chats'}
                   </p>
                 </div>
 
                 {/* Card 4: VIDEO-LINKED ANSWERS */}
-                <div className="border border-[#222222] bg-[#111111] p-5 rounded-xl hover:border-[#3a3a3a] transition-all group">
+                <div className="border border-[#222222] bg-[#111111] p-3 sm:p-4 md:p-5 rounded-xl hover:border-[#3a3a3a] transition-all group flex flex-col justify-between min-w-0 overflow-hidden">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Video-Linked Answers</span>
-                    <Sparkles size={16} className="text-[#555555] group-hover:text-white transition-colors" />
+                    <span className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">Video-Linked</span>
+                    <Sparkles size={15} className="text-[#555555] group-hover:text-white transition-colors flex-shrink-0" />
                   </div>
-                  <div className="mt-2 flex items-baseline gap-2">
-                    <span className="text-3xl font-semibold text-white">{stats.total_rag_grounded_messages ?? 0}</span>
+                  <div className="mt-2 flex items-baseline gap-1.5 sm:gap-2">
+                    <span className="text-2xl sm:text-3xl font-semibold text-white">{stats.total_rag_grounded_messages ?? 0}</span>
                     <span className="text-xs text-[#666666]">answers</span>
                   </div>
-                  <p className="text-[11px] text-[#666666] mt-1.5">
-                    {stats.rag_grounding_rate ?? 0}% referenced video timestamps
+                  <p className="text-[10px] sm:text-[11px] text-[#666666] mt-1.5 leading-tight line-clamp-2">
+                    {stats.rag_grounding_rate ?? 0}% with timestamps
                   </p>
                 </div>
               </div>
 
               {/* Chat Split Details Grid */}
-              <div className="grid gap-6 lg:grid-cols-2">
+              <div className="grid gap-4 sm:gap-6 lg:grid-cols-2 min-w-0">
                 {/* Left Column: Conversational Dynamics */}
-                <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-6">
+                <div className="border border-[#222222] bg-[#111111] p-3.5 sm:p-5 md:p-6 rounded-xl space-y-5 sm:space-y-6 min-w-0 overflow-hidden">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-[#777777] flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                     <Activity size={14} className="text-[#888888]" /> Conversational Dynamics
                   </h3>
 
                   {/* 6 Sub-metric Cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    <div className="bg-[#161616] p-3.5 rounded-lg border border-[#222222]">
-                      <p className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Avg Msgs / Thread</p>
-                      <p className="text-xl font-bold text-white mt-1">{stats.average_messages_per_session ?? 0}</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                    <div className="bg-[#161616] p-2.5 sm:p-3.5 rounded-lg border border-[#222222] min-w-0 overflow-hidden">
+                      <p className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">Avg Msgs / Thread</p>
+                      <p className="text-lg sm:text-xl font-bold text-white mt-1">{stats.average_messages_per_session ?? 0}</p>
                     </div>
 
-                    <div className="bg-[#161616] p-3.5 rounded-lg border border-[#222222]">
-                      <p className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Video Link Rate</p>
-                      <p className="text-xl font-bold text-white mt-1">{stats.rag_grounding_rate ?? 0}%</p>
+                    <div className="bg-[#161616] p-2.5 sm:p-3.5 rounded-lg border border-[#222222] min-w-0 overflow-hidden">
+                      <p className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">Video Link Rate</p>
+                      <p className="text-lg sm:text-xl font-bold text-white mt-1">{stats.rag_grounding_rate ?? 0}%</p>
                     </div>
 
-                    <div className="bg-[#161616] p-3.5 rounded-lg border border-[#222222]">
-                      <p className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">User Questions</p>
-                      <p className="text-xl font-bold text-white mt-1">{stats.total_user_messages ?? 0}</p>
+                    <div className="bg-[#161616] p-2.5 sm:p-3.5 rounded-lg border border-[#222222] min-w-0 overflow-hidden">
+                      <p className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">User Questions</p>
+                      <p className="text-lg sm:text-xl font-bold text-white mt-1">{stats.total_user_messages ?? 0}</p>
                     </div>
 
-                    <div className="bg-[#161616] p-3.5 rounded-lg border border-[#222222]">
-                      <p className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">AI Responses</p>
-                      <p className="text-xl font-bold text-white mt-1">{stats.total_assistant_messages ?? 0}</p>
+                    <div className="bg-[#161616] p-2.5 sm:p-3.5 rounded-lg border border-[#222222] min-w-0 overflow-hidden">
+                      <p className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">AI Responses</p>
+                      <p className="text-lg sm:text-xl font-bold text-white mt-1">{stats.total_assistant_messages ?? 0}</p>
                     </div>
 
-                    <div className="bg-[#161616] p-3.5 rounded-lg border border-[#222222]">
-                      <p className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Pinned Threads</p>
-                      <p className="text-xl font-bold text-white mt-1">{stats.pinned_chat_sessions ?? 0}</p>
+                    <div className="bg-[#161616] p-2.5 sm:p-3.5 rounded-lg border border-[#222222] min-w-0 overflow-hidden">
+                      <p className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">Pinned Threads</p>
+                      <p className="text-lg sm:text-xl font-bold text-white mt-1">{stats.pinned_chat_sessions ?? 0}</p>
                     </div>
 
-                    <div className="bg-[#161616] p-3.5 rounded-lg border border-[#222222]">
-                      <p className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Shared Threads</p>
-                      <p className="text-xl font-bold text-[#999999] mt-1">{stats.shared_chat_sessions ?? 0}</p>
+                    <div className="bg-[#161616] p-2.5 sm:p-3.5 rounded-lg border border-[#222222] min-w-0 overflow-hidden">
+                      <p className="text-[9px] sm:text-[10px] font-bold text-[#666666] uppercase tracking-wider truncate">Shared Threads</p>
+                      <p className="text-lg sm:text-xl font-bold text-[#999999] mt-1">{stats.shared_chat_sessions ?? 0}</p>
                     </div>
                   </div>
 
                   {/* Progress Meters for Activity & Turn Balance */}
-                  <div className="space-y-4 border-t border-[#1a1a1a] pt-4">
+                  <div className="space-y-4 border-t border-[#1a1a1a] pt-4 min-w-0">
                     <p className="text-[10px] font-bold text-[#666666] uppercase tracking-wider">Activity & Turn Balance</p>
 
                     {/* Video Evidence Progress Bar */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-[#888888]">Answers with Video References</span>
-                        <span className="text-white">{stats.rag_grounding_rate ?? 0}%</span>
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex justify-between items-center text-xs font-semibold gap-2">
+                        <span className="text-[#888888] truncate">Answers with Video References</span>
+                        <span className="text-white font-mono text-xs flex-shrink-0">{stats.rag_grounding_rate ?? 0}%</span>
                       </div>
                       <div className="h-1.5 w-full bg-[#1e1e1e] rounded-full overflow-hidden">
                         <div 
@@ -672,10 +672,10 @@ function Profile() {
                     </div>
 
                     {/* Query vs Answer Ratio */}
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-[#888888]">User Questions vs AI Turns</span>
-                        <span className="text-white">
+                    <div className="space-y-1.5 min-w-0">
+                      <div className="flex justify-between items-center text-xs font-semibold gap-2">
+                        <span className="text-[#888888] truncate">User Questions vs AI Turns</span>
+                        <span className="text-white font-mono text-xs flex-shrink-0">
                           {stats.total_user_messages ?? 0} : {stats.total_assistant_messages ?? 0}
                         </span>
                       </div>
@@ -704,35 +704,56 @@ function Profile() {
                 </div>
 
                 {/* Right Column: Top Discussed Videos & Scope Distribution */}
-                <div className="space-y-6 flex flex-col justify-between">
+                <div className="space-y-5 sm:space-y-6 flex flex-col justify-between min-w-0">
                   {/* Top Discussed Videos */}
-                  <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4 flex-1">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#777777] flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                      <Film size={14} className="text-[#888888]" /> Top Discussed Videos in Chat
-                    </h3>
+                  <div className="border border-[#222222] bg-[#111111] p-5 sm:p-6 rounded-2xl space-y-4 flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-[#888888] flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        <Film size={15} className="text-white" /> Top Discussed Videos in Chat
+                      </h3>
+                      {topDiscussedVideos.length > 0 && (
+                        <span className="text-[10px] font-mono text-[#555555]">
+                          {topDiscussedVideos.length} {topDiscussedVideos.length === 1 ? 'video' : 'videos'}
+                        </span>
+                      )}
+                    </div>
                     {topDiscussedVideos.length === 0 ? (
                       <p className="text-xs text-[#555555] py-4 text-center">No video-scoped chats created yet.</p>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-3.5 min-w-0">
                         {(() => {
                           const maxCount = topDiscussedVideos.reduce((max, v) => Math.max(max, v.chat_count), 1)
                           return topDiscussedVideos.map((vid, idx) => (
-                            <div key={`${vid.title}-${idx}`} className="space-y-1">
-                              <div className="flex justify-between items-center text-xs">
-                                <span className="text-[#cccccc] font-medium truncate flex items-center gap-1.5 max-w-[75%]">
-                                  <span className="text-[#555555] font-bold">#{idx + 1}</span>
-                                  <span className="truncate" title={vid.title}>{vid.title}</span>
-                                </span>
-                                <span className="text-[#888888] font-bold flex-shrink-0">
+                            <div 
+                              key={`${vid.title}-${idx}`} 
+                              className="rounded-xl border border-[#222222] bg-[#141414] p-3.5 sm:p-4 hover:border-[#383838] transition-all space-y-3 min-w-0 group"
+                            >
+                              <div className="flex items-start justify-between gap-3 min-w-0">
+                                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                  <span className="flex h-6 w-6 sm:h-7 sm:w-7 items-center justify-center rounded-lg text-xs font-mono font-bold flex-shrink-0 mt-0.5 bg-[#181818] text-white border border-[#2c2c2c]">
+                                    #{idx + 1}
+                                  </span>
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    <h4 className="text-xs sm:text-sm font-semibold text-white truncate leading-snug" title={vid.title}>
+                                      {vid.title}
+                                    </h4>
+                                    {vid.channel && (
+                                      <p className="text-[11px] text-[#777777] font-medium flex items-center gap-1.5 truncate">
+                                        <Film size={11} className="text-[#555555] flex-shrink-0" />
+                                        <span className="truncate">{vid.channel}</span>
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <span className="flex-shrink-0 rounded-md bg-[#181818] border border-[#2a2a2a] px-2.5 py-1 text-[11px] font-mono font-bold text-white">
                                   {vid.chat_count} {vid.chat_count === 1 ? 'chat' : 'chats'}
                                 </span>
                               </div>
-                              {vid.channel && (
-                                <p className="text-[10px] text-[#666666] truncate pl-5">{vid.channel}</p>
-                              )}
+
+                              {/* Visual Progress Bar (Black and White) */}
                               <div className="h-1.5 w-full bg-[#1e1e1e] rounded-full overflow-hidden">
                                 <div 
-                                  className="h-full bg-[#aaaaaa] rounded-full" 
+                                  className="h-full bg-white rounded-full transition-all duration-700" 
                                   style={{ width: `${(vid.chat_count / maxCount) * 100}%` }}
                                 />
                               </div>
@@ -744,21 +765,21 @@ function Profile() {
                   </div>
 
                   {/* Scope Mode Breakdown */}
-                  <div className="border border-[#222222] bg-[#111111] p-6 rounded-xl space-y-4 flex-1">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#777777] flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                      <Layers size={14} className="text-[#888888]" /> Conversation Scope Breakdown
+                  <div className="border border-[#222222] bg-[#111111] p-5 sm:p-6 rounded-2xl space-y-4 min-w-0">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#888888] flex items-center gap-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                      <Layers size={15} className="text-white" /> Conversation Scope Breakdown
                     </h3>
                     {chatScopeDistribution.length === 0 ? (
                       <p className="text-xs text-[#555555] py-4 text-center">No chat scopes recorded yet.</p>
                     ) : (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 min-w-0">
                         {chatScopeDistribution.map((scopeItem) => (
                           <div 
                             key={scopeItem.scope} 
-                            className="flex items-center gap-2 bg-[#161616] border border-[#282828] hover:border-[#444444] hover:bg-[#202020] px-3 py-1.5 rounded-lg text-xs transition-colors"
+                            className="flex items-center gap-2 bg-[#161616] border border-[#282828] hover:border-[#444444] hover:bg-[#202020] px-3 py-2 rounded-xl text-xs transition-colors max-w-full min-w-0"
                           >
-                            <span className="text-[#cccccc] font-medium">{scopeLabel(scopeItem.scope)}</span>
-                            <span className="bg-[#242424] text-[10px] text-white font-bold px-1.5 py-0.5 rounded-md">
+                            <span className="text-[#cccccc] font-medium truncate max-w-[150px] xs:max-w-[220px] sm:max-w-none">{scopeLabel(scopeItem.scope)}</span>
+                            <span className="bg-[#242424] text-[10px] text-white font-mono font-bold px-2 py-0.5 rounded-md flex-shrink-0 border border-[#333333]">
                               {scopeItem.count} {scopeItem.count === 1 ? 'thread' : 'threads'}
                             </span>
                           </div>

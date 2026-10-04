@@ -1003,6 +1003,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           )}
           <div className="flex items-center gap-1">
             <button
+              data-tour="quick-search"
               onClick={() => {
                 setSearchOpen(true)
                 setSearchQuery('')
@@ -1028,6 +1029,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
             {navItems.map(({ label, icon: Icon, to }) => (
               <li key={to}>
                 <NavLink
+                  data-tour={`nav-${label.toLowerCase()}`}
                   to={to}
                   onClick={() => setOpen(false)}
                   title={collapsed ? label : undefined}
@@ -1069,7 +1071,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {!collapsed && (
           <div className="min-h-0 flex-1 flex flex-col">
             {/* Tab Switcher (Fixed / Non-scrollable) */}
-            <div className="flex-shrink-0 px-3 pt-1 pb-2">
+            <div data-tour="sidebar-history" className="flex-shrink-0 px-3 pt-1 pb-2">
               <div className="flex items-center gap-1 rounded-lg bg-[#111111] p-1 border border-[#222222]">
                 <button
                   onClick={() => setSidebarTab('research')}
@@ -1221,7 +1223,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
 
         {/* Footer profile menu */}
-        <div className="flex-shrink-0 border-t border-[#181818] p-3">
+        <div data-tour="user-profile" className="flex-shrink-0 border-t border-[#181818] p-3">
           <UserMenu collapsed={collapsed} />
         </div>
       </aside>
