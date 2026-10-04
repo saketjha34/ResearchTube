@@ -1094,73 +1094,74 @@ function Research() {
 
   return (
     <>
-    <div className="mx-auto flex min-h-[calc(100vh-3.5rem)] max-w-4xl flex-col px-6 pb-16 pt-8 text-white selection:bg-white selection:text-black">
-      {/* Header Bar */}
-      <header className="mb-10 flex items-center justify-between border-b border-[#181818] pb-6">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>RESEARCHTUBE AI</h1>
-          <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-[#555555]">DEEP TECHNICAL RESEARCH ENGINE</p>
-        </div>
-      </header>
-
-      {/* Archived Notice Banner */}
-      {historyResult?.is_archived && (
-        <div className="mb-6 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-300 backdrop-blur-xs animate-fade-in">
-          <div className="flex items-center gap-2">
-            <Archive size={14} className="flex-shrink-0 text-amber-400" />
-            <span>This research run is archived.</span>
+    <div className="h-full w-full flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar text-white selection:bg-white selection:text-black">
+      <div className={`mx-auto flex w-full max-w-4xl flex-col ${showHome ? 'h-full flex-1 justify-between px-4 pt-14 pb-6 md:px-6 md:pt-8 md:pb-8' : 'px-4 pt-14 pb-16 md:px-6 md:pt-8 md:pb-16'}`}>
+        {/* Header Bar */}
+        <header className="mb-6 flex items-center justify-between border-b border-[#181818] pb-4 flex-shrink-0">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-white" style={{fontFamily:"'Space Grotesk',sans-serif"}}>RESEARCHTUBE AI</h1>
+            <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-[#555555]">DEEP TECHNICAL RESEARCH ENGINE</p>
           </div>
-          <button
-            type="button"
-            onClick={async () => {
-              if (!activeRunId) return
-              try {
-                const res = await archiveHistoryEntry(activeRunId)
-                setHistoryResult((prev) => (prev ? { ...prev, is_archived: res.is_archived } : null))
-              } catch {
-                alert('Failed to unarchive research run.')
-              }
-            }}
-            className="flex items-center gap-1 font-semibold text-amber-200 hover:text-white transition-colors underline underline-offset-2 ml-3 flex-shrink-0 cursor-pointer"
-          >
-            <ArchiveRestore size={13} />
-            <span>Unarchive</span>
-          </button>
-        </div>
-      )}
+        </header>
 
-      {/* Background research in progress banner when viewing a past report */}
-      {loading && activeRunId && (
-        <div className="mb-6 flex items-center justify-between rounded-xl border border-[#2a2a2a] bg-[#121212] px-4 py-2.5 text-xs text-[#cccccc] shadow-lg animate-fade-in">
-          <div className="flex items-center gap-2.5 min-w-0 pr-2">
-            <Loader2 size={14} className="animate-spin text-white flex-shrink-0" />
-            <span className="truncate">
-              Your research <span className="font-semibold text-white">"{lastSubmittedQuery || 'in progress'}"</span> is compiling in background...
-            </span>
+        {/* Archived Notice Banner */}
+        {historyResult?.is_archived && (
+          <div className="mb-6 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-300 backdrop-blur-xs animate-fade-in">
+            <div className="flex items-center gap-2">
+              <Archive size={14} className="flex-shrink-0 text-amber-400" />
+              <span>This research run is archived.</span>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!activeRunId) return
+                try {
+                  const res = await archiveHistoryEntry(activeRunId)
+                  setHistoryResult((prev) => (prev ? { ...prev, is_archived: res.is_archived } : null))
+                } catch {
+                  alert('Failed to unarchive research run.')
+                }
+              }}
+              className="flex items-center gap-1 font-semibold text-amber-200 hover:text-white transition-colors underline underline-offset-2 ml-3 flex-shrink-0 cursor-pointer"
+            >
+              <ArchiveRestore size={13} />
+              <span>Unarchive</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setSearchParams({})
-              setHistoryResult(null)
-              setHistoryQuery('')
-            }}
-            className="rounded-lg border border-[#333333] bg-[#1e1e1e] hover:bg-[#282828] hover:text-white px-3 py-1 text-[11px] font-semibold text-[#cccccc] transition-all cursor-pointer flex-shrink-0"
-          >
-            View Live Progress
-          </button>
-        </div>
-      )}
+        )}
 
-      {/* Empty State Centered Search Dialog (only when no run is active and not loading) */}
-      {showHome ? (
-        <div className="flex flex-col justify-center flex-1 max-w-2xl mx-auto w-full animate-fade-in py-12">
-          <div className="w-full flex flex-col items-start">
-            <h2 className="text-base md:text-lg font-bold tracking-tight text-left text-[#cccccc] mb-6" style={{fontFamily:"'Space Grotesk',sans-serif"}}>{greeting}</h2>
-            <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} attachedVideos={attachedVideos} setAttachedVideos={setAttachedVideos} videoInputOpen={videoInputOpen} setVideoInputOpen={setVideoInputOpen} videoUrlInput={videoUrlInput} setVideoUrlInput={setVideoUrlInput} videoInputError={videoInputError} setVideoInputError={setVideoInputError} />
+        {/* Background research in progress banner when viewing a past report */}
+        {loading && activeRunId && (
+          <div className="mb-6 flex items-center justify-between rounded-xl border border-[#2a2a2a] bg-[#121212] px-4 py-2.5 text-xs text-[#cccccc] shadow-lg animate-fade-in">
+            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+              <Loader2 size={14} className="animate-spin text-white flex-shrink-0" />
+              <span className="truncate">
+                Your research <span className="font-semibold text-white">"{lastSubmittedQuery || 'in progress'}"</span> is compiling in background...
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchParams({})
+                setHistoryResult(null)
+                setHistoryQuery('')
+              }}
+              className="rounded-lg border border-[#333333] bg-[#1e1e1e] hover:bg-[#282828] hover:text-white px-3 py-1 text-[11px] font-semibold text-[#cccccc] transition-all cursor-pointer flex-shrink-0"
+            >
+              View Live Progress
+            </button>
           </div>
-        </div>
-      ) : (
+        )}
+
+        {/* Empty State Centered Search Dialog (only when no run is active and not loading) */}
+        {showHome ? (
+          <div className="flex flex-col justify-center flex-1 max-w-2xl mx-auto w-full animate-fade-in my-auto py-2">
+            <div className="w-full flex flex-col items-start">
+              <h2 className="text-base md:text-lg font-bold tracking-tight text-left text-[#cccccc] mb-6" style={{fontFamily:"'Space Grotesk',sans-serif"}}>{greeting}</h2>
+              <InputBox query={query} setQuery={setQuery} videoCount={videoCount} setVideoCount={setVideoCount} loading={loading} onSubmit={() => void submit()} onKeyDown={onKeyDown} inputRef={inputRef} placeholder={typingPlaceholder} showOptions={showOptions} setShowOptions={setShowOptions} attachedVideos={attachedVideos} setAttachedVideos={setAttachedVideos} videoInputOpen={videoInputOpen} setVideoInputOpen={setVideoInputOpen} videoUrlInput={videoUrlInput} setVideoUrlInput={setVideoUrlInput} videoInputError={videoInputError} setVideoInputError={setVideoInputError} />
+            </div>
+          </div>
+        ) : (
         <div className="space-y-10 flex-1">
           {/* History Run Skeleton Loader */}
           {historyLoading && <ReportSkeletonLoader />}
@@ -1220,6 +1221,7 @@ function Research() {
           )}
         </div>
       )}
+      </div>
     </div>
     {/* Report Search Bar */}
     {reportSearchOpen && (

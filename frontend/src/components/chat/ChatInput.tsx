@@ -1,4 +1,4 @@
-﻿import React, { useRef, useEffect, useState } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import { ArrowUp, Square } from 'lucide-react'
 import { VideoScopeSelector } from './VideoScopeSelector'
 import { ToolSelector } from './ToolSelector'
@@ -16,7 +16,6 @@ interface ChatInputProps {
   scopeMode?: VideoScopeMode
   selectedVideo: AvailableVideo | null
   onSelectScope?: (mode: VideoScopeMode, video: AvailableVideo | null) => void
-  onSelectVideo?: (video: AvailableVideo | null) => void
   webSearchActive?: boolean
   onToggleWebSearch?: (active: boolean) => void
 }
@@ -33,7 +32,6 @@ export const ChatInput = React.memo(function ChatInput({
   scopeMode = 'none',
   selectedVideo,
   onSelectScope,
-  onSelectVideo,
   webSearchActive = false,
   onToggleWebSearch,
 }: ChatInputProps) {
@@ -87,7 +85,6 @@ export const ChatInput = React.memo(function ChatInput({
             scopeMode={scopeMode}
             selectedVideo={selectedVideo}
             onSelectScope={onSelectScope}
-            onSelect={onSelectVideo}
             disabled={isStreaming || disabled}
             isOpen={activePopup === 'scope'}
             onToggleOpen={(open) => setActivePopup(open ? 'scope' : null)}

@@ -332,9 +332,6 @@ export default function Chat() {
     }
   }
 
-  const handleSelectVideo = (video: AvailableVideo | null) => {
-    handleSelectScope(video ? 'video' : 'none', video)
-  }
   // Submit message and stream response
   const handleSubmit = async (customPrompt?: string) => {
     const textToSend = (customPrompt || input).trim()
@@ -759,7 +756,6 @@ export default function Chat() {
                 scopeMode={scopeMode}
                 selectedVideo={selectedVideo}
                 onSelectScope={handleSelectScope}
-                onSelectVideo={handleSelectVideo}
                 webSearchActive={webSearchActive}
                 onToggleWebSearch={setWebSearchActive}
               />
@@ -862,7 +858,6 @@ export default function Chat() {
                   scopeMode={scopeMode}
                   selectedVideo={selectedVideo}
                   onSelectScope={handleSelectScope}
-                  onSelectVideo={handleSelectVideo}
                   webSearchActive={webSearchActive}
                   onToggleWebSearch={setWebSearchActive}
                 />

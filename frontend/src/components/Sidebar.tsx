@@ -1065,32 +1065,37 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </button>
         </div>
 
-        {/* History List */}
+        {/* History Section */}
         {!collapsed && (
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 py-3">
-            {/* Tab Switcher */}
-            <div className="flex items-center gap-1 rounded-lg bg-[#111111] p-1 mb-3 border border-[#222222]">
-              <button
-                onClick={() => setSidebarTab('research')}
-                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition-all ${
-                  sidebarTab === 'research'
-                    ? 'bg-[#222222] text-white shadow-xs'
-                    : 'text-[#666666] hover:text-white'
-                }`}
-              >
-                Research ({completedHistory.length})
-              </button>
-              <button
-                onClick={() => setSidebarTab('chat')}
-                className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition-all ${
-                  sidebarTab === 'chat'
-                    ? 'bg-[#222222] text-white shadow-xs'
-                    : 'text-[#666666] hover:text-white'
-                }`}
-              >
-                Chat ({chatSessions.length})
-              </button>
+          <div className="min-h-0 flex-1 flex flex-col">
+            {/* Tab Switcher (Fixed / Non-scrollable) */}
+            <div className="flex-shrink-0 px-3 pt-1 pb-2">
+              <div className="flex items-center gap-1 rounded-lg bg-[#111111] p-1 border border-[#222222]">
+                <button
+                  onClick={() => setSidebarTab('research')}
+                  className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition-all ${
+                    sidebarTab === 'research'
+                      ? 'bg-[#222222] text-white shadow-xs'
+                      : 'text-[#666666] hover:text-white'
+                  }`}
+                >
+                  Research ({completedHistory.length})
+                </button>
+                <button
+                  onClick={() => setSidebarTab('chat')}
+                  className={`flex-1 rounded-md py-1 text-[11px] font-semibold transition-all ${
+                    sidebarTab === 'chat'
+                      ? 'bg-[#222222] text-white shadow-xs'
+                      : 'text-[#666666] hover:text-white'
+                  }`}
+                >
+                  Chat ({chatSessions.length})
+                </button>
+              </div>
             </div>
+
+            {/* Scrollable History List */}
+            <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 pb-3">
 
             {sidebarTab === 'research' ? (
               loadingHistory ? (
@@ -1211,6 +1216,7 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 )}
               </>
             )}
+            </div>
           </div>
         )}
 

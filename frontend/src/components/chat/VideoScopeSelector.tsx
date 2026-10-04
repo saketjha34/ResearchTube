@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Video, VideoOff, Search, Check, Layers, ChevronUp, X, MoreVertical } from 'lucide-react'
 import type { AvailableVideo, VideoScopeMode } from '../../api/chat'
@@ -74,8 +74,7 @@ export function VideoScopeSelector({
   const handleChooseScope = (mode: VideoScopeMode, video: AvailableVideo | null) => {
     if (onSelectScope) {
       onSelectScope(mode, video)
-    }
-    if (onSelect) {
+    } else if (onSelect) {
       onSelect(video)
     }
     handleClose()
