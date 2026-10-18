@@ -37,5 +37,9 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.2.0"
+  },
+  "overrides": {
+    "katex": "^0.18.7",
+    "source-map-js": "^1.2.2"
   }
 }
