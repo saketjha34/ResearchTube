@@ -1,6 +1,6 @@
 from app.db.database import Base
 
-from .auth import AuthProvider, OAuthAccount, RefreshToken, UserAuth
+from .auth import AuthProvider, OAuthAccount, RefreshToken, UserAuth, PasswordResetToken
 from .user import User
 from .youtube import (
     FinalReport,
@@ -21,6 +21,7 @@ __all__ = [
     "AuthProvider",
     "OAuthAccount",
     "RefreshToken",
+    "PasswordResetToken",
     "ResearchRun",
     "YouTubeVideo",
     "ResearchVideo",

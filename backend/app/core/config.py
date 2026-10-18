@@ -59,6 +59,21 @@ class Settings(BaseSettings):
     FRONTEND_URL_PROD: str | None = None
 
     # ========================================================
+    # EMAIL SERVICE (SMTP)
+    # ========================================================
+
+    EMAIL_PROVIDER: str = "smtp"
+    EMAIL_FROM: str = "ResearchTubeAI <saketjha0324@gmail.com>"
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 15
+
+    # SMTP Configuration (Google Gmail / custom SMTP relay)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_USE_TLS: bool = True
+
+    # ========================================================
     # CONFIG
     # ========================================================
 

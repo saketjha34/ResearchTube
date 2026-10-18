@@ -133,3 +133,33 @@ export const startGoogleLogin = (): void => {
 
   window.location.href = googleAuthUrl.toString()
 }
+
+export const forgotPasswordRequest = async (identifier: string): Promise<{ message: string }> => {
+  const response = await authClient.post<{ message: string }>('/auth/forgot-password', {
+    identifier,
+  })
+  return response.data
+}
+
+export const verifyResetTokenRequest = async (
+  token: string,
+): Promise<{ valid: boolean; email_masked?: string }> => {
+  const response = await authClient.get<{ valid: boolean; email_masked?: string }>(
+    '/auth/verify-reset-token',
+    {
+      params: { token },
+    },
+  )
+  return response.data
+}
+
+export const resetPasswordRequest = async (payload: {
+  token: string
+  identifier: string
+  new_password: string
+  confirm_password: string
+}): Promise<{ message: string }> => {
+  const response = await authClient.post<{ message: string }>('/auth/reset-password', payload)
+  return response.data
+}
+

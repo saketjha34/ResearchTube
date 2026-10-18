@@ -29,6 +29,7 @@ if TYPE_CHECKING:
         OAuthAccount,
         RefreshToken,
         UserAuth,
+        PasswordResetToken,
     )
 
     from app.db.models.youtube import ResearchRun
@@ -113,6 +114,11 @@ class User(Base):
     )
 
     refresh_tokens: Mapped[List["RefreshToken"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    password_reset_tokens: Mapped[List["PasswordResetToken"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
     )

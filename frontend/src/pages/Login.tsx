@@ -69,6 +69,12 @@ function Login() {
         <h1 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">Welcome back</h1>
         <p className="mt-2 text-sm text-[#999999]">Continue building your research workspace.</p>
 
+        {(location.state as { resetSuccess?: boolean })?.resetSuccess ? (
+          <p className="mt-4 border border-[#2b2b2b] bg-[#161616] px-3 py-2.5 text-xs text-white">
+            Your password has been successfully reset. Please sign in with your new credentials.
+          </p>
+        ) : null}
+
         {params.get('expired') === '1' ? (
           <p className="mt-4 border border-[#222222] bg-black px-3 py-2 text-xs text-[#cfcfcf]">
             Your session has expired. Please sign in again.
@@ -83,21 +89,31 @@ function Login() {
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <Input
-            label="Email"
-            type="email"
-            placeholder="you@example.com"
-            helperText="Use the email linked to your ResearchTube account."
+            label="Email or Username"
+            type="text"
+            placeholder="you@example.com or username"
+            helperText="Use the email or username linked to your ResearchTube account."
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
-          <Input
-            label="Password"
-            type="password"
-            placeholder="••••••••"
-            helperText="Use your secure password for this workspace."
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
+          <div>
+            <Input
+              label="Password"
+              type="password"
+              placeholder="••••••••"
+              helperText="Use your secure password for this workspace."
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+            <div className="mt-1.5 flex justify-end">
+              <Link
+                to="/forgot-password"
+                className="text-xs text-[#888888] transition-colors hover:text-white"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          </div>
 
           <div className="pt-1">
             <Button type="submit" fullWidth loading={loading}>

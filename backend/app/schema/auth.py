@@ -139,3 +139,53 @@ class ChangePasswordRequest(BaseModel):
         min_length=8,
         max_length=128
     )
+
+
+# ============================================================
+# FORGOT & RESET PASSWORD
+# ============================================================
+
+class ForgotPasswordRequest(BaseModel):
+
+    identifier: str = Field(
+        min_length=1,
+        max_length=320,
+        description="Username or email address of the account",
+    )
+
+
+class ForgotPasswordResponse(BaseModel):
+
+    message: str
+
+
+class VerifyResetTokenResponse(BaseModel):
+
+    valid: bool
+    email_masked: str | None = None
+
+
+class ResetPasswordRequest(BaseModel):
+
+    token: str = Field(
+        min_length=1,
+        description="Password reset token from email link",
+    )
+
+    identifier: str = Field(
+        min_length=1,
+        max_length=320,
+        description="Username or email address to confirm identity",
+    )
+
+    new_password: str = Field(
+        min_length=8,
+        max_length=128,
+        description="New password (minimum 8 characters)",
+    )
+
+    confirm_password: str = Field(
+        min_length=8,
+        max_length=128,
+        description="Confirm new password",
+    )

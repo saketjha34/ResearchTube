@@ -13,7 +13,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -57,37 +58,55 @@ class LocalAuthService:
         full_name: str | None = None,
     ) -> User:
 
-        email = email.lower().strip()
+        clean_email = email.lower().strip()
+        clean_username = username.strip() if username else None
+        clean_full_name = full_name.strip() if full_name else None
 
-        existing_user = await db.scalar(
-            select(User).where(User.email == email)
+        # 1. Pre-check email uniqueness
+        existing_email_user = await db.scalar(
+            select(User).where(func.lower(User.email) == clean_email)
         )
-
-        if existing_user:
+        if existing_email_user:
             raise ValueError("A user with this email already exists.")
 
+        # 2. Pre-check username uniqueness
+        if clean_username:
+            existing_username_user = await db.scalar(
+                select(User).where(func.lower(User.username) == clean_username.lower())
+            )
+            if existing_username_user:
+                raise ValueError("A user with this username already exists.")
+
         user = User(
-            email=email,
-            username=username,
-            full_name=full_name,
+            email=clean_email,
+            username=clean_username,
+            full_name=clean_full_name,
             is_active=True,
             is_verified=False,
         )
 
-        db.add(user)
-        await db.flush()
+        try:
+            db.add(user)
+            await db.flush()
 
-        auth = UserAuth(
-            user_id=user.id,
-            password_hash=hash_password(password),
-            last_password_change=datetime.now(timezone.utc),
-        )
+            auth = UserAuth(
+                user_id=user.id,
+                password_hash=hash_password(password),
+                last_password_change=datetime.now(timezone.utc),
+            )
 
-        db.add(auth)
-        await db.commit()
-        await db.refresh(user)
-
-        return user
+            db.add(auth)
+            await db.commit()
+            await db.refresh(user)
+            return user
+        except IntegrityError as exc:
+            await db.rollback()
+            err_msg = str(exc.orig) if hasattr(exc, "orig") else str(exc)
+            if "users_username_key" in err_msg or "username" in err_msg:
+                raise ValueError("A user with this username already exists.")
+            if "users_email_key" in err_msg or "email" in err_msg:
+                raise ValueError("A user with this email already exists.")
+            raise ValueError("Registration failed due to conflicting account details.")
 
     # ============================================================
     # AUTHENTICATE USER
@@ -100,12 +119,17 @@ class LocalAuthService:
         password: str,
     ) -> User | None:
 
-        email = email.lower().strip()
+        identifier = email.lower().strip()
 
         user = await db.scalar(
             select(User)
             .options(selectinload(User.auth))
-            .where(User.email == email)
+            .where(
+                or_(
+                    func.lower(User.email) == identifier,
+                    func.lower(User.username) == identifier,
+                )
+            )
         )
 
         if not user or not user.is_active or not user.auth:

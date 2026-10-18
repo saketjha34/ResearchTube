@@ -4,6 +4,7 @@ Local auth routes — registration, login, token refresh, logout.
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.limiter import limiter
@@ -14,9 +15,14 @@ from app.schema.auth import (
     RefreshTokenRequest,
     TokenResponse,
     UserResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    VerifyResetTokenResponse,
+    ResetPasswordRequest,
 )
 from app.services.auth.local_auth_service import local_auth_service
 from app.services.auth.profile_service import profile_service
+from app.services.auth.forget_password import forget_password_service
 
 
 router = APIRouter()
@@ -47,6 +53,13 @@ async def register(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except IntegrityError as e:
+        err_msg = str(e.orig) if hasattr(e, "orig") else str(e)
+        if "username" in err_msg:
+            raise HTTPException(status_code=400, detail="A user with this username already exists.")
+        if "email" in err_msg:
+            raise HTTPException(status_code=400, detail="A user with this email already exists.")
+        raise HTTPException(status_code=400, detail="A user with this email or username already exists.")
 
     access_token, refresh_token = await local_auth_service.create_token_pair(db, user)
 
@@ -144,3 +157,76 @@ async def logout(
 ):
     await local_auth_service.revoke_refresh_token(db, data.refresh_token)
     return {"message": "Successfully logged out."}
+
+
+# ============================================================
+# FORGOT PASSWORD
+# ============================================================
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+)
+@limiter.limit("5/minute")
+async def forgot_password(
+    request: Request,
+    data: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    await forget_password_service.request_password_reset(db, data.identifier)
+    return ForgotPasswordResponse(
+        message="If an account matches that username or email, a password reset link has been dispatched to your email."
+    )
+
+
+# ============================================================
+# VERIFY RESET TOKEN
+# ============================================================
+
+@router.get(
+    "/verify-reset-token",
+    response_model=VerifyResetTokenResponse,
+)
+@limiter.limit("20/minute")
+async def verify_reset_token(
+    request: Request,
+    token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        result = await forget_password_service.verify_reset_token(db, token)
+        return VerifyResetTokenResponse(
+            valid=result["valid"],
+            email_masked=result.get("email_masked"),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ============================================================
+# RESET PASSWORD
+# ============================================================
+
+@router.post(
+    "/reset-password",
+    response_model=ForgotPasswordResponse,
+)
+@limiter.limit("10/minute")
+async def reset_password(
+    request: Request,
+    data: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await forget_password_service.reset_password(
+            db=db,
+            token=data.token,
+            identifier=data.identifier,
+            new_password=data.new_password,
+            confirm_password=data.confirm_password,
+        )
+        return ForgotPasswordResponse(
+            message="Your password has been successfully updated. Please log in with your new password."
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

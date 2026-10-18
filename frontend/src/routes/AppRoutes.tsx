@@ -7,6 +7,8 @@ import Library from '../pages/Library'
 import About from '../pages/About'
 import Login from '../pages/Login'
 import Register from '../pages/Register'
+import ForgotPassword from '../pages/ForgotPassword'
+import ResetPassword from '../pages/ResetPassword'
 import AuthCallback from '../pages/AuthCallback'
 import Research from '../pages/Research'
 import Chat from '../pages/Chat'
@@ -27,6 +29,8 @@ function AppRoutes() {
         <Route path="/about" element={<About />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         
         {/* Share routes: /share/:id automatically resolves to SharedReport or SharedChat */}

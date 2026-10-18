@@ -8,10 +8,13 @@ from app.external_services.e2b_sandbox import (
     SandboxExecutionResult,
     e2b_sandbox_service,
 )
+from app.external_services.email_service import EmailService, email_service
 from app.external_services.firecrawl import FirecrawlClient, FirecrawlError
 from app.external_services.html_scraper import HTMLScraper
 
 __all__ = [
+    "EmailService",
+    "email_service",
     "FirecrawlClient",
     "FirecrawlError",
     "DuckDuckGoClient",
