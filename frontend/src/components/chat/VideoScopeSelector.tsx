@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Video, VideoOff, Search, Check, Layers, ChevronUp, X, MoreVertical } from 'lucide-react'
 import type { AvailableVideo, VideoScopeMode } from '../../api/chat'
@@ -34,18 +34,33 @@ export function VideoScopeSelector({
   const [filter, setFilter] = useState('')
   const [hoveredVideo, setHoveredVideo] = useState<AvailableVideo | null>(null)
   const [showSelectedPreview, setShowSelectedPreview] = useState(false)
-  const [previewSide, setPreviewSide] = useState<'right' | 'left'>('right')
   const [inspectedVideo, setInspectedVideo] = useState<AvailableVideo | null>(null)
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 768 : true
   )
 
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const previewCardRef = useRef<HTMLDivElement>(null)
+  const triggerPreviewRef = useRef<HTMLDivElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
   const hoverTimeoutRef = useRef<any>(null)
   const triggerHoverTimeoutRef = useRef<any>(null)
 
+  const [floatingPreviewPos, setFloatingPreviewPos] = useState<{
+    top: number
+    left: number
+    maxHeight: number
+  } | null>(null)
+
+  const [triggerPreviewPos, setTriggerPreviewPos] = useState<{
+    top: number
+    left: number
+    maxHeight: number
+  } | null>(null)
+
   const effectiveScopeMode: VideoScopeMode = scopeMode || (selectedVideo ? 'video' : 'none')
+  const activeFloatingVideo = isDesktop ? (inspectedVideo || hoveredVideo) : null
 
   const handleToggle = () => {
     const next = !open
@@ -80,37 +95,139 @@ export function VideoScopeSelector({
     handleClose()
   }
 
-  // Determine if preview should dock to left or right based on screen edge
-  const updatePreviewPosition = useCallback(() => {
-    if (!dropdownRef.current) return
-    const rect = dropdownRef.current.getBoundingClientRect()
-    const spaceOnRight = window.innerWidth - rect.right
-    if (spaceOnRight < 370) {
-      setPreviewSide('left')
-    } else {
-      setPreviewSide('right')
+  // Calculate clamped viewport position for the floating preview card (docked beside the popover)
+  const updateFloatingPreviewPosition = useCallback(() => {
+    if (!popoverRef.current || !activeFloatingVideo || !isDesktop) {
+      setFloatingPreviewPos(null)
+      return
     }
-  }, [])
+
+    const popoverRect = popoverRef.current.getBoundingClientRect()
+    const cardWidth = 352 // w-88 = 22rem = 352px
+    const margin = 12
+    const minPadding = 16
+
+    // Horizontal dock: Prefer right of popover if space allows, otherwise left
+    const spaceRight = window.innerWidth - popoverRect.right
+    const spaceLeft = popoverRect.left
+
+    let left: number
+    if (spaceRight >= cardWidth + margin + minPadding) {
+      left = popoverRect.right + margin
+    } else if (spaceLeft >= cardWidth + margin + minPadding) {
+      left = popoverRect.left - cardWidth - margin
+    } else {
+      left = Math.max(minPadding, Math.min(popoverRect.right + margin, window.innerWidth - cardWidth - minPadding))
+    }
+
+    const cardHeight = previewCardRef.current?.offsetHeight || 480
+    const availableHeight = window.innerHeight - minPadding * 2
+
+    // Vertical dock: Align bottom with popover bottom by default
+    let top = popoverRect.bottom - cardHeight
+
+    // If bottom-alignment pushes the top off-screen (top < minPadding), align with popover top instead
+    if (top < minPadding) {
+      top = Math.max(minPadding, popoverRect.top)
+    }
+
+    // Ensure the card bottom does not extend below the viewport
+    if (top + cardHeight > window.innerHeight - minPadding) {
+      top = Math.max(minPadding, window.innerHeight - cardHeight - minPadding)
+    }
+
+    setFloatingPreviewPos({
+      top: Math.round(top),
+      left: Math.round(left),
+      maxHeight: Math.round(availableHeight),
+    })
+  }, [activeFloatingVideo, isDesktop])
+
+  // Calculate clamped viewport position for the trigger hover preview card
+  const updateTriggerPreviewPosition = useCallback(() => {
+    if (!dropdownRef.current || !showSelectedPreview || open || !selectedVideo || !isDesktop) {
+      setTriggerPreviewPos(null)
+      return
+    }
+
+    const triggerRect = dropdownRef.current.getBoundingClientRect()
+    const cardWidth = 352
+    const margin = 12
+    const minPadding = 16
+
+    const cardHeight = triggerPreviewRef.current?.offsetHeight || 480
+    const availableHeight = window.innerHeight - minPadding * 2
+
+    let left = Math.max(minPadding, Math.min(triggerRect.left, window.innerWidth - cardWidth - minPadding))
+
+    let top = triggerRect.top - cardHeight - margin
+    if (top < minPadding) {
+      if (triggerRect.bottom + cardHeight + margin <= window.innerHeight - minPadding) {
+        top = triggerRect.bottom + margin
+      } else {
+        top = minPadding
+      }
+    }
+
+    setTriggerPreviewPos({
+      top: Math.round(top),
+      left: Math.round(left),
+      maxHeight: Math.round(availableHeight),
+    })
+  }, [showSelectedPreview, open, selectedVideo, isDesktop])
+
+  useLayoutEffect(() => {
+    if (activeFloatingVideo && isDesktop) {
+      updateFloatingPreviewPosition()
+    } else {
+      setFloatingPreviewPos(null)
+    }
+  }, [activeFloatingVideo, isDesktop, updateFloatingPreviewPosition])
+
+  useLayoutEffect(() => {
+    if (showSelectedPreview && !open && isDesktop) {
+      updateTriggerPreviewPosition()
+    } else {
+      setTriggerPreviewPos(null)
+    }
+  }, [showSelectedPreview, open, isDesktop, updateTriggerPreviewPosition])
 
   useEffect(() => {
-    const handleResize = () => {
+    const handleWindowEvents = () => {
       setIsDesktop(window.innerWidth >= 768)
-      updatePreviewPosition()
+      if (activeFloatingVideo && isDesktop) {
+        updateFloatingPreviewPosition()
+      }
+      if (showSelectedPreview && isDesktop) {
+        updateTriggerPreviewPosition()
+      }
     }
-    updatePreviewPosition()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [updatePreviewPosition])
+
+    window.addEventListener('resize', handleWindowEvents)
+    window.addEventListener('scroll', handleWindowEvents, { passive: true, capture: true })
+    return () => {
+      window.removeEventListener('resize', handleWindowEvents)
+      window.removeEventListener('scroll', handleWindowEvents, true)
+    }
+  }, [activeFloatingVideo, showSelectedPreview, isDesktop, updateFloatingPreviewPosition, updateTriggerPreviewPosition])
 
   useEffect(() => {
     if (!open) return
 
     const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node
       // If clicking inside the portaled mobile modal, DO NOT close
-      if (modalRef.current && modalRef.current.contains(e.target as Node)) {
+      if (modalRef.current && modalRef.current.contains(target)) {
         return
       }
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      // If clicking inside the portaled desktop preview cards, DO NOT close
+      if (previewCardRef.current && previewCardRef.current.contains(target)) {
+        return
+      }
+      if (triggerPreviewRef.current && triggerPreviewRef.current.contains(target)) {
+        return
+      }
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         handleClose()
       }
     }
@@ -179,8 +296,6 @@ export function VideoScopeSelector({
       (v.channel && v.channel.toLowerCase().includes(term))
     )
   })
-
-  const activeFloatingVideo = isDesktop ? (inspectedVideo || hoveredVideo) : null
 
   return (
     <div className="relative inline-block flex-shrink-0 min-w-0" ref={dropdownRef}>
@@ -276,28 +391,12 @@ export function VideoScopeSelector({
             </div>
           )}
         </div>
-
-        {/* Floating Card for the currently selected video when dropdown is closed (desktop only) */}
-        {showSelectedPreview && !open && effectiveScopeMode === 'video' && selectedVideo && isDesktop && (
-          <div
-            className="absolute left-0 bottom-full mb-3 z-[110] animate-fade-in"
-            onMouseEnter={() => clearTimeout(triggerHoverTimeoutRef.current)}
-            onMouseLeave={handleTriggerMouseLeave}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <VideoScopePreviewCard
-              video={selectedVideo}
-              isSelected={true}
-              onClose={() => setShowSelectedPreview(false)}
-            />
-          </div>
-        )}
       </div>
 
       {/* Upward Dropdown Popover (Centered on mobile, docked above on desktop) */}
       {open && (
         <div
+          ref={popoverRef}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           className="fixed left-1/2 -translate-x-1/2 bottom-[82px] w-[calc(100vw-2rem)] max-w-sm sm:max-w-none sm:w-96 sm:absolute sm:left-0 sm:translate-x-0 sm:bottom-full sm:mb-2.5 rounded-2xl border border-[#2a2a2a] bg-[#111111] p-3 shadow-2xl animate-fade-in text-xs z-50"
@@ -319,7 +418,7 @@ export function VideoScopeSelector({
             />
           </div>
 
-          <div className="max-h-60 sm:max-h-64 overflow-y-auto space-y-1 custom-scrollbar">
+          <div className="max-h-60 sm:max-h-64 sm:max-h-[min(16rem,calc(100vh-240px))] overflow-y-auto space-y-1 custom-scrollbar">
             {/* Option 1: No Video Scope (Default) */}
             <button
               type="button"
@@ -457,30 +556,65 @@ export function VideoScopeSelector({
               </div>
             )}
           </div>
-
-          {/* Floating YouTube Stats Preview Card docked beside the menu (Desktop only) */}
-          {activeFloatingVideo && isDesktop && (
-            <div
-              className={`absolute bottom-0 z-[120] ${
-                previewSide === 'right' ? 'left-full ml-3' : 'right-full mr-3'
-              }`}
-              onMouseEnter={() => clearTimeout(hoverTimeoutRef.current)}
-              onMouseLeave={handleMouseLeaveVideo}
-              onMouseDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <VideoScopePreviewCard
-                video={activeFloatingVideo}
-                isSelected={effectiveScopeMode === 'video' && selectedVideo?.db_id === activeFloatingVideo.db_id}
-                onClose={() => {
-                  setHoveredVideo(null)
-                  setInspectedVideo(null)
-                }}
-                onSelect={() => handleChooseScope('video', activeFloatingVideo)}
-              />
-            </div>
-          )}
         </div>
+      )}
+
+      {/* Floating YouTube Stats Preview Card docked beside menu (Desktop only, Portaled to avoid scrollbars/overflow) */}
+      {isDesktop && activeFloatingVideo && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={previewCardRef}
+          style={{
+            position: 'fixed',
+            top: floatingPreviewPos ? `${floatingPreviewPos.top}px` : '16px',
+            left: floatingPreviewPos ? `${floatingPreviewPos.left}px` : '-9999px',
+            maxHeight: floatingPreviewPos ? `${floatingPreviewPos.maxHeight}px` : 'calc(100vh - 32px)',
+            zIndex: 9999,
+            visibility: floatingPreviewPos ? 'visible' : 'hidden',
+          }}
+          onMouseEnter={() => clearTimeout(hoverTimeoutRef.current)}
+          onMouseLeave={handleMouseLeaveVideo}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="animate-fade-in"
+        >
+          <VideoScopePreviewCard
+            video={activeFloatingVideo}
+            isSelected={effectiveScopeMode === 'video' && selectedVideo?.db_id === activeFloatingVideo.db_id}
+            onClose={() => {
+              setHoveredVideo(null)
+              setInspectedVideo(null)
+            }}
+            onSelect={() => handleChooseScope('video', activeFloatingVideo)}
+          />
+        </div>,
+        document.body
+      )}
+
+      {/* Floating Card for selected video when dropdown is closed (Desktop only, Portaled to avoid scrollbars/overflow) */}
+      {isDesktop && showSelectedPreview && !open && effectiveScopeMode === 'video' && selectedVideo && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={triggerPreviewRef}
+          style={{
+            position: 'fixed',
+            top: triggerPreviewPos ? `${triggerPreviewPos.top}px` : '16px',
+            left: triggerPreviewPos ? `${triggerPreviewPos.left}px` : '-9999px',
+            maxHeight: triggerPreviewPos ? `${triggerPreviewPos.maxHeight}px` : 'calc(100vh - 32px)',
+            zIndex: 9999,
+            visibility: triggerPreviewPos ? 'visible' : 'hidden',
+          }}
+          onMouseEnter={() => clearTimeout(triggerHoverTimeoutRef.current)}
+          onMouseLeave={handleTriggerMouseLeave}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          className="animate-fade-in"
+        >
+          <VideoScopePreviewCard
+            video={selectedVideo}
+            isSelected={true}
+            onClose={() => setShowSelectedPreview(false)}
+          />
+        </div>,
+        document.body
       )}
 
       {/* Full-viewport Modal Preview Card (Mobile / Tablets < 768px) */}

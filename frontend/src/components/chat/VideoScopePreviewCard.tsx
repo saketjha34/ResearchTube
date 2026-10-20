@@ -55,7 +55,7 @@ export function VideoScopePreviewCard({
 
   return (
     <div
-      className={`w-80 sm:w-88 max-w-[calc(100vw-2rem)] rounded-2xl border border-[#2a2a2a] bg-[#111111]/95 backdrop-blur-2xl p-4 shadow-2xl animate-fade-in text-white select-none ${className}`}
+      className={`w-80 sm:w-88 max-w-[calc(100vw-2rem)] max-h-[min(540px,calc(100vh-32px))] overflow-y-auto custom-scrollbar rounded-2xl border border-[#2a2a2a] bg-[#111111]/95 backdrop-blur-2xl p-4 shadow-2xl animate-fade-in text-white select-none ${className}`}
       onClick={(e) => e.stopPropagation()}
     >
       {/* 16:9 Thumbnail Header with Play Overlay */}
