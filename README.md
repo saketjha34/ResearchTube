@@ -9,8 +9,6 @@
 [![LangGraph](https://img.shields.io/badge/Orchestrator-LangGraph-purple.svg)](https://langchain-ai.github.io/langgraph/)
 [![PostgreSQL](https://img.shields.io/badge/VectorDB-PostgreSQL_pgvector-blue.svg)](https://github.com/pgvector/pgvector)
 
----
-
 ## Project Overview
 
 Technical YouTube content including architecture lectures, conference talks, and deep-dive coding tutorials contains invaluable engineering knowledge. However, accessing and leveraging this knowledge presents major hurdles:
@@ -33,88 +31,37 @@ For detailed installation instructions, environment variables configuration, loc
 * **[Backend Documentation & Setup Guide](backend/README.md):** Complete guide for installing Python 3.12 dependencies, setting up credentials via [ENV_SETUP.md](backend/ENV_SETUP.md), managing database migrations via [MIGRATIONS.md](backend/MIGRATIONS.md), initializing PostgreSQL `pgvector` schemas, running FastAPI servers, and exploring interactive Swagger API docs.
 * **[Frontend Documentation & Setup Guide](frontend/README.md):** Complete guide for setting up React 19 SPA, Node.js dependencies, Vite build configurations, Tailwind CSS v4 styling, component hierarchy, and routing.
 
+### Architecture & Design Documentation (`docs/`)
+
+All system design specifications, database schemas, and architecture diagrams live in the [`docs/`](docs/) directory:
+
+| Document / Asset | Description |
+| :--- | :--- |
+| **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Deep-dive system architecture covering the High-Level System Design, Auth Service (flowcharts & sequence diagrams), 7-node YouTube Research pipeline, Chat Service, and Hybrid RAG architecture. |
+| **[DATABASE-DESIGN.md](docs/DATABASE-DESIGN.md)** | Complete **PostgreSQL 16 + `pgvector`** schema documentation with a full 15-table Mermaid ER diagram, domain table breakdowns, and architectural decisions. |
+| **[FRONTEND.md](docs/FRONTEND.md)** | Frontend SPA architecture (`React 19 + TypeScript + Vite`), directory structure, library-by-library rationale, JWT auto-refresh queue, and SSE streaming workflows. |
+| **[ResearchTube AI.excalidraw](docs/ResearchTube%20AI.excalidraw)** | Editable Excalidraw source file for the High-Level System Design diagram (exported to [`docs/static/images/hld.png`](docs/static/images/hld.png)). |
+
 ---
 ## Visual System Architecture Map & Data Flow
 
 ResearchTube is powered by a high-throughput, dual-engine backend supporting both **Autonomous Multi-Agent YouTube Research** and **Conversational Video RAG Chat**, unified by a **PostgreSQL 16 + pgvector Hybrid Search (BM25 + Dense Vectors via Reciprocal Rank Fusion)** engine.
 
-### 1. Unified End-to-End System Architecture
+### 1. High Level System Design
 
-```mermaid
-flowchart TD
-    subgraph Client[" CLIENT PRESENTATION LAYER (React 19 + TypeScript + Vite)"]
-        UI_Home["Landing & Dashboard"]
-        UI_Research["Autonomous Research Canvas\n(2D Knowledge Graph + Report)"]
-        UI_Chat["Conversational Chat Interface\n(SSE Streaming + Video Scope Selector)"]
-        UI_Profile["Profile Analytics Dashboard\n(Research Metrics + Chat History Stats)"]
-    end
+![hld image](docs/static/images/hld.png)
 
-    subgraph Security[" SECURITY & API GATEWAY LAYER (FastAPI)"]
-        CORS["CORS & GZip Response Compression"]
-        RateLimit["SlowAPI Rate Limiter (Token Bucket)"]
-        JWT["JWT Auth & Session Guardian\n(Access: 30m / Refresh: 7-10d)"]
-    end
+The High-Level System Design illustrates the end-to-end request, data, and AI execution flow across ResearchTube:
 
-    subgraph DualEngines[" CORE INTELLIGENCE ENGINES"]
-        subgraph ResearchEngine[" Autonomous Multi-Agent Research Engine (LangGraph DAG)"]
-            AG1["Agent 1: YouTube Researcher\n(Query Decomposition & Proxy Scraper)"]
-            Chunker["Sliding Window Chunker\n(Window=1000, Overlap=150)"]
-            AG2["Agent 2: RAG Evaluator\n(Relevance & Quality Scoring)"]
-            AG3["Agent 3: Synthesis Engine\n(Markdown Report & Knowledge Graph)"]
-        end
-
-        subgraph ChatEngine[" Conversational RAG Chat Engine"]
-            ScopeHandler["Scope Resolver\n(Video / Library / General)"]
-            HistoryBuffer["Multi-Turn History Window\n(Context-Preserving Buffer)"]
-            PromptAssembler["Grounding Prompt Assembler\n(Context + Timestamp Anchors)"]
-            SSEStream["SSE Streaming Generator\n(Real-Time Token Stream)"]
-        end
-    end
-
-    subgraph HybridEngine[" HYBRID RETRIEVAL & FUSION ENGINE (RRF)"]
-        DualEmbed["DualEmbeddingService\n(OpenAI text-embedding-3 / Gemini text-embedding-004)"]
-        DenseSearch["Dense Vector Search\n(pgvector Cosine Distance <->)"]
-        BM25Search["Sparse Lexical Search\n(PostgreSQL tsvector + GIN Index + ts_rank_cd)"]
-        RRF["Reciprocal Rank Fusion (RRF)\nRRF_score = ∑ 1 / (60 + rank_i)"]
-    end
-
-    subgraph Storage[" PERSISTENT DATA LAYER (PostgreSQL 16 + pgvector)"]
-        DB_Users[("users & refresh_tokens")]
-        DB_Research[("research_runs & youtube_videos")]
-        DB_Chunks[("video_chunks\n(Vector 768/1536 + tsvector GIN)")]
-        DB_Chat[("chat_sessions & chat_messages")]
-    end
-
-    Client --> Security
-    Security --> DualEngines
-
-    %% Research Flow
-    AG1 --> Chunker
-    Chunker --> DB_Chunks
-    Chunker --> AG2
-    AG2 --> HybridEngine
-    HybridEngine --> AG2
-    AG2 --> AG3
-    AG3 --> DB_Research
-
-    %% Chat Flow
-    UI_Chat --> ScopeHandler
-    ScopeHandler --> HistoryBuffer
-    HistoryBuffer --> PromptAssembler
-    PromptAssembler --> HybridEngine
-    HybridEngine --> PromptAssembler
-    PromptAssembler --> SSEStream
-    SSEStream --> UI_Chat
-    SSEStream --> DB_Chat
-
-    %% Hybrid Search Flow
-    DualEmbed --> DenseSearch
-    DenseSearch --> RRF
-    BM25Search --> RRF
-    RRF --> DB_Chunks
-```
-
----
+- **Client (`React 19 + TypeScript`):** Single-Page Application communicating over `HTTPS / REST / SSE`, handling JWT auto-refresh, real-time token streaming, Markdown/KaTeX rendering, and interactive 2D knowledge graphs.
+- **API Gateway (`FastAPI`):** Enforces CORS, per-endpoint rate limiting (`SlowAPI`), `SelectiveGZipMiddleware` (compresses large JSON payloads while bypassing SSE `/stream` routes), OAuth session state, and structured logging (`structlog`).
+- **Backend Services:**
+  - **Auth & User Service:** Manages local registration/login, Google OAuth2 account linking, rotating refresh tokens (with a 30s multi-tab grace window), and password resets.
+  - **YouTube Research Service:** Orchestrates the 7-node LangGraph pipeline for discovering videos, ingesting transcripts, evaluating quality, and synthesizing final reports.
+  - **Chat Service:** Unified facade (`SessionService`, `MessagingService`, `ShareService`, `GreetingService`) supporting scoped RAG Q&A over SSE, public sharing, and conversation forking.
+- **RAG & AI Layer:** Houses the **LangGraph 7-Node Pipeline**, **DualLLM Router** (OpenAI primary with automatic Google Gemini fallback), and **RAG Engine** (LangChain chunking, 768-dim dual embeddings, and `pgvector` + BM25 Hybrid Search).
+- **Persistence (`PostgreSQL 16 + pgvector`):** Stores all 15 relational and vector tables (`users`, `oauth_accounts`, `research_runs`, `youtube_videos`, `transcript_chunks`, `evaluations`, `final_reports`, `chat_sessions`, `chat_messages`), managed via Alembic (`dev` Docker / `prod` Supabase pooler).
+- **External Services:** Integrates with **Google OAuth2**, **SMTP Email**, **OpenAI & Gemini APIs**, **YouTube Data & Transcript APIs**, **E2B Cloud Micro-VMs** (for isolated Python/C++ execution), and **DuckDuckGo / Firecrawl** (for live web search and scraping).
 
 ### 2. Autonomous Multi-Agent Research Workflow (7-Node LangGraph DAG)
 
@@ -144,8 +91,6 @@ flowchart LR
 5. **Node 5 (Hybrid RAG Evaluator - Agent 2):** Embeds chunks, performs hybrid search, and grades videos on relevance score (0–10), educational quality (0–10), topic coverage (0–10), and beginner friendliness.
 6. **Node 6 (Synthesizer Engine - Agent 3):** Synthesizes top video evidence into a publication-grade Markdown research report featuring key concepts, methodology limitations, step-by-step learning paths, and 2D knowledge graph nodes.
 7. **Node 7 (Persistence):** Atomically commits research runs, videos, chunks, evaluations, and final reports to PostgreSQL within a single managed transaction.
-
----
 
 ### 3. Conversational RAG Chat Workflow & Streaming Architecture
 
@@ -191,8 +136,6 @@ sequenceDiagram
     ChatAPI-->>User: data: {"type": "done", "sources": [...]}
 ```
 
----
-
 ### 4. Hybrid Search Engine: BM25 + Dense Embeddings + Reciprocal Rank Fusion (RRF)
 
 Traditional vector search often fails on exact keyword identifiers, CLI commands, package names (e.g., `docker compose up --build`), and function signatures. Pure keyword search fails on synonyms, high-level conceptual questions, and paraphrased explanations.
@@ -229,8 +172,6 @@ flowchart TD
 * **Reciprocal Rank Fusion (RRF, $k=60$):** Merges independent ranking spaces without requiring fragile score normalization or artificial weighting parameters.
 
 
----
-
 ##  Detailed Technology Stack
 
 | Layer | Technology | Technical Purpose & Implementation Details |
@@ -246,8 +187,6 @@ flowchart TD
 | **Anti-Block Proxy Mesh** | **Webshare Residential Proxies** | 3-layer proxy scraper mesh with residential authentication pools, environment proxy injection, and sequential language tag scanning. |
 | **Security & Rate Limiting** | **JWT + Argon2 + SlowAPI** | Sliding session management (30m access / 7–10d refresh tokens), Argon2 password hashing, and token-bucket rate limiting. |
 | **Containerization** | **Docker & Docker Compose** | Multi-container orchestrated development and deployment connecting Frontend, FastAPI backend, and PostgreSQL with pgvector. |
-
----
 
 ##  Core System Capabilities
 
