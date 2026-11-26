@@ -11,21 +11,6 @@
 ## 2. Auth Service
 
 ```mermaid
-%%{init: {
-  "theme": "base",
-  "themeVariables": {
-    "fontSize": "20px",
-    "fontFamily": "Arial, sans-serif",
-    "background": "#FFF9C4",
-    "primaryColor": "#FFF176",
-    "primaryTextColor": "#111111",
-    "primaryBorderColor": "#B7791F",
-    "lineColor": "#333333",
-    "textColor": "#111111",
-    "secondaryColor": "#FFFDE7",
-    "tertiaryColor": "#FFF59D"
-  }
-}}%%
 
 flowchart TD
     Start(["User Visits ResearchTube"]) --> AuthChoice{"Choose Auth Path"}
