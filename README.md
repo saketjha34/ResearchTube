@@ -201,6 +201,30 @@ flowchart TD
 * **Public Collaboration & Sharing:** One-click public sharing tokens for research reports and chat sessions, featuring instant conversation forking into user accounts.
 * **Enterprise Session Guardian:** Hardened JWT session security with 30-minute access tokens, sliding 7–10 day refresh tokens, Argon2 password hashing, and endpoint rate limiting.
 
+---
+
+## Application Screenshots
+
+| Landing Page | Capabilities Library |
+| :---: | :---: |
+| ![Landing Page](docs/static/images/frontend/landing.png) | ![Capabilities Library](docs/static/images/frontend/library.png) |
+
+| Multi-Agent Research Workspace | Executive Summary Report |
+| :---: | :---: |
+| ![Research Prompt](docs/static/images/frontend/research-prompt.png) | ![Research Report](docs/static/images/frontend/research-report.png) |
+
+| Ranked Resources & Knowledge Graph | Profile & Research Analytics |
+| :---: | :---: |
+| ![Research Resources](docs/static/images/frontend/research-resources.png) | ![Profile Analytics](docs/static/images/frontend/profile-analytics.png) |
+
+| Conversational RAG Chat | Video Scope Selector |
+| :---: | :---: |
+| ![Chat Conversation](docs/static/images/frontend/chat-conversation.png) | ![Video Scope Selector](docs/static/images/frontend/chat-video-scope.png) |
+
+| Chat Home | Sign In | Create Account |
+| :---: | :---: | :---: |
+| ![Chat Home](docs/static/images/frontend/chat-home.png) | ![Login](docs/static/images/frontend/login.png) | ![Register](docs/static/images/frontend/register.png) |
+
 
 ## Author & Attribution
 

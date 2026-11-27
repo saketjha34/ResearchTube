@@ -104,10 +104,30 @@ frontend/
 
 ## 4. Website Screenshots
 
-> Place captured screenshots in `docs/static/images/frontend/` to render them here:
->
-> - `docs/static/images/frontend/landing.png` — Landing Page (`/`)
-> - `docs/static/images/frontend/library.png` — Research Library (`/library`)
-> - `docs/static/images/frontend/research.png` — Multi-Agent Research Runner (`/research`)
-> - `docs/static/images/frontend/chat.png` — RAG & Sandbox AI Chat (`/chat`)
-> - `docs/static/images/frontend/login.png` — Sign In & Google OAuth (`/login`)
+### Landing, Capabilities Library & Authentication
+| Landing Page (`/`) | System Capabilities Library (`/library`) |
+| :---: | :---: |
+| ![Landing Page](static/images/frontend/landing.png) | ![Capabilities Library](static/images/frontend/library.png) |
+
+| Sign In (`/login`) | Create Account (`/register`) |
+| :---: | :---: |
+| ![Login Page](static/images/frontend/login.png) | ![Register Page](static/images/frontend/register.png) |
+
+### Multi-Agent YouTube Research (`/research`)
+| New Research Workspace | Executive Summary Report |
+| :---: | :---: |
+| ![New Research Prompt](static/images/frontend/research-prompt.png) | ![Research Report](static/images/frontend/research-report.png) |
+
+**Knowledge Graph & Ranked Video Evaluations:**
+![Research Resources & Scores](static/images/frontend/research-resources.png)
+
+### Conversational RAG & Sandbox Chat (`/chat`)
+| Chat Workspace | Video Scope Selector & Preview |
+| :---: | :---: |
+| ![Chat Home](static/images/frontend/chat-home.png) | ![Video Scope Selector](static/images/frontend/chat-video-scope.png) |
+
+**Active RAG Chat Conversation:**
+![Chat Conversation](static/images/frontend/chat-conversation.png)
+
+### Profile & Research Analytics (`/profile`)
+![Profile & Research Analytics](static/images/frontend/profile-analytics.png)

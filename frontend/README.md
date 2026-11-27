@@ -4,6 +4,13 @@ Welcome to the client-side user interface of **ResearchTube** — a modern, resp
 
 The frontend allows users to sign up, log in, initiate complex multi-agent research runs, view detailed report summaries, interact with semantic knowledge graphs, and share public reports.
 
+### Documentation & Architecture References (`../docs/`)
+
+* **[Frontend Architecture Guide (docs/FRONTEND.md)](../docs/FRONTEND.md)** — Detailed frontend directory breakdown, rationale for every npm dependency, JWT 401 refresh queue, and SSE chat streaming workflows.
+* **[System Architecture & HLD (docs/ARCHITECTURE.md)](../docs/ARCHITECTURE.md)** — Complete High-Level System Design ([`hld.png`](../docs/static/images/hld.png) / [`ResearchTube AI.excalidraw`](../docs/ResearchTube%20AI.excalidraw)), Auth Service, 7-node YouTube Research pipeline, Chat Service, and Hybrid RAG architecture.
+* **[Database Design (docs/DATABASE-DESIGN.md)](../docs/DATABASE-DESIGN.md)** — Complete 15-table **PostgreSQL 16 + `pgvector`** schema and ER diagram.
+* **[Backend Environment Setup (backend/ENV_SETUP.md)](../backend/ENV_SETUP.md)** — Required backend API keys, Google OAuth redirect setup, and `.env` configuration.
+
 ---
 
 ## 🏗️ Tech Stack & Dependencies
@@ -111,15 +118,15 @@ Auth is coordinated via the global [`AuthContext.tsx`](file:///c:/Saket/Projects
 ## ⚙️ Running Locally
 
 ### Environment Setup
-The frontend must point to the FastAPI backend URL.
-
-> [!IMPORTANT]
-> Detailed instructions on setting up environment variables (`VITE_API_URL_DEV`, `VITE_API_URL_PROD`) can be found in [`ENV_SETUP.md`](file:///c:/Saket/Projects/ResearchTube/frontend/ENV_SETUP.md). **Do not copy credential generation steps into this configuration.**
+The frontend must point to the FastAPI backend URL via [`.env.example`](.env.example):
 
 ```bash
 cp .env.example .env
-# Edit .env and adjust variables to match your local setup.
+# Edit .env and set VITE_API_URL_DEV (default: http://localhost:8000)
+# and VITE_API_URL_PROD for production deployments.
 ```
+
+> For backend API keys, Google OAuth2 client setup, and database configuration, see [`backend/ENV_SETUP.md`](../backend/ENV_SETUP.md).
 
 ---
 
@@ -169,3 +176,27 @@ If you prefer building and running the UI directly on your host machine:
     npm run build
     ```
     *(The output static production files will be built under the `dist/` directory).*
+
+---
+
+## 📸 Application Screenshots
+
+| Landing Page | Capabilities Library |
+| :---: | :---: |
+| ![Landing](../docs/static/images/frontend/landing.png) | ![Library](../docs/static/images/frontend/library.png) |
+
+| Sign In | Create Account |
+| :---: | :---: |
+| ![Login](../docs/static/images/frontend/login.png) | ![Register](../docs/static/images/frontend/register.png) |
+
+| New Research Workspace | Research Report |
+| :---: | :---: |
+| ![Research Prompt](../docs/static/images/frontend/research-prompt.png) | ![Research Report](../docs/static/images/frontend/research-report.png) |
+
+| Ranked Resources & Knowledge Graph | Profile & Analytics |
+| :---: | :---: |
+| ![Research Resources](../docs/static/images/frontend/research-resources.png) | ![Profile Analytics](../docs/static/images/frontend/profile-analytics.png) |
+
+| Chat Workspace | Video Scope Selector | Active Chat Thread |
+| :---: | :---: | :---: |
+| ![Chat Home](../docs/static/images/frontend/chat-home.png) | ![Video Scope](../docs/static/images/frontend/chat-video-scope.png) | ![Chat Conversation](../docs/static/images/frontend/chat-conversation.png) |

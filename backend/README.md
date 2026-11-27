@@ -1,12 +1,21 @@
 # ResearchTube Backend API Engine
 
-Welcome to the backend server engine of **ResearchTube** — an automated, multi-agent research pipeline and conversational intelligence platform. The engine crawls YouTube, extracts transcripts through a resilient 3-layer proxy mesh, embeds chunks into PostgreSQL utilizing `pgvector` alongside full-text lexical indexing (`tsvector`), evaluates content via **Hybrid Search (BM25 + Dense Vectors via Reciprocal Rank Fusion)**, synthesizes publication-grade technical markdown reports, and streams real-time RAG-grounded discussions via Server-Sent Events (SSE).
+Welcome to the backend server engine of **ResearchTube** an automated, multi-agent research pipeline and conversational intelligence platform. The engine crawls YouTube, extracts transcripts through a resilient 3-layer proxy mesh, embeds chunks into PostgreSQL utilizing `pgvector` alongside full-text lexical indexing (`tsvector`), evaluates content via **Hybrid Search (BM25 + Dense Vectors via Reciprocal Rank Fusion)**, synthesizes publication-grade technical markdown reports, and streams real-time RAG-grounded discussions via Server-Sent Events (SSE).
 
 This document covers the architectural design, database schemas, agent workflows, hybrid retrieval mechanics, conversational streaming engine, tool implementations, and comprehensive setup instructions.
 
 ### Core Documentation Links
-* [Environment Configuration Guide (ENV_SETUP.md)](ENV_SETUP.md) - Step-by-step instructions for acquiring API keys (Google Gemini, YouTube Data v3, Google OAuth), setting up JWT secrets, configuring local/production database URLs, and proxy credentials.
-* [Database Migrations Guide (MIGRATIONS.md)](MIGRATIONS.md) - Operational reference for managing Alembic migrations with asynchronous SQLAlchemy (`asyncpg`) across dual workmodes (`dev` and `prod`), including Supabase connection pooler configurations.
+
+* **[Environment Configuration Guide (ENV_SETUP.md)](ENV_SETUP.md)** — Step-by-step instructions for acquiring API keys (Google Gemini, YouTube Data v3, Google OAuth, OpenAI, E2B, Firecrawl, Gmail SMTP), configuring `.env` from [`.env.example`](.env.example), setting up JWT secrets, local/Supabase database URLs, and proxy credentials.
+* **[Database Migrations Guide (MIGRATIONS.md)](MIGRATIONS.md)** — Operational reference for managing Alembic migrations with asynchronous SQLAlchemy (`asyncpg`) across dual workmodes (`dev` and `prod`), including Supabase connection pooler configurations.
+
+### Project Architecture & Design Docs
+
+* **[System Architecture & Specs (docs/ARCHITECTURE.md)](../docs/ARCHITECTURE.md)** — Complete High-Level System Design ([`hld.png`](../docs/static/images/hld.png) / [`ResearchTube AI.excalidraw`](../docs/ResearchTube%20AI.excalidraw)), Auth Service flowcharts & sequence diagrams, 7-node YouTube Research pipeline, Chat Service, and Hybrid RAG architecture.
+* **[Database Design (docs/DATABASE-DESIGN.md)](../docs/DATABASE-DESIGN.md)** — Complete 15-table **PostgreSQL 16 + `pgvector`** schema documentation, Mermaid ER diagram, and architectural decisions.
+* **[Frontend Architecture (docs/FRONTEND.md)](../docs/FRONTEND.md)** — React 19 + TypeScript + Vite SPA structure, library rationale, JWT auto-refresh queue, and SSE streaming workflows.
+
+> **Quick Environment Setup:** Copy [`.env.example`](.env.example) to `.env` (`cp .env.example .env`) and follow [ENV_SETUP.md](ENV_SETUP.md) to populate required keys before starting Docker Compose or running Alembic migrations.
 
 ---
 
@@ -33,223 +42,6 @@ The backend is built as an asynchronous Python application using a modern enterp
 *   **Observability:** `structlog` (structured JSON logging optimized for GCP Cloud Logging).
 *   **Efficiency:** `GZipMiddleware` (response compression cutting payload size by ~70% on large requests).
 
----
-
-## Database Schema & Models
-
-The database contains tables representing user profiles, local/social authentication accounts, autonomous research graph artifacts, and multi-turn conversational chat sessions.
-
-### Entity-Relationship Diagram
-
-The schema structure is fully relational with foreign key cascades, unique constraints, and vector indexes:
-
-```mermaid
-erDiagram
-    users {
-        uuid id PK
-        string email UK
-        string username UK
-        string full_name
-        text profile_picture_url
-        boolean is_active
-        boolean is_verified
-        datetime created_at
-        datetime updated_at
-    }
-
-    user_auth {
-        uuid id PK
-        uuid user_id FK
-        text password_hash
-        datetime last_password_change
-        datetime created_at
-    }
-
-    oauth_accounts {
-        uuid id PK
-        uuid user_id FK
-        string provider
-        string provider_user_id UK
-        string provider_email
-        text access_token
-        text refresh_token
-        datetime expires_at
-        datetime created_at
-    }
-
-    refresh_tokens {
-        uuid id PK
-        uuid user_id FK
-        text token_hash UK
-        datetime expires_at
-        boolean revoked
-        datetime created_at
-    }
-
-    research_runs {
-        uuid id PK
-        uuid user_id FK
-        text user_query
-        integer video_count
-        string status
-        boolean is_public
-        text error_message
-        datetime started_at
-        datetime completed_at
-        datetime created_at
-    }
-
-    youtube_videos {
-        uuid id PK
-        string video_id UK
-        text title
-        text description
-        string channel
-        datetime published_at
-        text url
-        integer views
-        integer likes
-        integer comments
-        datetime created_at
-    }
-
-    research_videos {
-        uuid id PK
-        uuid research_run_id FK
-        uuid video_id FK
-        integer position
-        boolean transcript_available
-        string transcript_language
-        datetime created_at
-    }
-
-    transcript_chunks {
-        uuid id PK
-        uuid research_run_id FK
-        uuid video_id FK
-        integer chunk_index
-        text text
-        vector embedding
-        tsvector search_vector
-        float start_time
-        float end_time
-        string language
-        datetime created_at
-    }
-
-    resource_evaluations {
-        uuid id PK
-        uuid research_run_id FK
-        uuid video_id FK
-        float relevance_score
-        string technical_depth
-        json pros
-        json cons
-        text key_takeaways
-        datetime created_at
-    }
-
-    resource_rankings {
-        uuid id PK
-        uuid research_run_id FK
-        json rankings_list
-        datetime created_at
-    }
-
-    final_reports {
-        uuid id PK
-        uuid research_run_id FK
-        text content
-        datetime created_at
-    }
-
-    chat_sessions {
-        uuid id PK
-        uuid user_id FK
-        string title
-        string scope_mode
-        uuid video_id FK
-        uuid research_run_id FK
-        boolean is_archived
-        boolean is_pinned
-        string share_token UK
-        boolean is_shared
-        integer message_count
-        datetime created_at
-        datetime updated_at
-    }
-
-    chat_messages {
-        uuid id PK
-        uuid session_id FK
-        string role
-        text content
-        text sources
-        integer prompt_tokens
-        integer completion_tokens
-        datetime created_at
-    }
-
-    users ||--o{ research_runs : "creates"
-    users ||--o| user_auth : "has local"
-    users ||--o{ oauth_accounts : "links social"
-    users ||--o{ refresh_tokens : "signs"
-    users ||--o{ chat_sessions : "starts"
-    
-    research_runs ||--o{ research_videos : "crawls"
-    research_runs ||--o{ transcript_chunks : "vectorizes"
-    research_runs ||--o{ resource_evaluations : "scores"
-    research_runs ||--|| resource_rankings : "orders"
-    research_runs ||--|| final_reports : "synthesizes"
-    research_runs ||--o{ chat_sessions : "scopes"
-
-    youtube_videos ||--o{ research_videos : "assigned"
-    youtube_videos ||--o{ transcript_chunks : "chunked"
-    youtube_videos ||--o{ resource_evaluations : "evaluated"
-    youtube_videos ||--o{ chat_sessions : "scopes"
-
-    chat_sessions ||--o{ chat_messages : "contains"
-```
-
-### Table Details & Types
-
-1.  **`users`:** Holds core profile metadata.
-    *   `email`: Indexed, unique, mandatory.
-    *   `username`: Unique, nullable.
-2.  **`user_auth`:** Credentials repository for local logins.
-    *   `user_id`: Unique foreign key pointing to `users.id` with `ondelete="CASCADE"`.
-    *   `password_hash`: Argon2 ID string representation.
-3.  **`oauth_accounts`:** Stores connected Google OAuth profiles.
-    *   `provider`: Custom SQLAlchemy Enum (`local`, `google`).
-    *   `provider_user_id`: Scoped ID returned by provider. Enforces `UniqueConstraint("provider", "provider_user_id")`.
-4.  **`refresh_tokens`:** Manages refresh tokens for sliding sessions.
-    *   `token_hash`: SHA-256 digested representation, unique.
-    *   `expires_at`: Sliding 7–10 day expiry window.
-5.  **`research_runs`:** Defines individual research jobs.
-    *   `status`: String index representing graph progress (`pending`, `researching`, `ingesting`, `analyzing`, `reporting`, `completed`, `failed`).
-    *   `is_public`: Indexed boolean determining shared route visibility.
-6.  **`youtube_videos`:** Stores global video cache to prevent repetitive metadata scraping.
-    *   `video_id`: Unique 11-character identifier (indexed).
-7.  **`research_videos`:** Junction table linking videos to runs. Enforces `UniqueConstraint("research_run_id", "video_id")`.
-8.  **`transcript_chunks`:** Contains embedded vectors and lexical tokens.
-    *   `embedding`: Data type `Vector(768)`. Uses PostgreSQL index `hnsw` or `ivfflat` (via pgvector) for Cosine Similarity search.
-    *   `search_vector`: PostgreSQL `tsvector` with GIN indexing for high-speed lexical search.
-    *   `start_time` & `end_time`: Second-level timestamps for precise video anchoring in RAG responses.
-9.  **`resource_evaluations`:** Evaluated metrics produced by Agent 2.
-    *   `pros` and `cons`: Native PostgreSQL JSON columns.
-10. **`resource_rankings`:** Ordered result output generated from RAG score weighting.
-11. **`final_reports`:** Houses synthesized Markdown files.
-12. **`chat_sessions`:** Persistent multi-turn conversation threads.
-    *   `scope_mode`: Scope type string (`none`, `video`, `run`).
-    *   `video_id` / `research_run_id`: Nullable foreign keys defining retrieval boundaries.
-    *   `is_pinned` & `is_archived`: Session organization flags.
-    *   `share_token`: Unique 64-character token for public conversation access.
-13. **`chat_messages`:** Individual turns within a session.
-    *   `role`: Enum (`user`, `assistant`, `system`).
-    *   `content`: Raw markdown conversation text.
-    *   `sources`: JSON-encoded provenance array containing chunk IDs, video titles, and timestamps.
-
----
 
 ## Multi-Agent Graph Orchestration (7-Node LangGraph DAG)
 
